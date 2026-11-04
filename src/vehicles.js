@@ -4,10 +4,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
+// lowrider reuses the sedan body, lowered, with candy paint and chrome trim
 const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police' };
 const templates = {};
-const PAINT = [0x7a1414, 0x14306a, 0x1c1c1e, 0x6a6a20, 0xd8d8d8, 0x2a4a2a, 0x6a6a72, 0x5a2a6a];
+const PAINT = [0x6a2420, 0x2a3a5a, 0x1e1e20, 0x6a6238, 0xc8c2b4, 0x3a4a34, 0x6a6a6e, 0x5a3a4a, 0x8a6a4a];
 
 export async function loadCars(base) {
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
@@ -24,8 +26,9 @@ function parts() {
   const beam = new THREE.ConeGeometry(2.2, 10, 12, 1, true); beam.translate(0, -5, 0); beam.rotateX(-Math.PI / 2);
   const bc = document.createElement('canvas'); bc.width = 4; bc.height = 64; const g = bc.getContext('2d');
   const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, 'rgba(255,240,200,0.9)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = gr; g.fillRect(0, 0, 4, 64);
+  const beams = mergeGeometries([beam.clone().rotateX(0.06).translate(-0.62, 0.72, 2.3), beam.clone().rotateX(0.06).translate(0.62, 0.72, 2.3)]);
   shared = {
-    beam, beamMat: new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bc), transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    beam, beams, beamMat: new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bc), transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
     lamp: new THREE.BoxGeometry(0.4, 0.14, 0.05),
     head: new THREE.MeshBasicMaterial({ color: 0xfff4d0, toneMapped: false }),
     tail: new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }),
@@ -33,42 +36,120 @@ function parts() {
     sirenB: new THREE.MeshBasicMaterial({ color: 0x2050ff, toneMapped: false }),
     sirenGeo: new THREE.BoxGeometry(0.35, 0.14, 0.25),
     burnt: new THREE.MeshStandardMaterial({ color: 0x151313, roughness: 1 }),
+    lampMat: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
   };
   return shared;
 }
 
-export function makeCar(c) {
-  const P = parts(), T = templates[c.type] || templates.sedan;
-  const g = new THREE.Group();
-  const model = T.scene.clone(true);
-  model.scale.setScalar(T.scale); model.position.y = -T.minY * T.scale; model.rotation.y = Math.PI; // kit faces -z
-  const wheels = [], paintMats = [];
-  model.traverse((o) => {
-    if (o.isMesh) {
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      o.material = mats.map((m) => {
-        if (/paint/i.test(m.name) && c.type !== 'police' && c.type !== 'taxi') { const n = m.clone(); n.color.setHex(PAINT[c.paint % PAINT.length]); n.metalness = 0.5; n.roughness = 0.35; paintMats.push(n); return n; }
-        if (/paint|_default/i.test(m.name)) { const n = m.clone(); n.metalness = 0.4; n.roughness = 0.4; paintMats.push(n); return n; }
-        if (/window/i.test(m.name)) { const n = m.clone(); n.color.setHex(0x101820); n.metalness = 0.9; n.roughness = 0.1; return n; }
-        return m;
-      });
-      if (o.material.length === 1) o.material = o.material[0];
+// Each car type and paint is merged once into a single vertex colored body
+// mesh plus four wheel meshes, so a car costs a handful of draw calls. A
+// shader adds chrome (per vertex metal flag) and road dirt low on the body.
+const PAINT_LOW = [0x5a1a6a, 0x0a6a6a, 0xa8781a, 0x7a0a1a, 0x1a3a8a];
+let carMat = null;
+function bodyMaterial() {
+  if (carMat) return carMat;
+  carMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.35, roughness: 0.42 });
+  carMat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aMetal;\nattribute float aDirt;\nvarying float vMetal;\nvarying float vDirt;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMetal = aMetal; vDirt = aDirt;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vMetal;\nvarying float vDirt;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.12, 0.09), vDirt * 0.75);')
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 1.0, vMetal) * (1.0 - vDirt);')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.1, vMetal), 0.95, vDirt);');
+  };
+  return carMat;
+}
+const geoCache = new Map();
+function carGeometry(type, paint) {
+  const key = type + ':' + paint;
+  if (geoCache.has(key)) return geoCache.get(key);
+  const T = templates[type === 'lowrider' ? 'sedan' : type] || templates.sedan;
+  T.scene.updateMatrixWorld(true);
+  const body = [], wheels = [], col = new THREE.Color();
+  const pushGeo = (mesh, mat, matrix, group, start, count) => {
+    let g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    if (group) { const n = new THREE.BufferGeometry(); for (const a of ['position', 'normal']) { const at = g.attributes[a]; n.setAttribute(a, new THREE.BufferAttribute(at.array.slice(start * at.itemSize, (start + count) * at.itemSize), at.itemSize, at.normalized)); } g = n; }
+    else { for (const a of Object.keys(g.attributes)) if (a !== 'position' && a !== 'normal') g.deleteAttribute(a); }
+    // meshopt quantized attributes are normalized ints: go to floats before transforming
+    for (const a of ['position', 'normal']) { const at = g.attributes[a]; if (!at) continue; const f = new Float32Array(at.count * 3); for (let i = 0; i < at.count; i++) { f[i * 3] = at.getX(i); f[i * 3 + 1] = at.getY(i); f[i * 3 + 2] = at.getZ(i); } g.setAttribute(a, new THREE.BufferAttribute(f, 3)); }
+    g.applyMatrix4(matrix);
+    const n = mat.name || '';
+    let metal = 0;
+    if (/paint/i.test(n) && type !== 'police' && type !== 'taxi') col.setHex(type === 'lowrider' ? PAINT_LOW[paint % PAINT_LOW.length] : PAINT[paint % PAINT.length]);
+    else if (/window/i.test(n)) { col.setHex(0x0c1218); metal = 0.8; }
+    else if (/plastic/i.test(n) && type === 'lowrider') { col.setHex(0xd8d8d8); metal = 1; }
+    else if (/wheelInside|carTire/i.test(n)) col.setHex(0x161616);
+    else if (/_default/i.test(n) && type === 'lowrider') { col.setHex(0xe0e0e0); metal = 1; }
+    else col.copy(mat.color);
+    const cnt = g.attributes.position.count, c = new Float32Array(cnt * 3), m = new Float32Array(cnt), d = new Float32Array(cnt);
+    for (let i = 0; i < cnt; i++) { c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b; m[i] = metal; }
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setAttribute('aMetal', new THREE.BufferAttribute(m, 1)); g.setAttribute('aDirt', new THREE.BufferAttribute(d, 1));
+    return g;
+  };
+  const meshParts = (mesh, matrix, out) => {
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (mats.length === 1) out.push(pushGeo(mesh, mats[0], matrix));
+    else { const g = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry; for (const gr of mesh.geometry.groups) out.push(pushGeo({ geometry: g }, mats[gr.materialIndex], matrix, true, gr.start, gr.count)); }
+  };
+  const inv = new THREE.Matrix4(), rel = new THREE.Matrix4();
+  T.scene.traverse((o) => {
+    if (/^wheel_/.test(o.name)) {
+      const parts = []; inv.copy(o.matrixWorld).invert();
+      o.traverse((m) => { if (m.isMesh) meshParts(m, rel.multiplyMatrices(inv, m.matrixWorld), parts); });
+      const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3(); o.matrixWorld.decompose(pos, quat, scl);
+      const wg = mergeGeometries(parts); wg.scale(scl.x, scl.y, scl.z); wg.applyQuaternion(quat);
+      wheels.push({ geo: wg, pos, front: /front/.test(o.name) });
+      return;
     }
-    if (/^wheel_/.test(o.name)) wheels.push({ node: o, front: /front/.test(o.name) });
+    if (o.isMesh) { let p = o.parent, inWheel = false; while (p) { if (/^wheel_/.test(p.name)) inWheel = true; p = p.parent; } if (!inWheel) meshParts(o, o.matrixWorld, body); }
   });
-  g.add(model);
-  for (const x of [-0.62, 0.62]) {
-    const h = new THREE.Mesh(P.lamp, P.head); h.position.set(x, 0.75, 2.2); g.add(h);
-    const t = new THREE.Mesh(P.lamp, P.tail); t.position.set(x, 0.8, -2.2); g.add(t);
-    const b = new THREE.Mesh(P.beam, P.beamMat); b.position.set(x, 0.72, 2.3); b.rotation.x = 0.06; g.add(b); b.userData.beam = true;
+  const merged = mergeGeometries(body);
+  // dirt: strongest near the rocker panels, broken up with a little noise
+  merged.computeBoundingBox(); const bb = merged.boundingBox, P = merged.attributes.position, D = merged.attributes.aDirt, M = merged.attributes.aMetal;
+  for (let i = 0; i < P.count; i++) {
+    const y = (P.getY(i) - bb.min.y) / (bb.max.y - bb.min.y);
+    const n = Math.sin(P.getX(i) * 9.1 + P.getZ(i) * 5.3) * 0.5 + 0.5;
+    D.setX(i, Math.max(0, 1 - y / 0.42) * (0.35 + 0.5 * n) * (M.getX(i) > 0.5 ? 0.3 : 1) * (type === 'lowrider' ? 0.3 : 1));
   }
+  const out = { body: merged, wheels };
+  geoCache.set(key, out); return out;
+}
+
+export function makeCar(c) {
+  const P = parts(), T = templates[c.type === 'lowrider' ? 'sedan' : c.type] || templates.sedan;
+  const g = new THREE.Group();
+  const model = new THREE.Group();
+  model.scale.setScalar(T.scale); model.position.y = -T.minY * T.scale; model.rotation.y = Math.PI; // kit faces -z
+  const geo = carGeometry(c.type, c.paint);
+  const body = new THREE.Mesh(geo.body, bodyMaterial()); body.castShadow = true;
+  if (c.type === 'lowrider') body.position.y = -0.1 / T.scale;
+  model.add(body);
+  const wheels = [];
+  for (const w of geo.wheels) { const m = new THREE.Mesh(w.geo, bodyMaterial()); m.position.copy(w.pos); model.add(m); wheels.push({ node: m, front: w.front }); }
+  g.add(model);
+  const lamps = new THREE.Group();
+  for (const x of [-0.62, 0.62]) {
+    const h = new THREE.Mesh(P.lamp, P.head); h.position.set(x, 0.75, 2.2); lamps.add(h);
+    const t = new THREE.Mesh(P.lamp, P.tail); t.position.set(x, 0.8, -2.2); lamps.add(t);
+  }
+  g.add(mergedLamps(lamps));
+  const beams = new THREE.Mesh(P.beams, P.beamMat); beams.userData.beam = true; g.add(beams);
   let siren = null;
   if (c.type === 'police') {
     siren = [new THREE.Mesh(P.sirenGeo, P.sirenR), new THREE.Mesh(P.sirenGeo, P.sirenB)];
     siren[0].position.set(-0.25, 1.75, -0.1); siren[1].position.set(0.25, 1.75, -0.1); g.add(...siren);
   }
-  g.userData = { wheels, spinA: 0, paintMats, siren, model, burnt: false };
+  g.userData = { wheels, spinA: 0, siren, model, body, burnt: false };
   return g;
+}
+let lampGeo = null;
+function mergedLamps(grp) {
+  if (!lampGeo) {
+    const parts = []; grp.updateMatrixWorld(true);
+    for (const m of grp.children) { const g = m.geometry.clone().applyMatrix4(m.matrixWorld); const col = m.material.color, n = g.attributes.position.count, c = new Float32Array(n * 3); for (let i = 0; i < n; i++) col.toArray(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); parts.push(g); }
+    lampGeo = mergeGeometries(parts);
+  }
+  return new THREE.Mesh(lampGeo, parts().lampMat);
 }
 
 export function updateCar(g, c, dt, night, now) {

@@ -43,3 +43,18 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 .touch #msg{bottom:auto;top:46%}
 .touch #mission{bottom:auto;top:40%}
 @media (max-width:500px){#steer button{width:70px;height:70px}#touch button{width:60px;height:60px}#touch button.big{width:80px;height:80px}}
+/* v0.4 title screen and loading */
+#intro{position:fixed;inset:0;z-index:5;background:#120c08 url(../art/title.webp) left center/cover no-repeat;display:flex;align-items:flex-end;justify-content:flex-end;font-family:Arial,sans-serif;line-height:1.4}
+@media (orientation:portrait){#intro{background-image:url(../art/keyart.webp);background-position:center top;align-items:flex-end;justify-content:center}}
+#intro .card{max-width:440px;max-height:62vh;overflow:auto;margin:16px;padding:16px 18px;background:linear-gradient(180deg,rgba(20,12,6,.72),rgba(14,8,4,.9));border-left:3px solid #e8914a;color:#eadccb;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#intro .card p{margin:6px 0}
+#intro .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+#intro button{font:bold 20px Impact,sans-serif;padding:12px 26px;background:#e8914a;color:#1a0f08;border:0;letter-spacing:2px;width:100%;margin-top:8px}
+#intro button:disabled{background:#6a4a32;color:#d8c0a0}
+#intro .opt{display:block;margin:8px 0 4px;font-size:13px;color:#d8c0a0}
+#load{height:5px;background:rgba(255,255,255,.12);margin-top:6px}
+#loadbar{height:100%;width:0;background:#f2c27a;transition:width .2s}
+.loaded #load{opacity:.25}
+#intro .credit{position:fixed;left:10px;bottom:6px;color:rgba(255,230,200,.5);font-size:11px}
+#intro.hidden{display:none}
+@media (orientation:portrait){#intro .card{max-height:48vh;font-size:13px}#intro .keys{display:none}}

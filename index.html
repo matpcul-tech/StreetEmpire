@@ -5,8 +5,22 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#1a1410" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<link rel="icon" href="data:," />
-<title>Street Empire v0.3</title>
+<link rel="icon" type="image/png" href="./art/icon-32.png" />
+<link rel="apple-touch-icon" href="./art/icon-180.png" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<title>Street Empire</title>
+<meta name="description" content="Take over the city block by block. A third person street crew game for your phone and browser." />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Street Empire" />
+<meta property="og:description" content="Take over the city block by block. Free to play in your browser, built for phones." />
+<meta property="og:url" content="https://matpcul-tech.github.io/StreetEmpire/" />
+<meta property="og:image" content="https://matpcul-tech.github.io/StreetEmpire/art/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Street Empire" />
+<meta name="twitter:description" content="Take over the city block by block. Free to play in your browser, built for phones." />
+<meta name="twitter:image" content="https://matpcul-tech.github.io/StreetEmpire/art/og.jpg" />
 <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
@@ -38,13 +52,18 @@
     <button id="bGas" class="drive big">GAS</button>
   </div>
 </div>
-<div id="intro" class="panel">
-  <h1>STREET EMPIRE</h1>
+<div id="intro">
+ <div class="card">
+  <h1 class="sr">STREET EMPIRE</h1>
   <p>You are a youngster on the Eastside with one block to your name. Three crews run the rest of the city, from Eastside through Downtown to the Harbor, and they want yours too.</p>
   <p>Beat a block's defenders, then hold its ring to take it. Every block runs a hustle that pays you. Spend cash on crew. Talk to Unc (the man in the suit) for jobs. Fighting, carjacking and shooting raise your wanted level and the cops will come.</p>
   <p><b>Win:</b> wipe out the three rival crews. <b>Lose:</b> lose all your turf.</p>
   <p class="keys">Desktop: WASD move, mouse look (click to lock), Shift sprint, Space jump, click or F attack, Q switch weapon, E car or talk, R recruit.<br/>Phone: left thumb moves, drag the right side to look, buttons change with what you are doing.</p>
+  <label class="opt"><input type="checkbox" id="grain" checked /> Film grain (G)</label>
+  <div id="load"><div id="loadbar"></div></div>
   <button id="start">HIT THE STREETS</button>
+ </div>
+ <div class="credit">v0.4</div>
 </div>
 <div id="end" class="panel hidden"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>
 <script type="module" src="./src/main.js"></script>

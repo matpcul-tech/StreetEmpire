@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { makeGradePass } from './grade.js';
 import { LocalSession } from './net.js';
 import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS } from './state.js';
 import { buildCity } from './city.js';
@@ -35,24 +40,40 @@ const su = sky.material.uniforms;
 su.turbidity.value = 9; su.rayleigh.value = 2.6; su.mieCoefficient.value = 0.008; su.mieDirectionalG.value = 0.88;
 scene.add(sky);
 const sunDir = new THREE.Vector3();
-{
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  const envScene = new THREE.Scene(); const sky2 = new Sky(); sky2.scale.setScalar(1000);
-  sky2.material.uniforms.sunPosition.value.setFromSphericalCoords(1, THREE.MathUtils.degToRad(84), 4);
-  envScene.add(sky2);
-  scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+// Reflections follow the day: the sky is re-baked into the environment map
+// whenever the sun has moved far enough.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envScene = new THREE.Scene(), sky2 = new Sky(); sky2.scale.setScalar(1000); envScene.add(sky2);
+Object.assign(sky2.material.uniforms, { turbidity: { value: 10 }, rayleigh: { value: 2.6 }, mieCoefficient: { value: 0.01 }, mieDirectionalG: { value: 0.88 } });
+let envRT = null; const envSun = new THREE.Vector3(9, 9, 9);
+function rebuildEnv() {
+  if (envSun.distanceTo(sunDir) < (LOW ? 0.16 : 0.08)) return;
+  envSun.copy(sunDir); sky2.material.uniforms.sunPosition.value.copy(sunDir);
+  const rt = pmrem.fromScene(envScene, 0.04); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
 }
-scene.fog = new THREE.Fog(0x6a4a52, 50, LOW ? 160 : 240);
-const hemi = new THREE.HemisphereLight(0x8c7ab0, 0x3a2a22, 0.9);
+scene.fog = new THREE.Fog(0xb87a52, 30, LOW ? 170 : 260);
+const hemi = new THREE.HemisphereLight(0xc8a080, 0x4a3226, 0.9);
 const sun = new THREE.DirectionalLight(0xffa060, 2.2);
 if (!LOW) { sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; }
 scene.add(hemi, sun, sun.target);
 
-const city = buildCity(scene, LOW, S().blocks);
+// post: tone map, then a warm LUT grade, light film grain and vignette
+const FX = !params.has('nofx');
+let composer = null, grade = null;
+if (FX) {
+  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW ? 0 : 4 });
+  composer = new EffectComposer(renderer, rt);
+  composer.addPass(new RenderPass(scene, camera)); composer.addPass(new OutputPass());
+  grade = makeGradePass(ShaderPass); composer.addPass(grade);
+  grade.uniforms.uGrain.value = localStorage.getItem('se-grain') === '0' ? 0 : 1;
+}
+export function setGrain(on) { localStorage.setItem('se-grain', on ? '1' : '0'); if (grade) grade.uniforms.uGrain.value = on ? 1 : 0; }
+const city = buildCity(scene, LOW, S().blocks, BASE);
 { const p = player(S()); city.buildAllNear(p.x, p.z); }
 
 // day and night
-const fogDay = new THREE.Color(0x9fb0c0), fogDusk = new THREE.Color(0x6a4a52), fogNight = new THREE.Color(0x0c0e18);
+// warm smoggy haze: peach by day, burnt orange at sunset, plum blue at night
+const fogDay = new THREE.Color(0xc8a888), fogDusk = new THREE.Color(0xb8683e), fogNight = new THREE.Color(0x16141e);
 const sunDay = new THREE.Color(0xfff0dd), sunDusk = new THREE.Color(0xffa060);
 let night = 0, lastNightSet = -1;
 function updateDay() {
@@ -66,7 +87,7 @@ function updateDay() {
   night = 1 - THREE.MathUtils.smoothstep(elev, -0.12, 0.05);
   sun.intensity = 2.6 * day + 0.25 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8090c0); }
-  hemi.intensity = 0.35 + 0.75 * day; hemi.color.setHex(night > 0.5 ? 0x405080 : 0x8c7ab0);
+  hemi.intensity = 0.35 + 0.75 * day; hemi.color.setHex(night > 0.5 ? 0x46507a : dusk > 0.5 ? 0xb8846a : 0xc8a888);
   scene.environmentIntensity = 0.12 + 0.5 * day;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   renderer.toneMappingExposure = 0.75 + 0.25 * night;
@@ -76,6 +97,8 @@ function updateDay() {
     for (const o of city.nightOnly) o.visible = night > 0.3 || dusk > 0.6;
   }
   sky.visible = true;
+  rebuildEnv();
+  if (grade) { grade.uniforms.uNight.value = night; grade.uniforms.uDusk.value = dusk; }
   return h;
 }
 
@@ -135,6 +158,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyQ') session.send({ type: 'weapon' });
   if (e.code === 'Space') { e.preventDefault(); session.send({ type: 'jump' }); }
   if (e.code === 'KeyH') sfx.honk();
+  if (e.code === 'KeyG') { const on = !(grade && grade.uniforms.uGrain.value); setGrain(on); showMsg('Film grain ' + (on ? 'on' : 'off')); }
 });
 addEventListener('keyup', (e) => (keys[e.code] = false));
 renderer.domElement.addEventListener('mousedown', () => {
@@ -280,10 +304,12 @@ const camPos = new THREE.Vector3(), tmp = new THREE.Vector3(), look = new THREE.
 let last = performance.now(), radarT = 0, frameAvg = 16, resT = 0, camInit = false;
 const startBtn = $('start');
 startBtn.disabled = true; startBtn.textContent = 'LOADING...';
+THREE.DefaultLoadingManager.onProgress = (url, done, total) => { $('loadbar').style.width = Math.round((done / total) * 100) + '%'; };
+const grainBox = $('grain'); grainBox.checked = localStorage.getItem('se-grain') !== '0'; grainBox.onchange = () => setGrain(grainBox.checked);
 Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }).catch((e) => console.error(e)),
   loadCars(BASE).then(() => { carsReady = true; }).catch((e) => console.error(e)),
-]).finally(() => { peopleReady = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; });
+]).finally(() => { peopleReady = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
 startBtn.onclick = () => {
   $('intro').classList.add('hidden'); started = true; last = performance.now(); sfx.initAudio();
   showMsg('Talk to Unc for work, or take the block next door: knock out the Locals and stand in the ring.');
@@ -293,9 +319,10 @@ function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' ? 0.8 :
 
 function frame(now) {
   requestAnimationFrame(frame);
+  renderer.info.reset();
   let rdt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   frameAvg = frameAvg * 0.95 + rdt * 1000 * 0.05;
-  if ((resT += rdt) > 2) { resT = 0; const max = Math.min(devicePixelRatio, LOW ? 1.25 : 1.75); const target = frameAvg > 24 ? Math.max(0.7, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); } }
+  if ((resT += rdt) > 2) { resT = 0; const max = Math.min(devicePixelRatio, LOW ? 1.25 : 1.75); const target = frameAvg > 24 ? Math.max(0.7, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; }
   const s = S(), p = player(s);
@@ -362,7 +389,7 @@ function frame(now) {
     seenCars.add(c.id);
     let g = carViz.get(c.id);
     if (!g) { g = makeCar(c); g.position.set(c.x, 0, c.z); g.rotation.y = c.ry; scene.add(g); carViz.set(c.id, g); }
-    updateCar(g, c, rdt, night > 0.3 || hour > 17.5 || hour < 6.5, now);
+    updateCar(g, c, rdt, night > 0.3, now);
     // visible driver
     const occupied = (c.ai && !c.wrecked) || (c.cops && s.ents.some((e) => e.car === c.id));
     const wantDriver = peopleReady && occupied && d2 < DRIVER_DIST * DRIVER_DIST;
@@ -439,9 +466,10 @@ function frame(now) {
   if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = here ? `${DISTRICTS[districtOf(here)]}: ${here.hustle} ($${here.rate}/s), ${CREWS[here.owner].name}` : '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');
   if ((radarT -= rdt) <= 0) { radarT = LOW ? 0.1 : 0.05; drawRadar(now); }
-  renderer.render(scene, camera);
+  if (composer) { grade.uniforms.uTime.value = now / 1000; composer.render(); } else renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
-window.__game = session;
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
+window.__game = session; window.__dbg = { scene, carViz, charViz, camera };
+renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

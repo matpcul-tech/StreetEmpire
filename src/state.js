@@ -31,6 +31,7 @@ export const CREWS = {
 export const CAR_TYPES = {
   sedan: { max: 28, acc: 16, hp: 100 }, muscle: { max: 36, acc: 21, hp: 100 }, suv: { max: 26, acc: 15, hp: 140 },
   van: { max: 22, acc: 12, hp: 160 }, taxi: { max: 28, acc: 16, hp: 100 }, police: { max: 34, acc: 20, hp: 150 },
+  lowrider: { max: 26, acc: 15, hp: 110 },
 };
 export const WEAPONS = { fists: { range: 2.8, dmg: 20, cd: 0.42, swing: 0.32 }, bat: { range: 3.3, dmg: 34, cd: 0.7, swing: 0.5 }, pistol: { range: 28, dmg: 26, cd: 0.35, swing: 0.25 } };
 
@@ -57,7 +58,7 @@ export function createState(seed = 1, cfg = {}) {
   s.ents.push(newEnt(s, { kind: 'player', crew: 'player', x: c.x + BLOCK / 2 + 3, z: c.z, hp: 100, weapon: 'fists', ammo: 0, hasBat: false, heat: 0, calmT: 0, busted: 0 }));
   s.ents.push(newEnt(s, { kind: 'giver', crew: 'player', name: 'Unc', x: c.x + 6, z: c.z + 6, ry: Math.PI, hp: 999 }));
   // parked cars along the curbs, one or two per block
-  const types = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'sedan'];
+  const types = ['sedan', 'muscle', 'suv', 'lowrider', 'van', 'taxi', 'sedan', 'lowrider'];
   s.blocks.forEach((b, i) => {
     const bc = blockCenter(b);
     s.cars.push(makeCar(s, bc.x + PITCH / 2 - 5.6, bc.z - 10 + (i % 3) * 6, 0, types[i % types.length], false));
@@ -83,7 +84,7 @@ function spawnTraffic(s, anywhere) {
     const along = lineCoord(j) + PITCH / 2;
     const x = d % 2 === 0 ? lineCoord(i) : along, z = d % 2 === 0 ? along : lineCoord(i);
     if (p && !anywhere) { const dd = Math.hypot(x - p.x, z - p.z); if (dd < 70 || dd > 160) continue; }
-    const ty = ['sedan', 'sedan', 'suv', 'van', 'taxi', 'muscle'][Math.floor(R(s) * 6)];
+    const ty = ['sedan', 'sedan', 'suv', 'van', 'taxi', 'muscle', 'lowrider'][Math.floor(R(s) * 7)];
     const car = makeCar(s, x, z, Math.atan2(DIRS[d][0], DIRS[d][1]), ty, true); laneSnap(car); s.cars.push(car);
     return car;
   }
@@ -115,7 +116,7 @@ export function spawnUnit(s, crew, role, blockId, x, z) {
 
 export const player = (s) => s.ents.find((e) => e.kind === 'player');
 export const stars = (p) => (!p || p.heat < 10 ? 0 : Math.min(5, 1 + Math.floor((p.heat - 10) / 20)));
-export const clock = (s) => (18.5 + (s.t * 24) / DAY_SECONDS) % 24;
+export const clock = (s) => (17.8 + (s.t * 24) / DAY_SECONDS) % 24;
 // Traffic light: which axis has green. Returns 'z', 'x' or null (all red / yellow).
 export function signal(s) { const ph = s.t % SIGNAL_CYCLE; return ph < 8 ? 'z' : ph < 10 ? 'yz' : ph < 18 ? 'x' : 'yx'; }
 export function blockAt(s, x, z) {
@@ -323,11 +324,17 @@ function clampWorld(o) { o.x = Math.max(-HALF, Math.min(HALF, o.x)); o.z = Math.
 // Buildings: each block has 4 corner buildings leaving a plus-shaped open lot
 // (the alleys and courtyard) through the middle.
 export function buildingsFor(b) {
-  const c = blockCenter(b), h = BLOCK / 2, w = 13, out = [];
-  const tall = districtOf(b) === 1 ? 2.2 : 1;
+  // kind drives the look: store, house, apt (Eastside), tower (Downtown), shed (Harbor)
+  const c = blockCenter(b), h = BLOCK / 2, w = 13, out = [], d = districtOf(b);
+  let i = 0;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const height = (8 + ((b.id * 13 + sx * 3 + sz * 5 + 20) % 4) * 3.5) * tall;
-    out.push({ x: c.x + sx * (h - w / 2), z: c.z + sz * (h - w / 2), w, d: w, h: height, sx, sz });
+    const r = (b.id * 13 + sx * 3 + sz * 5 + 20) % 4;
+    let kind, height;
+    if (d === 0) { kind = i === 0 ? 'store' : i === 3 && b.id % 2 ? 'apt' : 'house'; height = kind === 'apt' ? 11 : kind === 'store' ? 6 : 6.5; }
+    else if (d === 1) { kind = r === 0 ? 'apt' : 'tower'; height = kind === 'apt' ? 18 + r * 2 : 22 + r * 9; }
+    else { kind = 'shed'; height = 9 + r * 1.2; }
+    out.push({ x: c.x + sx * (h - w / 2), z: c.z + sz * (h - w / 2), w, d: w, h: height, sx, sz, kind });
+    i++;
   }
   return out;
 }

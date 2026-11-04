@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 export const MODELS = ['Casual_Male', 'Casual2_Male', 'Casual3_Male', 'Casual_Female', 'Suit_Male', 'BlueSoldier_Male'];
 const templates = {};
@@ -33,16 +34,18 @@ const PANTS = [0x2a3550, 0x1a1a1a, 0x4a4030, 0x3a3a40, 0x5a5a60];
 export function lookFor(e, CREWS) {
   const v = e.look ?? (e.id * 7);
   const skin = SKINS[v % SKINS.length], hair = HAIR[(v >> 1) % HAIR.length];
-  if (e.kind === 'player') return { model: 'Casual_Male', colors: { Skin: 0x7a4a30, Shirt: 0x2f8f4a, Pants: 0x2a3550, Hair: 0x111111, Belt: 0x111111 } };
+  if (e.kind === 'player') return { model: 'Casual_Male', colors: { Skin: 0x7a4a30, Shirt: 0x2f8f4a, Pants: 0x2a3550, Hair: 0x111111, Belt: 0x111111 }, acc: { cap: 0x1e6a34, back: true, neck: 0x2f8f4a } };
   if (e.kind === 'giver') return { model: 'Suit_Male', colors: { Skin: 0x5a3825, Shirt: 0xd8d0c0, Black: 0x2a2a30, Hair: 0x777777 } };
   if (e.kind === 'cop') return { model: 'BlueSoldier_Male', colors: { Skin: skin, Main: 0x1a2a55, Black: 0x111111, Grey: 0x2a2a3a, Helmet: 0x101830 } };
   if (e.kind === 'ped') {
     const m = ['Casual_Male', 'Casual2_Male', 'Casual3_Male', 'Casual_Female', 'Suit_Male'][v % 5];
-    return { model: m, colors: { Skin: skin, Hair: hair, Shirt: SHIRTS[(v >> 2) % SHIRTS.length], Pants: PANTS[(v >> 3) % PANTS.length], Black: 0x222228 } };
+    return { model: m, colors: { Skin: skin, Hair: hair, Shirt: SHIRTS[(v >> 2) % SHIRTS.length], Pants: PANTS[(v >> 3) % PANTS.length], Black: 0x222228 }, acc: v % 4 === 1 && m !== 'Suit_Male' ? { cap: SHIRTS[(v >> 4) % SHIRTS.length] } : {} };
   }
   const c = CREWS[e.crew];
   const model = e.crew === 'neutral' ? (v % 2 ? 'Casual_Female' : 'Casual3_Male') : c.model;
-  return { model, colors: { Skin: skin, Hair: hair, Shirt: c.shirt, Pants: c.pants } };
+  // crew uniforms: a cap or a bandana in crew colors, worn a little differently per crew
+  const acc = { reds: { rag: c.shirt }, blues: { neck: c.shirt, cap: 0x1a1a1a }, golds: { cap: c.shirt }, neutral: v % 3 ? {} : { cap: 0x3a3a3a } }[e.crew] || {};
+  return { model, colors: { Skin: skin, Hair: hair, Shirt: c.shirt, Pants: c.pants }, acc };
 }
 
 function materialFor(base, col) {
@@ -51,6 +54,24 @@ function materialFor(base, col) {
   const m = new THREE.MeshStandardMaterial({ color: col ?? base.color, roughness: base.name === 'Face' ? 0.4 : 0.85, metalness: 0 });
   if (base.name === 'Skin' || base.name === 'Face') m.roughness = 0.6;
   matCache.set(key, m); return m;
+}
+
+// Caps, do-rags and neck bandanas, parented to the head and neck bones.
+export const ACC = { y: 0.3, z: 0.0, r: 0.25, neckY: 0.0, neckR: 0.13 };
+let accGeo = null;
+const accMats = new Map();
+function accMat(c) { if (!accMats.has(c)) accMats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 })); return accMats.get(c); }
+function accessories() {
+  if (accGeo) return accGeo;
+  const r = ACC.r;
+  const dome = new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2); dome.scale(1, 0.8, 1.08);
+  const brim = new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.015, 12, 1, false, -Math.PI / 2, Math.PI); brim.scale(1, 1, 1.1); brim.translate(0, 0.0, r * 0.35);
+  const cap = mergeGeometries([dome, brim]);
+  const rag = new THREE.SphereGeometry(r * 1.03, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.55); rag.scale(1, 0.85, 1.1);
+  const tail = new THREE.ConeGeometry(0.05, 0.16, 4); tail.rotateX(-Math.PI / 2 - 0.6); tail.translate(0, -0.02, -r * 1.05);
+  const doRag = mergeGeometries([rag.toNonIndexed(), tail.toNonIndexed()]);
+  const neck = new THREE.CylinderGeometry(ACC.neckR, ACC.neckR * 1.25, 0.12, 10, 1, true); neck.translate(0, 0, 0);
+  accGeo = { cap, doRag, neck }; return accGeo;
 }
 
 // Simple weapons parented to the right fist bone.
@@ -67,7 +88,7 @@ export function makeCharacter(look, shadow) {
   const T = templates[look.model] || templates.Casual_Male;
   const root = skeletonClone(T.scene);
   root.scale.setScalar(T.scale);
-  let hand = null;
+  let hand = null, head = null, neckB = null;
   root.traverse((o) => {
     if (o.isSkinnedMesh || o.isMesh) {
       const mats = Array.isArray(o.material) ? o.material : [o.material];
@@ -76,11 +97,19 @@ export function makeCharacter(look, shadow) {
       o.castShadow = !!shadow; o.frustumCulled = false;
     }
     if (o.isBone && o.name === 'Fist.R') hand = o;
+    if (o.isBone && o.name === 'Head') head = o;
+    if (o.isBone && o.name === 'Neck') neckB = o;
   });
   const W = weapons();
   const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat);
   bat.visible = gun.visible = false;
   if (hand) { const s = 1 / T.scale; bat.scale.setScalar(s); gun.scale.setScalar(s); bat.rotation.x = Math.PI / 2; hand.add(bat, gun); }
+  const A = look.acc || {}, AG = accessories(), si = 1 / T.scale;
+  if (head && (A.cap || A.rag)) {
+    const m = new THREE.Mesh(A.rag ? AG.doRag : AG.cap, accMat(A.rag || A.cap)); m.scale.setScalar(si); m.position.set(0, ACC.y * si, ACC.z * si);
+    if (A.back) m.rotation.y = Math.PI; m.castShadow = !!shadow; head.add(m);
+  }
+  if (neckB && A.neck) { const m = new THREE.Mesh(AG.neck, accMat(A.neck)); m.scale.setScalar(si); m.position.y = ACC.neckY * si; neckB.add(m); }
   const g = new THREE.Group(); g.add(root);
   const mixer = new THREE.AnimationMixer(root);
   const act = {};

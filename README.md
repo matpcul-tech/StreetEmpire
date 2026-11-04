@@ -79,3 +79,12 @@ npm run build
 ```
 
 Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
+
+## v0.4 art direction
+
+- Style guide: docs/art-style.md (golden hour haze, deep brown shadows, washed out palette).
+- Original painted textures in public/tex (WebP, 512 or 1024 px), made by tools/process-art.py from generated art. No real brands.
+- Eastside houses with porches, liquor store and corner market, basketball court, palms, telephone poles and wires, chain-link. Downtown towers and apartments. Harbor sheds, container docks and cranes.
+- Crew caps, do-rags and neck bandanas. Cars merged into one body mesh plus wheels with chrome and dirt shading, new lowrider.
+- Day-following sky reflections, warm haze fog, LUT grade, vignette, film grain (toggle on the title screen or G). `?nofx` turns post off.
+- Title screen, key art, loading bar, app icon, manifest, og and twitter preview.
