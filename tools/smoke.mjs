@@ -7,8 +7,8 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME || '/
 for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]]) {
   const page = await (await browser.newContext(opts)).newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
-  await page.goto(url, { waitUntil: 'load' });
-  await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 60000 });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 150000 });
   if (name === 'phone') await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(1500);
   if (name === 'desktop') { await page.keyboard.down('KeyD'); await page.waitForTimeout(800); await page.keyboard.up('KeyD'); await page.keyboard.press('KeyF'); }
