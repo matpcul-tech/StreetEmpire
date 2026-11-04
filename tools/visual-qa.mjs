@@ -31,6 +31,8 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
   await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 150000 });
   if (dev === 'phone') await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(1500);
+  // QA measures gameplay framing: cinematic moments are skipped as they start (tools/cine-shots.mjs covers them)
+  await page.evaluate(() => setInterval(() => window.__cine && window.__cine.active && window.__cine.skip(), 50));
   for (const [tod, t] of Object.entries(TIMES)) {
     const shot = async (kind, setup) => {
       await page.evaluate(setup, t); await page.waitForTimeout(2500);
@@ -82,7 +84,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
     });
     await shot('mission', (t) => {
       clearInterval(window.__drv); const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); if (p.car) g.send({ type: 'car' });
-      const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; g.send({ type: 'talk' }); s.t = t; window.__skipCine = setInterval(() => window.__cine && window.__cine.active === 'brief' && window.__cine.skip(), 100); setTimeout(() => clearInterval(window.__skipCine), 6000); // briefings are covered by tools/cine-shots.mjs
+      const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; g.send({ type: 'talk' }); s.t = t; // briefings are covered by tools/cine-shots.mjs
     });
   }
   if (errs.length) fail.push(`${dev}: page errors ${errs.join('; ')}`);
