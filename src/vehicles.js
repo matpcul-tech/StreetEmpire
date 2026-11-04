@@ -21,6 +21,11 @@ export async function loadCars(base) {
 }
 
 let shared = null;
+function glowTex(rgb) {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, `rgba(${rgb},1)`); gr.addColorStop(0.25, `rgba(${rgb},.45)`); gr.addColorStop(1, `rgba(${rgb},0)`); g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
+}
 function parts() {
   if (shared) return shared;
   const beam = new THREE.ConeGeometry(2.2, 10, 12, 1, true); beam.translate(0, -5, 0); beam.rotateX(-Math.PI / 2);
@@ -28,10 +33,14 @@ function parts() {
   const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, 'rgba(255,240,200,0.9)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = gr; g.fillRect(0, 0, 4, 64);
   const beams = mergeGeometries([beam.clone().rotateX(0.06).translate(-0.62, 0.72, 2.3), beam.clone().rotateX(0.06).translate(0.62, 0.72, 2.3)]);
   shared = {
-    beam, beams, beamMat: new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bc), transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
+    beam, beams, beamMat: new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bc), transparent: true, opacity: 0.05, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
     lamp: new THREE.BoxGeometry(0.4, 0.14, 0.05),
     head: new THREE.MeshBasicMaterial({ color: 0xfff4d0, toneMapped: false }),
     tail: new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }),
+    tailDim: new THREE.MeshBasicMaterial({ color: 0x8a1010, toneMapped: false }),
+    tailBrake: new THREE.MeshBasicMaterial({ color: 0xff3a3a, toneMapped: false }),
+    flare: new THREE.SpriteMaterial({ map: glowTex('255,240,210'), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    flareR: new THREE.SpriteMaterial({ map: glowTex('255,40,30'), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
     sirenR: new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }),
     sirenB: new THREE.MeshBasicMaterial({ color: 0x2050ff, toneMapped: false }),
     sirenGeo: new THREE.BoxGeometry(0.35, 0.14, 0.25),
@@ -45,20 +54,65 @@ function parts() {
 // mesh plus four wheel meshes, so a car costs a handful of draw calls. A
 // shader adds chrome (per vertex metal flag) and road dirt low on the body.
 const PAINT_LOW = [0x5a1a6a, 0x0a6a6a, 0xa8781a, 0x7a0a1a, 0x1a3a8a];
-let carMat = null;
-function bodyMaterial() {
-  if (carMat) return carMat;
-  carMat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.35, roughness: 0.42 });
-  carMat.onBeforeCompile = (sh) => {
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aMetal;\nattribute float aDirt;\nvarying float vMetal;\nvarying float vDirt;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMetal = aMetal; vDirt = aDirt;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying float vMetal;\nvarying float vDirt;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.16, 0.12, 0.09), vDirt * 0.75);')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 1.0, vMetal) * (1.0 - vDirt);')
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor, 0.1, vMetal), 0.95, vDirt);');
+// Car paint (v0.8b): one shader, four wear variants. Per vertex flags mark
+// chrome, glass and dirt; aP is the position inside the body box (0..1) so
+// rust, scratches, sun bleach, primer spots, stripes and livery are painted in
+// the shader without textures.
+const carMats = new Map();
+const CAR_GLSL = `
+varying vec3 vP; varying float vMetal; varying float vDirt; varying vec3 vON;
+uniform float uWear, uSeed, uKind; uniform vec3 uStripe;
+float ch(vec3 p){ p = fract(p*0.3183099+0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float cn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(ch(i),ch(i+vec3(1,0,0)),f.x),mix(ch(i+vec3(0,1,0)),ch(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(ch(i+vec3(0,0,1)),ch(i+vec3(1,0,1)),f.x),mix(ch(i+vec3(0,1,1)),ch(i+vec3(1,1,1)),f.x),f.y),f.z); }
+`;
+function bodyMaterial(wear = 0, kind = 0, stripe = 0xffffff) {
+  const key = wear + ':' + kind + ':' + stripe;
+  if (carMats.has(key)) return carMats.get(key);
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.4, roughness: 0.38 });
+  const U = { uWear: { value: [0.1, 0.4, 0.7, 1.0][wear] }, uSeed: { value: wear * 7.31 + kind * 1.7 }, uKind: { value: kind }, uStripe: { value: new THREE.Color(stripe) } };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aMetal;\nattribute float aDirt;\nattribute vec3 aP;\n' + CAR_GLSL)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMetal = aMetal; vDirt = aDirt; vP = aP; vON = normal;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + CAR_GLSL)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float paintable = step(vMetal, 0.05) * step(0.05, vP.y);
+        vec3 c = diffuseColor.rgb; float w = uWear;
+        // livery and markings: taxi checker band, police doors, muscle stripes, crew stickers
+        if (uKind > 0.5 && uKind < 1.5 && abs(vP.y - 0.5) < 0.035 && paintable > 0.0) c = mod(floor(vP.z*40.0)+floor(vP.y*60.0), 2.0) < 1.0 ? vec3(0.05) : vec3(0.95);
+        if (uKind > 1.5 && uKind < 2.5 && abs(vON.x) > 0.6 && vP.y < 0.55 && vP.y > 0.25 && abs(vP.z - 0.5) < 0.18 && paintable > 0.0) c = vec3(0.92);
+        if (uKind > 2.5 && uKind < 3.5 && abs(vP.x - 0.5) < 0.09 && abs(vP.x - 0.5) > 0.03 && vON.y > 0.3 && paintable > 0.0) c = uStripe;
+        if (uKind > 3.5 && abs(vON.x) > 0.6 && vP.y > 0.25 && vP.y < 0.42 && paintable > 0.0) c = uStripe * 0.9;
+        float st = cn(vec3(vP.z*9.0 + uSeed, vP.y*9.0, uSeed));
+        if (paintable > 0.0 && abs(vON.x) > 0.6 && st > 0.93 - 0.02*w && vP.y > 0.3 && vP.y < 0.6) c = mix(c, uStripe, 0.85);
+        // mismatched panel or primer spot on one door or fender
+        float panel = step(abs(vP.z - fract(uSeed*0.37)*0.8 - 0.1), 0.1) * step(0.5, fract(uSeed*0.53 + w));
+        if (paintable > 0.0 && abs(vON.x) > 0.5 && panel > 0.0 && w > 0.3) c = mix(c, mod(uSeed, 2.0) < 1.0 ? vec3(0.42, 0.42, 0.4) : c.gbr * 0.8, 0.9);
+        // sun bleached, faded roof and hood
+        c = mix(c, vec3(dot(c, vec3(0.33)))*1.15 + 0.06, paintable * w * 0.25 * smoothstep(0.4, 0.95, vON.y));
+        // rust at the edges, wheel arches and low panels
+        float rn = cn(vP*vec3(14.0, 18.0, 14.0) + uSeed);
+        float rust = paintable * smoothstep(0.62 - 0.22*w, 0.8 - 0.2*w, rn) * (1.0 - smoothstep(0.2, 0.55, vP.y)) * w;
+        c = mix(c, vec3(0.32, 0.14, 0.06) * (0.7 + 0.6*cn(vP*80.0)), rust);
+        // scratches: thin bright horizontal scuffs
+        float sc = step(0.985 - 0.01*w, cn(vec3(vP.z*3.0, vP.y*220.0, uSeed))) * step(0.7, cn(vP*7.0 + uSeed));
+        c = mix(c, vec3(0.75), sc * paintable * w);
+        c = mix(c, vec3(0.16, 0.12, 0.09), vDirt * (0.45 + 0.4*w) * (0.6 + 0.6*cn(vP*30.0)));
+        diffuseColor.rgb = c;`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        // dents: a little noisy normal wobble on worn cars
+        float dn = cn(vP*vec3(10.0, 6.0, 10.0) + uSeed*3.0) - 0.5;
+        normal = normalize(normal + vec3(dn, -dn*0.5, dn*0.7) * 0.35 * uWear * step(vMetal, 0.05));`)
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 1.0, vMetal) * (1.0 - vDirt) * (1.0 - 0.6*uWear);')
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(mix(roughnessFactor + 0.35*uWear*(1.0 - vMetal), 0.08 + 0.25*uWear*cn(vP*20.0), vMetal), 0.95, vDirt);');
   };
-  return carMat;
+  m.customProgramCacheKey = () => 'carpaint';
+  carMats.set(key, m); return m;
 }
+let glassMat = null;
+function glass() { return glassMat ||= new THREE.MeshStandardMaterial({ color: 0x1a2630, metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.5, depthWrite: false, envMapIntensity: 1.5 }); }
 const geoCache = new Map();
 function carGeometry(type, paint) {
   const key = type + ':' + paint;
@@ -76,9 +130,10 @@ function carGeometry(type, paint) {
     const n = mat.name || '';
     let metal = 0;
     if (/paint/i.test(n) && type !== 'police' && type !== 'taxi') col.setHex(type === 'lowrider' ? PAINT_LOW[paint % PAINT_LOW.length] : PAINT[paint % PAINT.length]);
-    else if (/window/i.test(n)) { col.setHex(0x0c1218); metal = 0.8; }
+    else if (/window/i.test(n)) { col.setHex(0x0c1218); metal = 2; }
     else if (/plastic/i.test(n) && type === 'lowrider') { col.setHex(0xd8d8d8); metal = 1; }
-    else if (/wheelInside|carTire/i.test(n)) col.setHex(0x161616);
+    else if (/carTire/i.test(n)) col.setHex(0x161616);
+    else if (/wheelInside/i.test(n)) { col.setHex(paint % 3 === 0 ? 0xd8d8d8 : paint % 3 === 1 ? 0x2a2a2a : 0xa89058); metal = paint % 3 === 1 ? 0 : 1; }
     else if (/_default/i.test(n) && type === 'lowrider') { col.setHex(0xe0e0e0); metal = 1; }
     else col.copy(mat.color);
     const cnt = g.attributes.position.count, c = new Float32Array(cnt * 3), m = new Float32Array(cnt), d = new Float32Array(cnt);
@@ -103,7 +158,9 @@ function carGeometry(type, paint) {
     }
     if (o.isMesh) { let p = o.parent, inWheel = false; while (p) { if (/^wheel_/.test(p.name)) inWheel = true; p = p.parent; } if (!inWheel) meshParts(o, o.matrixWorld, body); }
   });
-  const merged = mergeGeometries(body);
+  const glassParts = body.filter((g) => g.attributes.aMetal.getX(0) === 2), solid = body.filter((g) => g.attributes.aMetal.getX(0) !== 2);
+  const merged = mergeGeometries(solid);
+  const glassGeo = glassParts.length ? mergeGeometries(glassParts) : null;
   // dirt: strongest near the rocker panels, broken up with a little noise
   merged.computeBoundingBox(); const bb = merged.boundingBox, P = merged.attributes.position, D = merged.attributes.aDirt, M = merged.attributes.aMetal;
   for (let i = 0; i < P.count; i++) {
@@ -111,7 +168,12 @@ function carGeometry(type, paint) {
     const n = Math.sin(P.getX(i) * 9.1 + P.getZ(i) * 5.3) * 0.5 + 0.5;
     D.setX(i, Math.max(0, 1 - y / 0.42) * (0.35 + 0.5 * n) * (M.getX(i) > 0.5 ? 0.3 : 1) * (type === 'lowrider' ? 0.3 : 1));
   }
-  const out = { body: merged, wheels };
+  // aP: position inside the body box, for the paint shader
+  const ap = new Float32Array(P.count * 3), sz = new THREE.Vector3(); bb.getSize(sz);
+  for (let i = 0; i < P.count; i++) { ap[i * 3] = (P.getX(i) - bb.min.x) / sz.x; ap[i * 3 + 1] = (P.getY(i) - bb.min.y) / sz.y; ap[i * 3 + 2] = (P.getZ(i) - bb.min.z) / sz.z; }
+  merged.setAttribute('aP', new THREE.BufferAttribute(ap, 3));
+  for (const w of wheels) { const n = w.geo.attributes.position.count; w.geo.setAttribute('aP', new THREE.BufferAttribute(new Float32Array(n * 3), 3)); }
+  const out = { body: merged, wheels, glass: glassGeo };
   geoCache.set(key, out); return out;
 }
 
@@ -122,35 +184,46 @@ export function makeCar(c) {
   model.scale.setScalar(T.scale); model.position.y = -T.minY * T.scale; model.rotation.y = Math.PI; // kit faces -z
   model.rotation.order = 'YXZ';
   const geo = carGeometry(c.type, c.paint);
-  const body = new THREE.Mesh(geo.body, bodyMaterial()); body.castShadow = true;
+  let h = 0; for (const ch of String(c.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const wear = c.type === 'police' ? 0 : c.type === 'lowrider' ? h % 2 : h % 4;
+  const kind = { taxi: 1, police: 2, muscle: 3, van: 4 }[c.type] || 0;
+  const STRIPES = [0xd8d0c0, 0xa82222, 0x2850a8, 0xc89a18, 0x1a1a1a, 0xe0e0e0];
+  const mat = bodyMaterial(wear, kind, STRIPES[(h >> 3) % STRIPES.length]);
+  const body = new THREE.Mesh(geo.body, mat); body.castShadow = true;
   if (c.type === 'lowrider') body.position.y = -0.1 / T.scale;
   model.add(body);
   const wheels = [];
-  for (const w of geo.wheels) { const m = new THREE.Mesh(w.geo, bodyMaterial()); m.position.copy(w.pos); model.add(m); wheels.push({ node: m, front: w.front }); }
+  if (geo.glass) { const gl = new THREE.Mesh(geo.glass, glass()); gl.renderOrder = 2; body.add(gl); }
+  for (const w of geo.wheels) { const m = new THREE.Mesh(w.geo, mat); m.position.copy(w.pos); model.add(m); wheels.push({ node: m, front: w.front }); }
   g.add(model);
   const lamps = new THREE.Group();
   for (const x of [-0.62, 0.62]) {
     const h = new THREE.Mesh(P.lamp, P.head); h.position.set(x, 0.75, 2.2); lamps.add(h);
     const t = new THREE.Mesh(P.lamp, P.tail); t.position.set(x, 0.8, -2.2); lamps.add(t);
   }
-  g.add(mergedLamps(lamps));
+  const LG = lampGeos(lamps);
+  g.add(new THREE.Mesh(LG.head, P.head));
+  const tails = new THREE.Mesh(LG.tail, P.tailDim); g.add(tails);
+  const flares = new THREE.Group();
+  for (const x of [-0.62, 0.62]) { const f = new THREE.Sprite(P.flare); f.position.set(x, 0.75, 2.3); f.scale.setScalar(0.9); flares.add(f); const r = new THREE.Sprite(P.flareR); r.position.set(x, 0.8, -2.3); r.scale.setScalar(0.9); r.userData.tail = true; flares.add(r); }
+  g.add(flares);
   const beams = new THREE.Mesh(P.beams, P.beamMat); beams.userData.beam = true; g.add(beams);
   let siren = null;
   if (c.type === 'police') {
     siren = [new THREE.Mesh(P.sirenGeo, P.sirenR), new THREE.Mesh(P.sirenGeo, P.sirenB)];
     siren[0].position.set(-0.25, 1.75, -0.1); siren[1].position.set(0.25, 1.75, -0.1); g.add(...siren);
   }
-  g.userData = { wheels, spinA: 0, siren, model, body, burnt: false, baseY: model.position.y };
+  g.userData = { wheels, spinA: 0, siren, model, body, burnt: false, baseY: model.position.y, tails, flares };
   return g;
 }
 let lampGeo = null;
-function mergedLamps(grp) {
+function lampGeos(grp) {
   if (!lampGeo) {
-    const parts = []; grp.updateMatrixWorld(true);
-    for (const m of grp.children) { const g = m.geometry.clone().applyMatrix4(m.matrixWorld); const col = m.material.color, n = g.attributes.position.count, c = new Float32Array(n * 3); for (let i = 0; i < n; i++) col.toArray(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); parts.push(g); }
-    lampGeo = mergeGeometries(parts);
+    grp.updateMatrixWorld(true); const hs = [], ts = [];
+    for (const m of grp.children) (m.material === parts().head ? hs : ts).push(m.geometry.clone().applyMatrix4(m.matrixWorld));
+    lampGeo = { head: mergeGeometries(hs), tail: mergeGeometries(ts) };
   }
-  return new THREE.Mesh(lampGeo, parts().lampMat);
+  return lampGeo;
 }
 
 export function updateCar(g, c, dt, night, now) {
@@ -170,6 +243,12 @@ export function updateCar(g, c, dt, night, now) {
   u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
   u.model.rotation.x = u.pitch; u.model.rotation.z = u.roll; u.model.position.y = u.baseY + by;
   for (const ch of g.children) if (ch.userData.beam) ch.visible = night && !c.wrecked;
+  // brake lights glow when slowing hard or stopped in traffic, flares at night
+  const braking = !c.wrecked && (acc < -2.5 || (c.ai && Math.abs(c.v) < 0.5));
+  u.tails.material = braking ? parts().tailBrake : night && !c.wrecked ? parts().tail : parts().tailDim;
+  u.flares.visible = !c.wrecked && (night || braking);
+  for (const f of u.flares.children) f.visible = f.userData.tail ? (braking || night) : night;
+  for (const f of u.flares.children) if (f.userData.tail) f.scale.setScalar(braking ? 1.3 : 0.8);
   if (u.siren) { const on = c.siren && Math.floor(now / 180) % 2 === 0; u.siren[0].visible = !c.siren || on; u.siren[1].visible = !c.siren || !on; }
   if (c.wrecked && !u.burnt) { u.burnt = true; u.model.traverse((o) => { if (o.isMesh) o.material = parts().burnt; }); }
 }

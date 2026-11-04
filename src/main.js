@@ -89,12 +89,12 @@ function updateDay() {
   // night (v0.8): blue purple moonlight plus a strong sky fill so nothing goes black
   sun.intensity = 2.0 * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8c96e0); }
-  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.2) * night; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0xb8846a : 0xc8a888);
+  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.35) * night; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0xb8846a : 0xc8a888);
   hemi.groundColor.setHex(night > 0.5 ? 0x5a4434 : 0x4a3226);
   scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 45 - 15 * night;
-  renderer.toneMappingExposure = 0.62 + 0.1 * dusk + (LOW ? 0.6 : 0.5) * night;
+  renderer.toneMappingExposure = 0.62 + 0.1 * dusk + (LOW ? 0.6 : 0.58) * night;
   charNight(night);
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
@@ -508,6 +508,7 @@ function frame(now) {
     // visible driver
     const occupied = (c.ai && !c.wrecked) || (c.cops && s.ents.some((e) => e.car === c.id));
     for (const ch of g.children) if (ch.userData.beam) ch.visible = ch.visible && (occupied || p.car === c.id); // parked cars keep their lights off
+    if (!(occupied || p.car === c.id)) { g.userData.flares.visible = false; g.userData.tails.material.color && (g.userData.tails.visible = true); }
     const wantDriver = peopleReady && occupied && d2 < DRIVER_DIST * DRIVER_DIST;
     const u = g.userData;
     if (wantDriver && !u.driver) {
@@ -604,6 +605,6 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
-window.__game = session; window.__dbg = { scene, carViz, charViz, camera };
+window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
