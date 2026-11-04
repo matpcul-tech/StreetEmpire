@@ -58,16 +58,18 @@ export function createCine({ camera, sfx, charViz, blocked }) {
     // car: dir 'in' or 'out'; jack adds the pull out beat
     car(dir, carG, playerG, jackId) {
       if (!carG || !playerG) return;
+      if (cur) end();
       doorFor(carG);
       const jack = dir === 'in' && jackId != null;
       cur = { kind: 'car', dir, t: 0, dur: (dir === 'in' ? 1.15 : 0.95) + (jack ? 0.4 : 0), jack: jack ? 0.4 : 0, carG, playerG, jackId, start: playerG.position.clone(), startRy: playerG.rotation.y, camInit: false };
     },
     brief(idx, unc, playerG, intro) {
+      if (cur) end();
       const lines = [...(BRIEFS[idx] || []), intro || ''];
       cur = { kind: 'brief', t: 0, lines, per: 2.1, dur: 2.1 * lines.length, unc, playerG, shot: -1 };
       document.body.classList.add('cine-on', 'cine-bars');
     },
-    swing(center) { cur = { kind: 'swing', t: 0, dur: 1.7, center: new THREE.Vector3(center.x, 0, center.z), camInit: false }; document.body.classList.add('cine-on'); },
+    swing(center) { if (cur) end(); cur = { kind: 'swing', t: 0, dur: 1.7, center: new THREE.Vector3(center.x, 0, center.z), camInit: false }; document.body.classList.add('cine-on'); },
     down(busted) { card.classList.remove('show'); cardT = 0; tint.className = busted ? 'busted on' : 'wasted on'; },
     up() { tint.className = ''; },
     passed(title, reward, rep) { $('pcTitle').textContent = title; $('pcReward').textContent = '+$' + reward; $('pcRep').textContent = 'Respect +' + rep; card.classList.add('show'); cardT = 3.2; const b = $('big'); if (b) b.classList.remove('show'); },
