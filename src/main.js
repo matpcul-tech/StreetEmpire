@@ -305,22 +305,29 @@ function pop(t, cls = '') { const el = document.createElement('div'); el.classNa
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
 function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = 3; }
 function drawRadar(now) {
-  const s = S(), p = player(s), W = 200, Rm = 95, sc = (W / 2) / Rm;
+  const s = S(), p = player(s), W = 280, Rm = 80, sc = (W / 2) / Rm;
   const ctx = radar; ctx.save();
   ctx.clearRect(0, 0, W, W);
   ctx.beginPath(); ctx.arc(W / 2, W / 2, W / 2, 0, 7); ctx.clip();
-  ctx.fillStyle = '#3a4a3a'; ctx.fillRect(0, 0, W, W);
+  ctx.fillStyle = '#2a332b'; ctx.fillRect(0, 0, W, W);
   ctx.translate(W / 2, W / 2); ctx.rotate(yaw - Math.PI); ctx.scale(sc, sc); ctx.translate(-p.x, -p.z);
   // roads
   ctx.fillStyle = '#7a7a7a';
   const ext = GRID * PITCH / 2;
   for (let i = 0; i <= GRID; i++) { const L = (i - GRID / 2) * PITCH; ctx.fillRect(L - 7, -ext - 7, 14, ext * 2 + 14); ctx.fillRect(-ext - 7, L - 7, ext * 2 + 14, 14); }
+  // center lines so streets read as streets
+  ctx.strokeStyle = 'rgba(255,210,80,.55)'; ctx.lineWidth = 0.8; ctx.setLineDash([4, 4]); ctx.beginPath();
+  for (let i = 0; i <= GRID; i++) { const L = (i - GRID / 2) * PITCH; ctx.moveTo(L, -ext); ctx.lineTo(L, ext); ctx.moveTo(-ext, L); ctx.lineTo(ext, L); }
+  ctx.stroke(); ctx.setLineDash([]);
   // turf
   for (const b of s.blocks) {
     const c = blockCenter(b);
     if (Math.abs(c.x - p.x) > 140 || Math.abs(c.z - p.z) > 140) continue;
     ctx.globalAlpha = b.owner === 'neutral' ? 0.35 : 0.6; ctx.fillStyle = CREWS[b.owner].css;
     ctx.fillRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK);
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = b.owner === 'player' ? '#7f7' : 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.2 / sc * 2; ctx.strokeRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK);
+    // the capture ring in the middle of each block
+    ctx.beginPath(); ctx.arc(c.x, c.z, 5, 0, 7); ctx.strokeStyle = CREWS[b.owner].css; ctx.lineWidth = 1.5; ctx.stroke();
     if (b.capBy && Math.floor(now / 250) % 2) { ctx.globalAlpha = 0.9; ctx.fillStyle = CREWS[b.capBy].css; ctx.fillRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK); }
   }
   ctx.globalAlpha = 1;
@@ -333,24 +340,26 @@ function drawRadar(now) {
   for (const c of s.cars) if (c.cops && Math.abs(c.x - p.x) < 110 && Math.abs(c.z - p.z) < 110) dot(c.x, c.z, Math.floor(now / 200) % 2 ? '#26f' : '#f22', 4.5);
   for (const k of s.pickups) if (k.respawnT <= 0) dot(k.x, k.z, '#6cf', 3);
   const g = s.ents.find((e) => e.kind === 'giver');
-  if (g && !s.mission) { dot(g.x, g.z, '#fc3', 6); }
+  if (g && !s.mission) { dot(g.x, g.z, '#000', 9); dot(g.x, g.z, '#fc3', 7.5); }
+  const gt = !s.mission && started ? guideTarget(s, p) : null;
+  if (gt && gt.label === 'RING') { ctx.beginPath(); ctx.arc(gt.x, gt.z, 9 + Math.sin(now / 200) * 2, 0, 7); ctx.strokeStyle = '#fc3'; ctx.lineWidth = 2.5; ctx.stroke(); }
   ctx.restore();
   // mission target arrow at the edge if off radar
   const tgt = s.mission && missionTarget(s);
   if (tgt) {
     const dx = tgt.x - p.x, dz = tgt.z - p.z, a = Math.atan2(dz, dx) + (yaw - Math.PI);
-    const d = Math.hypot(dx, dz) * sc, r = Math.min(d, W / 2 - 8);
-    ctx.fillStyle = '#fc3'; ctx.beginPath(); ctx.arc(W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r, 7, 0, 7); ctx.fill(); ctx.strokeStyle = '#000'; ctx.stroke();
+    const d = Math.hypot(dx, dz) * sc, r = Math.min(d, W / 2 - 14);
+    ctx.fillStyle = '#fc3'; ctx.beginPath(); ctx.arc(W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r, 10, 0, 7); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
   }
   if (g && !s.mission && s.missionIdx < 4) {
-    const dx = g.x - p.x, dz = g.z - p.z, a = Math.atan2(dz, dx) + (yaw - Math.PI), r = Math.min(Math.hypot(dx, dz) * sc, W / 2 - 8);
-    ctx.fillStyle = '#fc3'; ctx.font = 'bold 16px Impact'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('M', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r);
+    const dx = g.x - p.x, dz = g.z - p.z, a = Math.atan2(dz, dx) + (yaw - Math.PI), r = Math.min(Math.hypot(dx, dz) * sc, W / 2 - 14);
+    ctx.fillStyle = '#fc3'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.font = 'bold 22px Impact'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.strokeText('U', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r); ctx.fillText('U', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r);
   }
   // player arrow
   ctx.save(); ctx.translate(W / 2, W / 2); ctx.rotate(-(p.ry - yaw)); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000';
-  ctx.beginPath(); ctx.moveTo(0, 9); ctx.lineTo(6, -6); ctx.lineTo(-6, -6); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
-  const na = yaw - Math.PI - Math.PI / 2; ctx.fillText('N', W / 2 + Math.cos(na) * 88, W / 2 + Math.sin(na) * 88 + 5);
+  ctx.beginPath(); ctx.moveTo(0, 13); ctx.lineTo(9, -8); ctx.lineTo(-9, -8); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center';
+  const na = yaw - Math.PI - Math.PI / 2; ctx.strokeText('N', W / 2 + Math.cos(na) * 120, W / 2 + Math.sin(na) * 120 + 7); ctx.fillText('N', W / 2 + Math.cos(na) * 120, W / 2 + Math.sin(na) * 120 + 7);
 }
 function missionTarget(s) {
   const m = s.mission; if (!m) return null;
