@@ -1,25 +1,45 @@
-html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Impact,Arial Black,sans-serif;color:#eee;touch-action:none;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Impact,'Arial Black',sans-serif;color:#eee;touch-action:none;user-select:none;-webkit-user-select:none}
 #app canvas{display:block}
-#hud{position:fixed;top:8px;left:8px;right:8px;pointer-events:none;text-shadow:0 2px 3px #000}
-#stats{font-size:20px;letter-spacing:1px}#stats span{margin-right:14px}#cash{color:#7f7}
-#hp{width:180px;height:10px;background:#300;border:1px solid #000;margin-top:6px}#hpbar{height:100%;background:#d33;width:100%}
-#msg{margin-top:8px;font-size:15px;color:#fc6;font-family:Arial,sans-serif;font-weight:bold;max-width:70vw}
-#capture{position:fixed;top:30%;left:0;right:0;text-align:center;font-size:22px;color:#fff}
-#minimap{position:fixed;top:8px;right:8px;width:130px;height:130px;border:2px solid #222;background:#111;opacity:.9;pointer-events:none}
-#touch{display:none}
-.touch #touch{display:block}
-#stick{position:fixed;left:24px;bottom:24px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25)}
+#radar{position:fixed;top:max(10px,env(safe-area-inset-top));left:10px;width:150px;height:150px;border-radius:50%;border:3px solid #111;box-shadow:0 0 0 2px #555;pointer-events:none}
+#hud{position:fixed;top:max(8px,env(safe-area-inset-top));right:12px;text-align:right;pointer-events:none;text-shadow:2px 2px 0 #000,-1px -1px 0 #000}
+#clock{font-size:22px;color:#eee}
+#weapon{font-size:15px;color:#ddd;margin:2px 0}
+#cash{font-size:30px;color:#3c6;letter-spacing:1px}
+#stars{font-size:22px;letter-spacing:2px}#stars i{font-style:normal;color:#333}#stars i.on{color:#fff}#stars.flash i.on{color:#ffd23a}
+#hp{width:150px;height:10px;background:#300;border:2px solid #000;margin:3px 0 0 auto}#hpbar{height:100%;background:#e33;width:100%;transition:width .15s}
+#sub{font-size:14px;color:#ccc;margin-top:3px}#sub span{margin-left:8px}
+#big{position:fixed;top:32%;left:0;right:0;text-align:center;font-size:44px;letter-spacing:3px;color:#ffcc33;text-shadow:3px 3px 0 #000;pointer-events:none;opacity:0;transition:opacity .3s}
+#big.show{opacity:1}#big.red{color:#d22}
+#capture{position:fixed;top:24%;left:0;right:0;text-align:center;font-size:20px;color:#fff;text-shadow:2px 2px 0 #000;pointer-events:none}
+#mission{position:fixed;bottom:150px;left:0;right:0;text-align:center;font:bold 15px Arial,sans-serif;color:#fff;text-shadow:1px 1px 2px #000;pointer-events:none}
+#mission b{color:#ffcc33}#mtimer{color:#f66}
+#msg{position:fixed;bottom:118px;left:10%;right:10%;text-align:center;font:bold 15px Arial,sans-serif;color:#fc6;text-shadow:1px 1px 2px #000;pointer-events:none}
+body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
+#touch{display:none}.touch #touch{display:block}
+#stick{position:fixed;left:30px;bottom:30px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.22);opacity:.6}
+#stick.active{opacity:1}
 #knob{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
-#btns{position:fixed;right:16px;bottom:20px;display:grid;grid-template-columns:auto auto;gap:10px}
-#btns button{width:84px;height:64px;border-radius:14px;border:2px solid rgba(255,255,255,.3);background:rgba(0,0,0,.45);color:#fff;font:bold 13px Arial;touch-action:none}
-#btns #bAttack{background:rgba(160,30,30,.6);height:84px}
-.panel{position:fixed;inset:0;margin:auto;max-width:520px;height:fit-content;max-height:90vh;overflow:auto;padding:22px;background:rgba(12,9,6,.92);border:2px solid #a63;font-family:Arial,sans-serif;line-height:1.4}
+#steer{display:none;position:fixed;left:16px;bottom:24px;gap:14px}
+#steer button{width:86px;height:86px;border-radius:50%;font-size:30px}
+.driving #steer{display:flex}.driving #stick{display:none}
+#btns{position:fixed;right:14px;bottom:18px;display:grid;grid-template-columns:repeat(3,auto);gap:9px;align-items:end;justify-items:center}
+#touch button{border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(0,0,0,.45);color:#fff;font:bold 13px Arial,sans-serif;touch-action:none;width:66px;height:66px}
+#touch button.big{width:88px;height:88px;background:rgba(170,30,30,.6);font-size:16px}
+#touch button.small{width:auto;height:34px;border-radius:17px;padding:0 10px;font-size:11px}
+#touch button.ctx{background:rgba(40,120,200,.7)}
+#touch button.on{background:rgba(200,140,40,.7)}
+#bWeapon{grid-column:1}#bRecruit{grid-column:2 / span 2}
+#bCtx{grid-column:3}
+.drive{display:none}.driving .drive{display:block}.driving .foot{display:none}
+#bGas{background:rgba(40,160,60,.6)!important}
+.hidden{display:none!important}
+.panel{position:fixed;inset:0;margin:auto;max-width:520px;height:fit-content;max-height:90vh;overflow:auto;padding:22px;background:rgba(12,9,6,.94);border:2px solid #a63;font-family:Arial,sans-serif;line-height:1.4;z-index:5}
 .panel h1{font-family:Impact,sans-serif;color:#f93;letter-spacing:3px;margin-top:0}
 .panel button{font:bold 18px Impact,sans-serif;padding:12px 26px;background:#a63;color:#fff;border:0;letter-spacing:2px}
-.keys{font-size:13px;color:#aaa}.hidden{display:none}
-#stick.active{opacity:1}
-#btns button.on{background:rgba(200,140,40,.7)}
-.driving #bCar{background:rgba(40,120,200,.6)}
 .panel button:disabled{opacity:.6}
-#hp{height:12px;border-radius:3px;overflow:hidden}
-#hpbar{transition:width .15s}
+.keys{font-size:13px;color:#aaa}
+@media (max-width:500px){#radar{width:118px;height:118px}#cash{font-size:24px}#clock{font-size:18px}#stars{font-size:18px}#hp{width:120px}}
+.driving #touch button.small{display:none}
+.touch #msg{bottom:auto;top:46%}
+.touch #mission{bottom:auto;top:40%}
+@media (max-width:500px){#steer button{width:70px;height:70px}#touch button{width:60px;height:60px}#touch button.big{width:80px;height:80px}}

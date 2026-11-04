@@ -20,7 +20,11 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
   if (name === 'desktop') { await page.keyboard.down('KeyW'); await page.waitForTimeout(2500); await page.keyboard.up('KeyW'); }
   else await page.waitForTimeout(1500);
   await page.screenshot({ path: `${dir}/${pre}-${name}-car.png` });
-  const info = await page.evaluate(() => { const s = window.__game.state; const p = s.ents.find((e) => e.kind === 'player'); const c = s.cars.find((c) => c.id === p.car); return { t: s.t.toFixed(1), inCar: !!p.car, carV: c ? c.v.toFixed(1) : null, hud: document.getElementById('stats').innerText, touch: document.body.classList.contains('touch'), perf: window.__perf(), mm: (() => { const d = document.getElementById('minimap').getContext('2d').getImageData(0, 0, 160, 160).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() }; });
+  // wanted level and night
+  await page.evaluate(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'); p.heat = 45; s.t = 95; });
+  await page.waitForTimeout(6000);
+  await page.screenshot({ path: `${dir}/${pre}-${name}-night-wanted.png` });
+  const info = await page.evaluate(() => { const s = window.__game.state; const p = s.ents.find((e) => e.kind === 'player'); const c = s.cars.find((c) => c.id === p.car); return { cops: s.ents.filter((e) => e.kind === 'cop').length, stars: document.querySelectorAll('#stars i.on').length, clock: document.getElementById('clock').innerText, t: s.t.toFixed(1), inCar: !!p.car, carV: c ? c.v.toFixed(1) : null, hud: document.getElementById('cash').innerText, touch: document.body.classList.contains('touch'), perf: window.__perf(), mm: (() => { const d = document.getElementById('radar').getContext('2d').getImageData(0, 0, 200, 200).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() }; });
   console.log(name, JSON.stringify(info), 'errors:', errs);
 }
 await browser.close();

@@ -4,34 +4,46 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#1a1410" />
-<title>Street Empire v0.2</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
 <link rel="icon" href="data:," />
+<title>Street Empire v0.3</title>
 <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
 <div id="app"></div>
+<canvas id="radar" width="200" height="200"></canvas>
 <div id="hud">
-  <div id="stats"><span id="cash">$0</span> <span id="rep">Rep 0</span> <span id="turf">Turf 0/9</span></div>
+  <div id="clock">18:30</div>
+  <div id="weapon"><span id="wname">FISTS</span> <span id="ammo"></span></div>
+  <div id="cash">$00000150</div>
+  <div id="stars"><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i><i>&#9733;</i></div>
   <div id="hp"><div id="hpbar"></div></div>
-  <div id="msg"></div>
-  <div id="capture"></div>
+  <div id="sub"><span id="rep">Rep 0</span> <span id="turf">Turf 1/25</span></div>
 </div>
-<canvas id="minimap" width="160" height="160"></canvas>
+<div id="big"></div>
+<div id="capture"></div>
+<div id="mission"><b id="mtitle"></b> <span id="mtext"></span> <span id="mtimer"></span></div>
+<div id="msg"></div>
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
+  <div id="steer"><button id="bLeft">&#9664;</button><button id="bRight">&#9654;</button></div>
   <div id="btns">
-    <button id="bAttack">PUNCH</button>
-    <button id="bSprint">RUN</button>
-    <button id="bCar">CAR</button>
-    <button id="bRecruit">RECRUIT $100</button>
+    <button id="bWeapon" class="small">FISTS</button>
+    <button id="bRecruit" class="small">+CREW $100</button>
+    <button id="bCtx" class="ctx hidden">CAR</button>
+    <button id="bJump" class="foot">JUMP</button>
+    <button id="bSprint" class="foot">RUN</button>
+    <button id="bAttack" class="foot big">HIT</button>
+    <button id="bBrake" class="drive">BRAKE</button>
+    <button id="bGas" class="drive big">GAS</button>
   </div>
 </div>
 <div id="intro" class="panel">
   <h1>STREET EMPIRE</h1>
-  <p>You are a youngster on the corner of Eastside with one block to your name. Three crews run the rest of the neighborhood, and they want yours too.</p>
-  <p>Beat a block's defenders, then hold its zone to take it. Every block runs a hustle that pays you over time. Spend cash on recruits who follow and fight for you. Steal a car to get around fast.</p>
-  <p><b>Win:</b> own all 9 blocks. <b>Lose:</b> lose all your turf.</p>
-  <p class="keys">Desktop: WASD move, mouse look (click to lock), Shift sprint, Click or F punch, E enter or exit car, R recruit.<br/>Phone: left stick moves, drag right side to look, buttons for the rest.</p>
+  <p>You are a youngster on the Eastside with one block to your name. Three crews run the rest of the city, from Eastside through Downtown to the Harbor, and they want yours too.</p>
+  <p>Beat a block's defenders, then hold its ring to take it. Every block runs a hustle that pays you. Spend cash on crew. Talk to Unc (the man in the suit) for jobs. Fighting, carjacking and shooting raise your wanted level and the cops will come.</p>
+  <p><b>Win:</b> wipe out the three rival crews. <b>Lose:</b> lose all your turf.</p>
+  <p class="keys">Desktop: WASD move, mouse look (click to lock), Shift sprint, Space jump, click or F attack, Q switch weapon, E car or talk, R recruit.<br/>Phone: left thumb moves, drag the right side to look, buttons change with what you are doing.</p>
   <button id="start">HIT THE STREETS</button>
 </div>
 <div id="end" class="panel hidden"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>

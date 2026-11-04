@@ -1,4 +1,4 @@
-# Street Empire (v0.2 prototype)
+# Street Empire (v0.3 prototype)
 
 A third-person browser game about building a street empire one block at a time. Think "World of Warcraft for the streets": every block is territory, every block runs a hustle, and rival crews are always expanding.
 
@@ -11,24 +11,41 @@ Play it: https://matpcul-tech.github.io/StreetEmpire/
 - Each block runs one hustle that pays its owner cash every second.
 - Spend cash on recruits who follow you and fight.
 - Three AI crews (Red Kings, Blue Hand, Gold Line) earn, recruit, push into neighboring blocks, and attack each other and you.
-- Win by owning all 9 blocks. Lose if your last block falls.
+- Win by wiping out the three rival crews. Lose if your last block falls.
 
 ### Controls
 
 | Action | Desktop | Phone |
 | --- | --- | --- |
-| Move | WASD or arrows | Left stick |
+| Move | WASD or arrows | Floating left stick |
 | Look | Mouse (click to lock) | Drag right side |
 | Sprint | Shift | RUN toggle |
-| Punch | Click or F | PUNCH |
-| Enter or exit car | E | CAR |
-| Recruit ($100) | R | RECRUIT |
+| Jump | Space | JUMP |
+| Attack or shoot | Click or F | HIT or SHOOT |
+| Switch weapon | Q | Weapon button |
+| Car, talk to Unc | E | Context button |
+| Recruit ($100) | R | +CREW |
+| Drive | W and S gas and brake, A and D steer | GAS, BRAKE and arrow buttons |
 
 In a car, forward and back are throttle and left and right steer. Hitting rivals at speed knocks them down.
 
 Phones get low settings automatically (no shadows, no dynamic street lights, pixel ratio up to 1.25, character LOD at 32 m). Add `?low` to the URL to force low settings on desktop.
 
-## What is new in v0.2
+## What is new in v0.3
+
+- Clothed people with faces from Quaternius' Ultimate Animated Character Pack: crews wear their own colors, police wear uniforms, Unc wears a suit, and pedestrians vary.
+- Kenney Car Kit vehicles: sedan, muscle car, SUV, van, taxi and police cruiser, with visible drivers, damage smoke and wrecks.
+- Traffic lights at every intersection. Traffic stops on red and for people in the road.
+- Wanted level (five stars): fighting, carjacking, hitting people with cars and shooting raise heat. Police cruisers chase you, officers get out and fight, and at three stars they shoot. Lose them and the heat fades. Get knocked out while wanted and you are BUSTED.
+- Day and night cycle (one day every 8 minutes) with lit windows, street lamps and headlights at night.
+- A 5 by 5 block city across Eastside, Downtown (taller towers) and the Harbor, built in sections as you move.
+- Pedestrians walk the sidewalks, flee from fights and gunfire, and can be knocked down (they get back up).
+- Weapon pickups: a bat and a pistol (non-gory: targets just fall down).
+- GTA-style rotating radar with turf colors, crews, cops, pickups and mission markers.
+- Unc gives four short missions: Package Run, Send a Message, Chop Job and Take Over.
+- Mobile controls: floating stick, context button (CAR, TALK, EXIT), HIT or SHOOT, JUMP, RUN, weapon switch, and GAS, BRAKE and steering buttons when driving.
+
+## What was new in v0.2
 
 - Rigged humanoids with idle, walk, jog, sprint, jab, cross, hit and knockdown animations. Crew clothing colors are painted in the shader so all characters share one small model.
 - A denser city: brick and concrete facades with lit windows, storefronts, awnings, neon signs, graffiti, rooftops with AC units and water towers, alleys with dumpsters, trash and fences, sidewalk trees, hydrants and street lamps. PBR materials, a dusk sky with an environment map, fog and ACES tone mapping.
@@ -40,7 +57,9 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## Credits
 
-- Character model and animations: Universal Animation Library by Quaternius, CC0 1.0 (`public/models/LICENSE-Quaternius-CC0.txt`). Trimmed to the needed clips and compressed with meshopt by `tools/trim-mannequin.mjs`.
+- People: Ultimate Animated Character Pack by Quaternius, CC0 1.0 (`public/models/people/LICENSE-Quaternius-CC0.txt`).
+- Cars: Car Kit by Kenney, CC0 1.0 (`public/models/cars/LICENSE-Kenney-CC0.txt`).
+- Both are trimmed and compressed with meshopt by `tools/pack-assets.mjs`.
 - Everything else (city, cars, textures and sound) is generated in code.
 
 ## Code layout

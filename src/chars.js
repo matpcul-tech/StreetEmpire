@@ -1,91 +1,121 @@
-// Rigged humanoids from Quaternius' Universal Animation Library (CC0).
-// One GLB is loaded and cloned; crew clothing is painted in the shader by
-// height on the bind pose, so every crew shares one geometry and one rig.
+// Clothed, rigged people from Quaternius' Ultimate Animated Character Pack
+// (CC0). All models share one rig, so one set of animation clips drives all.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 
-let template = null, clips = {}, bounds = null;
+export const MODELS = ['Casual_Male', 'Casual2_Male', 'Casual3_Male', 'Casual_Female', 'Suit_Male', 'BlueSoldier_Male'];
+const templates = {};
+let clips = {};
 const matCache = new Map();
 
-export async function loadCharacters(url) {
+export async function loadPeople(base, onFirst) {
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  const gltf = await loader.loadAsync(url);
-  template = gltf.scene;
-  for (const c of gltf.animations) clips[c.name] = c;
-  template.traverse((o) => { if (o.isSkinnedMesh && o.material.name === 'M_Main') { o.geometry.computeBoundingBox(); bounds = o.geometry.boundingBox; } });
-  // normalize height to about 1.8 m
-  const box = new THREE.Box3().setFromObject(template); const h = box.max.y - box.min.y;
-  template.userData.scale = 1.8 / h;
-}
-
-function clothMat(shirt, pants, cap, skin) {
-  const k = [shirt, pants, cap, skin].join('_');
-  if (matCache.has(k)) return matCache.get(k);
-  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0 });
-  const u = { uShirt: { value: new THREE.Color(shirt) }, uPants: { value: new THREE.Color(pants) }, uCap: { value: new THREE.Color(cap) }, uSkin: { value: new THREE.Color(skin) }, uMin: { value: bounds.min.clone() }, uMax: { value: bounds.max.clone() } };
-  m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, u);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vBind;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-varying vec3 vBind; uniform vec3 uShirt, uPants, uCap, uSkin, uMin, uMax;`).replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
-vec3 n = (vBind - uMin) / (uMax - uMin);
-float ax = abs(n.x - 0.5) * 2.0;
-vec3 col = uPants;
-if (n.y < 0.05) col = vec3(0.06);
-else if (n.y > 0.47) col = uShirt;
-if (n.y > 0.47 && ax > 0.55) col = uSkin;
-if (n.y > 0.47 && ax > 0.24 && ax <= 0.55) col = uShirt * 0.92;
-if (n.y > 0.83) col = uSkin;
-if (n.y > 0.955) col = uCap;
-vec4 diffuseColor = vec4( col, opacity );`);
+  const load = async (n) => {
+    const g = await loader.loadAsync(`${base}models/people/${n}.glb`);
+    const box = new THREE.Box3().setFromObject(g.scene);
+    templates[n] = { scene: g.scene, scale: 1.75 / (box.max.y - box.min.y) };
+    if (g.animations.length) for (const c of g.animations) clips[c.name] = c;
   };
-  m.customProgramCacheKey = () => 'cloth';
-  matCache.set(k, m); return m;
+  await load('Casual_Male');
+  onFirst && onFirst();
+  await Promise.all(MODELS.slice(1).map(load));
 }
-const jointMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
-const SKINS = [0x8d5a3b, 0x5a3825, 0xc49272, 0x3e2a1e, 0xa8714d];
+export const ready = (n) => !!templates[n];
 
-export function makeCharacter(look) {
-  const root = skeletonClone(template);
-  const s = template.userData.scale; root.scale.setScalar(s);
-  const skin = look.skin ?? SKINS[Math.floor(Math.random() * SKINS.length)];
-  const mat = clothMat(look.shirt, look.pants, look.cap ?? look.shirt, skin);
+const SKINS = [0x8d5a3b, 0x5a3825, 0xc49272, 0x3e2a1e, 0xa8714d, 0xe0b090];
+const HAIR = [0x111111, 0x2a1a10, 0x4a3020, 0x111111, 0x6a5040];
+const SHIRTS = [0x555555, 0x7a2a2a, 0x2a4a7a, 0xb0a080, 0x2a5a3a, 0x6a3a6a, 0xd0d0d0, 0x8a6a2a, 0x222222];
+const PANTS = [0x2a3550, 0x1a1a1a, 0x4a4030, 0x3a3a40, 0x5a5a60];
+
+// Look: { model, colors: { MaterialName: hex } }
+export function lookFor(e, CREWS) {
+  const v = e.look ?? (e.id * 7);
+  const skin = SKINS[v % SKINS.length], hair = HAIR[(v >> 1) % HAIR.length];
+  if (e.kind === 'player') return { model: 'Casual_Male', colors: { Skin: 0x7a4a30, Shirt: 0x2f8f4a, Pants: 0x2a3550, Hair: 0x111111, Belt: 0x111111 } };
+  if (e.kind === 'giver') return { model: 'Suit_Male', colors: { Skin: 0x5a3825, Shirt: 0xd8d0c0, Black: 0x2a2a30, Hair: 0x777777 } };
+  if (e.kind === 'cop') return { model: 'BlueSoldier_Male', colors: { Skin: skin, Main: 0x1a2a55, Black: 0x111111, Grey: 0x2a2a3a, Helmet: 0x101830 } };
+  if (e.kind === 'ped') {
+    const m = ['Casual_Male', 'Casual2_Male', 'Casual3_Male', 'Casual_Female', 'Suit_Male'][v % 5];
+    return { model: m, colors: { Skin: skin, Hair: hair, Shirt: SHIRTS[(v >> 2) % SHIRTS.length], Pants: PANTS[(v >> 3) % PANTS.length], Black: 0x222228 } };
+  }
+  const c = CREWS[e.crew];
+  const model = e.crew === 'neutral' ? (v % 2 ? 'Casual_Female' : 'Casual3_Male') : c.model;
+  return { model, colors: { Skin: skin, Hair: hair, Shirt: c.shirt, Pants: c.pants } };
+}
+
+function materialFor(base, col) {
+  const key = base.name + ':' + base.uuid + ':' + (col ?? 'x');
+  if (matCache.has(key)) return matCache.get(key);
+  const m = new THREE.MeshStandardMaterial({ color: col ?? base.color, roughness: base.name === 'Face' ? 0.4 : 0.85, metalness: 0 });
+  if (base.name === 'Skin' || base.name === 'Face') m.roughness = 0.6;
+  matCache.set(key, m); return m;
+}
+
+// Simple weapons parented to the right fist bone.
+let weaponGeo = null;
+function weapons() {
+  if (weaponGeo) return weaponGeo;
+  const bat = new THREE.CylinderGeometry(0.035, 0.06, 0.85, 8); bat.translate(0, 0.38, 0);
+  const pistol = new THREE.BoxGeometry(0.05, 0.12, 0.22); pistol.translate(0, 0.02, 0.06);
+  weaponGeo = { bat, pistol, batMat: new THREE.MeshStandardMaterial({ color: 0x8a5a30, roughness: 0.6 }), gunMat: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.7 }) };
+  return weaponGeo;
+}
+
+export function makeCharacter(look, shadow) {
+  const T = templates[look.model] || templates.Casual_Male;
+  const root = skeletonClone(T.scene);
+  root.scale.setScalar(T.scale);
+  let hand = null;
   root.traverse((o) => {
-    if (o.isSkinnedMesh) { o.material = o.material.name === 'M_Main' ? mat : jointMat; o.castShadow = !!look.shadow; o.frustumCulled = false; }
+    if (o.isSkinnedMesh || o.isMesh) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const out = mats.map((m) => materialFor(m, look.colors[m.name]));
+      o.material = Array.isArray(o.material) ? out : out[0];
+      o.castShadow = !!shadow; o.frustumCulled = false;
+    }
+    if (o.isBone && o.name === 'Fist.R') hand = o;
   });
+  const W = weapons();
+  const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat);
+  bat.visible = gun.visible = false;
+  if (hand) { const s = 1 / T.scale; bat.scale.setScalar(s); gun.scale.setScalar(s); bat.rotation.x = Math.PI / 2; hand.add(bat, gun); }
   const g = new THREE.Group(); g.add(root);
   const mixer = new THREE.AnimationMixer(root);
   const act = {};
   for (const n in clips) act[n] = mixer.clipAction(clips[n]);
-  for (const n of ['Punch_Jab', 'Punch_Cross', 'Death01', 'Hit_Chest']) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; }
-  act.Idle_Loop.play();
-  g.userData = { mixer, act, cur: 'Idle_Loop', root };
+  for (const n of ['Punch', 'SwordSlash', 'Shoot_OneHanded', 'Death', 'RecieveHit', 'Jump', 'SitDown']) if (act[n]) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; }
+  act.Idle.play();
+  g.userData = { mixer, act, cur: 'Idle', root, bat, gun };
   return g;
 }
 
-// Pick and blend an animation from simple entity state.
-export function animate(g, e, dt, step) {
+export function animate(g, e, dt, sitting) {
   const u = g.userData;
-  let want;
-  if (e.hp <= 0) want = 'Death01';
-  else if (e.swing > 0) want = e.combo ? 'Punch_Cross' : 'Punch_Jab';
-  else if (e.hitT > 0.05) want = 'Hit_Chest';
-  else if (e.moving > 1.3) want = 'Sprint_Loop';
-  else if (e.moving > 0.62) want = 'Jog_Fwd_Loop';
-  else if (e.moving > 0.05) want = 'Walk_Loop';
-  else want = 'Idle_Loop';
+  let want, speed = 1;
+  if (sitting) want = 'SitDown';
+  else if (e.hp <= 0) want = 'Death';
+  else if (e.swing > 0) { want = e.weapon === 'pistol' ? 'Shoot_OneHanded' : e.weapon === 'bat' ? 'SwordSlash' : 'Punch'; }
+  else if (e.hitT > 0.05) want = 'RecieveHit';
+  else if (e.jumpT > 0) want = 'Jump';
+  else if (e.moving > 0.62) { want = 'Run'; speed = 0.8 + e.moving * 0.25; }
+  else if (e.moving > 0.05) { want = 'Walk'; speed = Math.max(0.7, e.moving * 2.4); }
+  else want = 'Idle';
   const swingStart = e.swing > 0 && (u.lastSwing ?? 0) <= 0;
   u.lastSwing = e.swing;
   if (want !== u.cur || swingStart) {
-    const next = u.act[want], prev = u.act[u.cur];
+    const next = u.act[want] || u.act.Idle, prev = u.act[u.cur];
     next.reset(); next.enabled = true;
-    if (want.startsWith('Punch')) next.timeScale = 2.4; else if (want === 'Hit_Chest') next.timeScale = 1.6; else next.timeScale = 1;
+    if (want === 'Punch' || want === 'SwordSlash' || want === 'Shoot_OneHanded') next.timeScale = next.getClip().duration / Math.max(0.25, (e.swing || 0.3) + 0.15);
+    else if (want === 'RecieveHit') next.timeScale = 1.6;
+    else if (want === 'SitDown') { next.time = next.getClip().duration; next.timeScale = 1; }
+    else next.timeScale = 1;
     next.play();
-    if (prev !== next) prev.crossFadeTo(next, want === 'Death01' ? 0.12 : 0.15, false);
+    if (prev && prev !== next) prev.crossFadeTo(next, 0.12, false);
     u.cur = want;
   }
-  if (want === 'Walk_Loop') u.act.Walk_Loop.timeScale = Math.max(0.6, e.moving * 1.5);
-  if (step) u.mixer.update(dt);
+  if (want === 'Run' || want === 'Walk') u.act[want].timeScale = speed;
+  u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol';
+  u.mixer.update(dt);
 }

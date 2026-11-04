@@ -80,3 +80,38 @@ export function sting() {
   const t = ctx.currentTime;
   [220, 277, 330].forEach((fr, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = fr; g.gain.setValueAtTime(0, t + i * 0.08); g.gain.linearRampToValueAtTime(0.08, t + i * 0.08 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + 0.6); o.connect(g).connect(master); o.start(t + i * 0.08); o.stop(t + i * 0.08 + 0.7); });
 }
+
+export function gunshot(vol = 1) {
+  if (!ctx) return;
+  const t = ctx.currentTime, n = noiseSrc(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  f.type = 'lowpass'; f.frequency.setValueAtTime(5000, t); f.frequency.exponentialRampToValueAtTime(300, t + 0.2);
+  g.gain.setValueAtTime(0.7 * vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  n.connect(f).connect(g).connect(master); n.start(t, Math.random()); n.stop(t + 0.3);
+  const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+  og.gain.setValueAtTime(0.5 * vol, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.12); o.connect(og).connect(master); o.start(t); o.stop(t + 0.15);
+}
+
+let sirenOsc = null, sirenGain = null;
+export function setSiren(vol) {
+  if (!ctx) return;
+  if (!sirenOsc) {
+    sirenOsc = ctx.createOscillator(); sirenOsc.type = 'triangle'; sirenGain = ctx.createGain(); sirenGain.gain.value = 0;
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.9; lg.gain.value = 220; sirenOsc.frequency.value = 760;
+    lfo.connect(lg).connect(sirenOsc.frequency); lfo.start(); sirenOsc.connect(sirenGain).connect(master); sirenOsc.start();
+  }
+  sirenGain.gain.setTargetAtTime(0.05 * vol, ctx.currentTime, 0.2);
+}
+
+export function honk(vol = 1) {
+  if (!ctx) return;
+  const t = ctx.currentTime, o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  o1.type = o2.type = 'square'; o1.frequency.value = 400; o2.frequency.value = 500; f.type = 'lowpass'; f.frequency.value = 1200;
+  g.gain.setValueAtTime(0.06 * vol, t); g.gain.setValueAtTime(0.06 * vol, t + 0.3); g.gain.linearRampToValueAtTime(0, t + 0.35);
+  o1.connect(f); o2.connect(f); f.connect(g).connect(master); o1.start(t); o2.start(t); o1.stop(t + 0.4); o2.stop(t + 0.4);
+}
+
+export function chime(good) {
+  if (!ctx) return;
+  const t = ctx.currentTime, notes = good ? [392, 494, 587, 784] : [330, 262, 196];
+  notes.forEach((fr, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = fr; g.gain.setValueAtTime(0, t + i * 0.12); g.gain.linearRampToValueAtTime(0.1, t + i * 0.12 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.5); o.connect(g).connect(master); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 0.6); });
+}
