@@ -49,7 +49,8 @@ function check(name, ok) { console.log((ok ? 'PASS ' : 'FAIL ') + name + `  (t=$
 
 // recruits first: they should tag along and never hurt you
 for (let i = 0; i < 3; i++) G.applyAction(s, p.id, { type: 'recruit' });
-check('recruited 3', followers().length === 3);
+const guards = (b) => s.ents.filter((e) => e.kind === 'npc' && e.crew === 'player' && e.role === 'defender' && e.target === b.id && e.hp > 0);
+check('recruited 3: squad of 2 follows, 3rd guards a held block', followers().length === 2 && s.blocks.some((b) => b.owner === 'player' && guards(b).some((e) => e.guard)));
 
 // 1. Package Run
 let m = talk(); check('Package Run started', m && m.kind === 'fetch');
@@ -63,7 +64,7 @@ check('Package Run passed', s.missionIdx === 1);
 for (let i = 0; i < 150; i++) tick(); // a few seconds standing with Unc
 console.log('followers', s.ents.filter((e) => e.role === 'follower').map((e) => [e.hp, Math.hypot(e.x - p.x, e.z - p.z).toFixed(0)]));
 const near = followers().filter((e) => Math.hypot(e.x - p.x, e.z - p.z) < 14).length;
-check(`recruits kept up (${near}/3 within 14 m)`, near >= 2);
+check(`squad kept up (${near}/2 within 14 m)`, near >= 2);
 
 // 2. Send a Message: knock out 3 Red Kings
 m = talk(); check('Send a Message started', m && m.kind === 'beat');
@@ -78,13 +79,18 @@ check('Send a Message passed', s.missionIdx === 2);
 // 3. Chop Job: steal a muscle car and drive it to the marker
 m = talk(); check('Chop Job started', m && m.kind === 'chop');
 { let car = s.cars.filter((c) => c.type === 'muscle' && !c.wrecked && !c.driver).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
-  walkTo(car, 3, 120); G.applyAction(s, p.id, { type: 'car' });
-  for (let i = 0; i < 5; i++) tick(0, 0, false);
+  for (let k = 0; k < 3; k++) { walkTo(car, 1.8 - k * 0.5, 120); G.applyAction(s, p.id, { type: 'car' }); if (p.car === car.id) break; if (p.car) { G.applyAction(s, p.id, { type: 'car' }); tick(); } }
+  let rode = 0; for (let i = 0; i < 60; i++) { tick(0, 0, false); rode = followers().filter((e) => e.car === p.car).length; if (rode === 2) break; }
+  check(`squad got in the car (${rode}/2)`, rode === 2);
   check('in a muscle car, marker set', !!p.car && s.mission && s.mission.stage === 1);
   if (s.mission && s.mission.target) driveTo(s.mission.target, 5.5, 180);
   for (let i = 0; i < 10; i++) tick(0, -1, false); }
 check('Chop Job passed', s.missionIdx === 3);
 if (p.car) G.applyAction(s, p.id, { type: 'car' });
+for (let i = 0; i < 5; i++) tick();
+{ const out = followers().filter((e) => !e.car && Math.hypot(e.x - p.x, e.z - p.z) < 8).length; check(`squad hopped out with you (${out}/2)`, out === 2); }
+// sprint: the squad keeps up
+{ const t0 = t; while (t < t0 + 8) tick(1, 0, true); for (let i = 0; i < 60; i++) tick(); const near = followers().filter((e) => Math.hypot(e.x - p.x, e.z - p.z) < 10).length; check(`squad kept up with a sprint (${near}/${followers().length} alive within 10 m)`, near >= 1 && near === followers().length); }
 
 // 4. Take Over: clear the block and hold the ring
 m = talk(); check('Take Over started', m && m.kind === 'take');
@@ -96,6 +102,17 @@ m = talk(); check('Take Over started', m && m.kind === 'take');
     else tick();
   } }
 check('Take Over passed', s.missionIdx === 4);
+{ const b = s.blocks[m.block]; for (let i = 0; i < 300; i++) tick();
+  const g = guards(b); const c = G.blockCenter(b); const spread = g.length > 1 ? Math.max(...g.map((x) => Math.hypot(x.x - g[0].x, x.z - g[0].z))) : 0;
+  check(`taken block garrisoned (${g.length} guards, spread ${spread.toFixed(0)} m)`, g.length >= 2 && g.length <= 3 && spread > 4 && g.every((x) => Math.abs(x.x - c.x) < 30 && Math.abs(x.z - c.z) < 30));
+  check('squad stayed to guard, nobody follows by default', followers().length === 0);
+  // call one guard along, then send it back
+  G.applyAction(s, p.id, { type: 'squad' }); check('called a guard to follow', followers().length === 1);
+  G.applyAction(s, p.id, { type: 'squad', mode: 'send' }); check('sent it back to guard', followers().length === 0);
+  // a rival attack meets the guards
+  const r = []; for (let i = 0; i < 2; i++) r.push(G.spawnUnit(s, 'reds', 'attacker', b.id, c.x + 6 + i, c.z + 6));
+  for (let i = 0; i < 600; i++) tick();
+  check(`guards held the block against a rival attack (owner ${b.owner})`, b.owner === 'player' && r.some((e) => e.hp < 60)); }
 check('recruits never hit you', followerHits === 0);
 check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChasers <= 4);
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL MISSIONS PASSED', `game time ${t.toFixed(0)}s`);

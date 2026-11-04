@@ -125,6 +125,11 @@ export function openingScuffle(s) {
   log(s, 'A Local is stepping to you. Show him whose block this is.');
   return e;
 }
+const SQUAD_MAX = 2, CREW_MAX = 24, GUARDS_PER_BLOCK = 3;
+export const squadOf = (s, p) => s.ents.filter((e) => e.crew === p.crew && e.role === 'follower' && e.leader === p.id && e.hp > 0);
+export const guardsOf = (s, b) => s.ents.filter((e) => e.kind === 'npc' && e.crew === b.owner && e.role === 'defender' && e.target === b.id && e.hp > 0);
+function makeGuard(e, b) { e.role = 'defender'; e.guard = true; e.target = b.id; e.home = b.id; e.leader = null; e.slot = undefined; e.post = undefined; }
+function weakestHeld(s, crew) { let best = null, bn = 1e9; for (const b of s.blocks) if (b.owner === crew) { const n = guardsOf(s, b).length; if (n < bn) { bn = n; best = b; } } return best || s.blocks[0]; }
 export function spawnUnit(s, crew, role, blockId, x, z) {
   const c = blockCenter(s.blocks[blockId]);
   const a = R(s) * Math.PI * 2, r = 3 + R(s) * 6;
@@ -174,12 +179,22 @@ export function applyAction(s, playerId, a) {
     p.weapon = list[(list.indexOf(p.weapon) + 1) % list.length];
   } else if (a.type === 'recruit') {
     const cr = s.crews[p.crew];
-    const n = s.ents.filter((e) => e.crew === p.crew && e.role === 'follower' && e.hp > 0).length;
-    if (cr.cash >= RECRUIT_COST && n < 8) {
+    const n = s.ents.filter((e) => e.crew === p.crew && e.kind === 'npc' && (e.role === 'follower' || e.guard) && e.hp > 0).length;
+    if (cr.cash >= RECRUIT_COST && n < CREW_MAX) {
       cr.cash -= RECRUIT_COST;
-      const u = spawnUnit(s, p.crew, 'follower', 0, p.x + 2, p.z + 2); u.leader = p.id;
-      log(s, 'New recruit joined your crew.');
-    } else log(s, n >= 8 ? 'Crew is full (8 max).' : 'Need $' + RECRUIT_COST + ' to recruit.');
+      if (squadOf(s, p).length < SQUAD_MAX) { const u = spawnUnit(s, p.crew, 'follower', 0, p.x + 2, p.z + 2); u.leader = p.id; log(s, 'Recruit joined your squad.'); }
+      else { const b = weakestHeld(s, p.crew); const u = spawnUnit(s, p.crew, 'defender', b.id); u.guard = true; log(s, `Recruit sent to guard ${b.hustle}.`); }
+    } else log(s, n >= CREW_MAX ? `Crew is full (${CREW_MAX} max).` : 'Need $' + RECRUIT_COST + ' to recruit.');
+  } else if (a.type === 'squad') {
+    // inside a held block: take one guard along (squad max 2), or send the squad to guard it
+    const b = blockAt(s, p.x, p.z), sq = squadOf(s, p);
+    if (!b || b.owner !== p.crew) log(s, 'Stand in one of your blocks to swap guards.');
+    else {
+      const gs = guardsOf(s, b);
+      if (sq.length && (a.mode === 'send' || sq.length >= SQUAD_MAX || gs.length <= 1)) { for (const e of sq) makeGuard(e, b); log(s, `${sq.length} sent to guard ${b.hustle}.`); }
+      else if (gs.length > 1) { const e = gs[0]; e.role = 'follower'; e.guard = false; e.leader = p.id; e.slot = undefined; log(s, `A guard from ${b.hustle} is with you.`); }
+      else log(s, 'Need 2 guards here to take one.');
+    }
   } else if (a.type === 'car') {
     if (p.car) exitCar(s, p);
     else {
@@ -741,21 +756,37 @@ export function step(s, dt) {
     if (e.kind !== 'npc' || e.hp <= 0) continue;
     e.moving = 0;
     if (e.stun > 0) continue;
-    let foe = null, fd = 12 ** 2;
-    for (const o of s.ents) if (o.hp > 0 && hostile(e, o) && !(o.kind === 'player' && o.car)) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
+    let foe = null, fd = (e.guard ? 30 : 12) ** 2;
+    for (const o of s.ents) if (o.hp > 0 && hostile(e, o) && !o.car) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
     let goal, followSpeed = 0;
     if (e.role === 'follower') {
       // recruits walk in a loose formation behind you and only fight foes right next to you
       const l = s.ents.find((x) => x.id === e.leader);
+      // squad rides along: run to the car, hop in (1.2 s max), hop out beside it when you get out
+      if (l && l.car && !e.car) {
+        const car = s.cars.find((c) => c.id === l.car); e.board = (e.board || 0) + dt;
+        if (car && (dist2(car, e) < 3.2 * 3.2 || e.board > 1.2) && s.ents.filter((x) => x.car === car.id).length < 4) { e.car = car.id; e.board = 0; continue; }
+        if (car) { goal = car; followSpeed = 9.6; foe = null; }
+      } else if (e.car) {
+        const car = s.cars.find((c) => c.id === e.car);
+        if (l && l.car === e.car && car) { e.x = car.x; e.z = car.z; continue; }
+        const side = (e.slot ?? 0) % 2 ? 1 : -1, cr = car || e;
+        e.x = cr.x + Math.cos(cr.ry || 0) * 2.2 * side; e.z = cr.z - Math.sin(cr.ry || 0) * 2.2 * side; e.car = null; e.board = 0;
+        collideBuildings(e, 0.5);
+      } else e.board = 0;
       if (foe && !(l && dist2(foe, l) < 7 * 7)) foe = null;
       if (foe) goal = foe;
-      else if (l) {
+      else if (l && !l.car) {
         const slot = (e.slot ??= s.ents.filter((x) => x.role === 'follower' && x.leader === e.leader).indexOf(e));
         const side = (slot % 2 ? 1 : -1) * (1.2 + Math.floor(slot / 2) * 0.9), back = 2.4 + Math.floor(slot / 2) * 1.3;
         const fx = Math.sin(l.ry), fz = Math.cos(l.ry);
         const spot = { x: l.x - fx * back + fz * side, z: l.z - fz * back - fx * side };
         const ds = Math.sqrt(dist2(spot, e));
-        if (ds > 1.0) { goal = spot; followSpeed = ds > 12 ? 9.6 : ds > 4 ? 6 : 3.2; }
+        // keep up with a sprint (9 m/s), and snap back in if left far behind or stuck
+        if (ds > 40) { e.x = spot.x; e.z = spot.z; collideBuildings(e, 0.5); }
+        else if (ds > 1.0 && !goal) { goal = spot; followSpeed = ds > 8 ? 11 : ds > 3 ? 9.2 : 3.2; }
+        e.stuckT = ds > 6 && e.lastDs !== undefined && ds >= e.lastDs - 0.01 ? (e.stuckT || 0) + dt : 0; e.lastDs = ds;
+        if (e.stuckT > 2.5) { e.x = spot.x; e.z = spot.z; e.stuckT = 0; collideBuildings(e, 0.5); }
       }
       if (l && l.car && dist2(l, e) > 40 * 40) { e.x = l.x + 3; e.z = l.z + 3; } // catch up after a drive
     } else {
@@ -767,6 +798,14 @@ export function step(s, dt) {
         if (!inBlock || n >= 3) foe = null; else chasers.set(foe.id, n + 1);
       }
       if (foe) goal = foe;
+      else if (e.guard) {
+        // posts spread around the block, slow patrol between two corners of its side
+        e.post ??= (e.id * 2.39996) % (Math.PI * 2);
+        e.patT = (e.patT || 0) + dt * 0.12;
+        const a = e.post + Math.sin(e.patT) * 0.5, r = BLOCK / 2 + 1.2;
+        const spot = { x: c.x + Math.cos(a) * r, z: c.z + Math.sin(a) * r };
+        if (dist2(e, spot) > 2.2) { goal = spot; followSpeed = 1.6; }
+      }
       else if (dist2(e, c) > 16) goal = c;
     }
     if (goal) {
@@ -811,7 +850,14 @@ export function step(s, dt) {
       if (b.capT >= CAPTURE_TIME) {
         const prev = b.owner; b.owner = k; b.capBy = null; b.capT = 0;
         s.crews[k].rep += 25;
-        spawnUnit(s, k, 'defender', b.id);
+        const fresh = spawnUnit(s, k, 'defender', b.id);
+        if (k === 'player') {
+          // the squad stays behind to hold it (up to 3 guards), the rest keep following
+          fresh.guard = true; let n = 1;
+          for (const e of s.ents) if (n < GUARDS_PER_BLOCK && e.crew === 'player' && e.role === 'follower' && e.hp > 0) { makeGuard(e, b); n++; }
+          s.fx.push({ type: 'guards', block: b.id, n });
+          log(s, `${n} guard${n > 1 ? 's' : ''} now hold ${b.hustle}.`);
+        }
         for (const e of s.ents) if (e.crew === k && e.role === 'attacker' && e.target === b.id) e.role = 'defender';
         log(s, `${CREWS[k].name} took ${b.hustle} block from ${CREWS[prev].name}.`);
         s.fx.push({ type: 'capture', block: b.id, crew: k });
