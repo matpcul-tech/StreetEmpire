@@ -9,7 +9,7 @@ import { LocalSession } from './net.js';
 import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS } from './state.js';
 import { buildCity } from './city.js';
 import { loadCars, makeCar, updateCar, Smoke } from './vehicles.js';
-import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady } from './chars.js';
+import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { Particles, Flashes, Skids } from './fx.js';
 
@@ -74,7 +74,7 @@ const city = buildCity(scene, LOW, S().blocks, BASE);
 
 // day and night
 // warm smoggy haze: peach by day, burnt orange at sunset, plum blue at night
-const fogDay = new THREE.Color(0xb48a66), fogDusk = new THREE.Color(0xb8683e), fogNight = new THREE.Color(0x16141e);
+const fogDay = new THREE.Color(0xb48a66), fogDusk = new THREE.Color(0xb8683e), fogNight = new THREE.Color(0x2e2c40);
 const sunDay = new THREE.Color(0xfff0dd), sunDusk = new THREE.Color(0xffa060);
 let night = 0, lastNightSet = -1;
 function updateDay() {
@@ -86,12 +86,16 @@ function updateDay() {
   const day = THREE.MathUtils.smoothstep(elev, -0.08, 0.25);
   const dusk = 1 - Math.abs(THREE.MathUtils.clamp(elev / 0.25, -1, 1));
   night = 1 - THREE.MathUtils.smoothstep(elev, -0.12, 0.05);
-  sun.intensity = 2.0 * day + 0.25 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
-  if (elev < 0) { sun.color.setHex(0x8090c0); }
-  hemi.intensity = 0.3 + 0.45 * day; hemi.color.setHex(night > 0.5 ? 0x46507a : dusk > 0.5 ? 0xb8846a : 0xc8a888);
-  scene.environmentIntensity = 0.1 + 0.3 * day;
+  // night (v0.8): blue purple moonlight plus a strong sky fill so nothing goes black
+  sun.intensity = 2.0 * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
+  if (elev < 0) { sun.color.setHex(0x8c96e0); }
+  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.2) * night; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0xb8846a : 0xc8a888);
+  hemi.groundColor.setHex(night > 0.5 ? 0x5a4434 : 0x4a3226);
+  scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
-  renderer.toneMappingExposure = 0.62 + 0.1 * dusk + 0.3 * night;
+  scene.fog.near = 45 - 15 * night;
+  renderer.toneMappingExposure = 0.62 + 0.1 * dusk + (LOW ? 0.6 : 0.5) * night;
+  charNight(night);
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
     for (const [m, base] of city.emissive) m.emissiveIntensity = base * (0.15 + 0.85 * Math.max(night, dusk * 0.6));
@@ -108,7 +112,18 @@ const carViz = new Map();
 let carsReady = false;
 const smoke = new Smoke(scene, LOW ? 30 : 70);
 let playerCarLight = null;
-if (!LOW) { playerCarLight = new THREE.SpotLight(0xfff0d0, 60, 45, 0.5, 0.6, 1.5); scene.add(playerCarLight, playerCarLight.target); playerCarLight.visible = false; }
+const headPool = (() => {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const g = cv.getContext('2d');
+  const gr = g.createLinearGradient(0, 128, 0, 0); gr.addColorStop(0, 'rgba(255,240,200,0.85)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = gr;
+  g.beginPath(); g.moveTo(22, 128); g.lineTo(42, 128); g.lineTo(64, 0); g.lineTo(0, 0); g.fill();
+  const geo = new THREE.PlaneGeometry(13, 22); geo.rotateX(-Math.PI / 2); geo.rotateY(Math.PI); geo.translate(0, 0.05, 13);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: LOW ? 0.75 : 0.45 }));
+  m.visible = false; return m;
+})();
+const lampLights = [];
+let frameN = 0;
+if (!LOW) for (let i = 0; i < 6; i++) { const L = new THREE.PointLight(0xff9440, 0, 22, 1.4); lampLights.push(L); scene.add(L); }
+if (!LOW) { playerCarLight = new THREE.SpotLight(0xfff0d0, 260, 70, 0.62, 0.55, 1.3); scene.add(playerCarLight, playerCarLight.target); playerCarLight.visible = false; }
 
 // ---------- characters ----------
 const charViz = new Map();
@@ -492,6 +507,7 @@ function frame(now) {
     } else { skids.lift(c.id + -1); skids.lift(c.id + 1); }
     // visible driver
     const occupied = (c.ai && !c.wrecked) || (c.cops && s.ents.some((e) => e.car === c.id));
+    for (const ch of g.children) if (ch.userData.beam) ch.visible = ch.visible && (occupied || p.car === c.id); // parked cars keep their lights off
     const wantDriver = peopleReady && occupied && d2 < DRIVER_DIST * DRIVER_DIST;
     const u = g.userData;
     if (wantDriver && !u.driver) {
@@ -507,6 +523,14 @@ function frame(now) {
   smoke.update(rdt);
   sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
+  // headlight throw on the road: an additive ground decal on every platform
+  if (pcar && night > 0.3 && carViz.get(pcar.id)) { const g = carViz.get(pcar.id); if (headPool.parent !== g) g.add(headPool); headPool.visible = true; } else headPool.visible = false;
+  // sodium lamps: real point lights on the nearest lamps (desktop only)
+  if (lampLights.length && night > 0.2 && (frameN++ % 20 === 0)) {
+    const near = city.lamps.map((l) => [(l[0] - camX) ** 2 + (l[1] - camZ) ** 2, l]).sort((a, b) => a[0] - b[0]);
+    lampLights.forEach((L, i) => { const l = near[i][1]; L.position.set(l[0], 6.4, l[1]); });
+  }
+  for (const L of lampLights) L.intensity = 55 * night;
   if (playerCarLight) {
     playerCarLight.visible = !!pcar && night > 0.3;
     if (pcar) { const g = carViz.get(pcar.id); playerCarLight.position.set(g.position.x + Math.sin(g.rotation.y) * 2.4, 1, g.position.z + Math.cos(g.rotation.y) * 2.4); playerCarLight.target.position.set(g.position.x + Math.sin(g.rotation.y) * 20, 0, g.position.z + Math.cos(g.rotation.y) * 20); }

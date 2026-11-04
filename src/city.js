@@ -56,9 +56,9 @@ export function buildCity(scene, LOW, blocks, base = './') {
   TEXBASE = base;
   rnd = mulberry(7);
   const S = LOW ? 256 : 512;
-  const out = { blockViz: [], emissive: [], nightOnly: [], signals: null };
+  const out = { blockViz: [], emissive: [], nightOnly: [], signals: null, neon: [], lamps: [] };
   const SIZE = GRID * PITCH + 80;
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), v3 = new THREE.Vector3();
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), v3 = new THREE.Vector3(), v3b = new THREE.Vector3();
 
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshStandardMaterial({ map: painted('asphalt', SIZE / 14, SIZE / 14), roughness: 0.82 }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = !LOW; scene.add(ground);
@@ -218,6 +218,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
         const sm = new THREE.MeshBasicMaterial({ map: signTexture(b.hustle, neon[b.id % neon.length], S), toneMapped: false });
         const y = k.kind === 'tower' ? 5.4 : k.h + 1.3;
         const sign = add(new THREE.Mesh(new THREE.PlaneGeometry(7, 1.75), sm)); sign.position.set(k.x + k.sx * (k.w / 2 + 0.08), y, k.z); sign.rotation.y = k.sx * Math.PI / 2;
+        out.neon.push([k.x + k.sx * (k.w / 2 + 3.5), k.z, neon[b.id % neon.length]]); // colored spill on the sidewalk below
       }
       // graffiti mural on an alley wall
       if (rnd() < (dist === 1 ? 0.35 : 0.6)) {
@@ -311,12 +312,18 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const lh = new THREE.BoxGeometry(0.5, 0.15, 0.8); lh.translate(0, 6.8, 2.1);
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, toneMapped: false });
   instAll(lh, lampMat, lamps, 0);
-  const poolTex = (() => { const [c, g] = canvas(64, 64); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,190,110,.55)'); gr.addColorStop(1, 'rgba(255,190,110,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return tex(c); })();
-  const poolGeo = new THREE.PlaneGeometry(9, 9); poolGeo.rotateX(-Math.PI / 2);
+  const poolTex = (() => { const [c, g] = canvas(64, 64); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,150,60,.95)'); gr.addColorStop(0.45, 'rgba(255,130,50,.45)'); gr.addColorStop(1, 'rgba(255,120,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return tex(c); })();
+  const poolGeo = new THREE.PlaneGeometry(13, 13); poolGeo.rotateX(-Math.PI / 2);
   const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), lamps.length);
   lamps.forEach(([x, z, r], i) => pools.setMatrixAt(i, m4.compose(v3.set(x + Math.sin(r) * 2.1, 0.26, z + Math.cos(r) * 2.1), q.identity(), one)));
   scene.add(pools);
   out.nightOnly.push(pools); out.lampMat = lampMat;
+  out.lamps = lamps.map(([x, z, r]) => [x + Math.sin(r) * 2.1, z + Math.cos(r) * 2.1]);
+  // neon and lit window spill: tinted additive pools on the ground, no lights needed
+  const wTex = (() => { const [c, g] = canvas(64, 64); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return tex(c); })();
+  const spill = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({ map: wTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), Math.max(1, out.neon.length));
+  out.neon.forEach(([x, z, col], i) => { spill.setMatrixAt(i, m4.compose(v3.set(x, 0.27, z), q.identity(), v3b.set(0.8, 1, 0.8))); spill.setColorAt(i, new THREE.Color(col).multiplyScalar(0.55)); });
+  spill.count = out.neon.length; scene.add(spill); out.nightOnly.push(spill);
 
   // territory markers per block
   for (const b of blocks) {

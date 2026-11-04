@@ -40,9 +40,10 @@ export function makeGradePass(ShaderPass) {
         vec4 c = texture2D(tDiffuse, vUv);
         vec3 uvw = clamp(c.rgb, 0.0, 1.0) * ((uSize - 1.0) / uSize) + 0.5 / uSize;
         vec3 g = texture(tLut, uvw).rgb;
-        g = mix(g, g * vec3(0.86, 0.92, 1.1), uNight * 0.6);
+        g = mix(g, g * vec3(0.9, 0.94, 1.08), uNight * 0.6);
+        g = mix(g, pow(max(g, 0.0), vec3(0.82)) + vec3(0.018, 0.02, 0.034), uNight); // lift night shadows, deep blue-brown floor
         float d = distance(vUv, vec2(0.5));
-        g *= 1.0 - smoothstep(0.45, 0.95, d) * 0.45;
+        g *= 1.0 - smoothstep(0.45, 0.95, d) * (0.45 - 0.2 * uNight);
         float n = hash(vUv * 1000.0 + fract(uTime * 7.3) * 91.0) - 0.5;
         g += n * 0.05 * uGrain;
         gl_FragColor = vec4(g, c.a);
