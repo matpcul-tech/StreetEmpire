@@ -17,7 +17,9 @@ export async function loadPeople(base, onFirst) {
     const g = await loader.loadAsync(`${base}models/people/${n}.glb`);
     const box = new THREE.Box3().setFromObject(g.scene);
     templates[n] = { scene: g.scene, scale: 1.75 / (box.max.y - box.min.y) };
-    if (g.animations.length) for (const c of g.animations) clips[c.name] = c;
+    // Bone scales set in code (proportions) must not be overwritten by the
+    // clips, so drop scale tracks and every translation track except the hips.
+    if (g.animations.length) for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('Hips.'))); clips[c.name] = c; }
   };
   await load('Casual_Male');
   onFirst && onFirst();
@@ -74,6 +76,34 @@ function accessories() {
   accGeo = { cap, doRag, neck }; return accGeo;
 }
 
+// Proportions (v0.6): closer to the v0.2 look. Longer abdomen and legs and a
+// smaller head, done with bone scales on the shared rig. The parent of a scaled
+// spine bone is counter scaled so the arms and head do not inherit the stretch.
+export const PROP = { abdomen: 1.3, thigh: 1.3, shin: 1.3, head: 0.56, arm: 1.2, height: 1.8 };
+const BONE_SCALE = {
+  Abdomen: [1, PROP.abdomen, 1], Torso: [1, 1 / PROP.abdomen, 1],
+  'UpperLegL': [1, PROP.thigh, 1], 'UpperLegR': [1, PROP.thigh, 1],
+  'LowerLegL': [1, PROP.shin / PROP.thigh, 1], 'LowerLegR': [1, PROP.shin / PROP.thigh, 1],
+  Head: [PROP.head, PROP.head, PROP.head],
+  UpperArmL: [1, PROP.arm, 1], UpperArmR: [1, PROP.arm, 1],
+};
+const fitCache = {};
+// measure the posed, reproportioned mesh once per model: lift the feet to the
+// ground and scale the whole figure to PROP.height
+function fit(model, root, mixer, act) {
+  if (fitCache[model]) return fitCache[model];
+  act.Idle.play(); mixer.update(0); root.updateMatrixWorld(true);
+  let lo = 1e9, hi = -1e9; const v = new THREE.Vector3();
+  root.traverse((o) => { if (!o.isSkinnedMesh) return; const n = o.geometry.attributes.position.count; for (let i = 0; i < n; i += 5) { o.getVertexPosition(i, v); o.localToWorld(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); } });
+  const k = PROP.height / (hi - lo);
+  return (fitCache[model] = { k, lift: -lo * k });
+}
+
+// Guard pose for blocking: fixed local rotations for both arms, blended in
+// over the current animation. Values sampled from the punch clip (see v0.6 notes).
+export const GUARD = {};
+function guardBones(root) { const b = {}; root.traverse((o) => { if (o.isBone && /^(UpperArm|LowerArm|Fist)[LR]$/.test(o.name)) b[o.name] = o; }); return b; }
+
 // Simple weapons parented to the right fist bone.
 let weaponGeo = null;
 function weapons() {
@@ -96,7 +126,8 @@ export function makeCharacter(look, shadow) {
       o.material = Array.isArray(o.material) ? out : out[0];
       o.castShadow = !!shadow; o.frustumCulled = false;
     }
-    if (o.isBone && o.name === 'Fist.R') hand = o;
+    if (o.isBone && BONE_SCALE[o.name]) o.scale.set(...BONE_SCALE[o.name]);
+    if (o.isBone && o.name === 'FistR') hand = o;
     if (o.isBone && o.name === 'Head') head = o;
     if (o.isBone && o.name === 'Neck') neckB = o;
   });
@@ -115,8 +146,15 @@ export function makeCharacter(look, shadow) {
   const act = {};
   for (const n in clips) act[n] = mixer.clipAction(clips[n]);
   for (const n of ['Punch', 'SwordSlash', 'Shoot_OneHanded', 'Death', 'RecieveHit', 'Jump', 'SitDown']) if (act[n]) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; }
+  // fit the reproportioned body: unit scale first, measure, then apply
+  const base = root.scale.x; root.scale.setScalar(1);
+  const f = fit(look.model, root, mixer, act);
+  root.scale.setScalar(f.k); root.position.y = f.lift;
+  for (const o of [...(hand ? hand.children : []), ...(head ? head.children : []), ...(neckB ? neckB.children : [])].filter((o) => o.isMesh)) o.scale.multiplyScalar(base / f.k);
+  for (const o of head ? head.children : []) if (o.isMesh) o.position.multiplyScalar(base / f.k);
+  if (neckB) for (const o of neckB.children) if (o.isMesh) o.position.multiplyScalar(base / f.k);
   act.Idle.play();
-  g.userData = { mixer, act, cur: 'Idle', root, bat, gun };
+  g.userData = { mixer, act, cur: 'Idle', root, bat, gun, arms: guardBones(root) };
   return g;
 }
 
@@ -140,7 +178,7 @@ export function animate(g, e, dt, sitting) {
     if (want === 'Punch' || want === 'SwordSlash' || want === 'Shoot_OneHanded') next.timeScale = next.getClip().duration / Math.max(0.25, (e.swing || 0.3) + 0.15);
     else if (want === 'RecieveHit') next.timeScale = 1.6;
     else if (want === 'SitDown') { next.time = next.getClip().duration; next.timeScale = 1; }
-    else if (want === 'Guard') { next.time = next.getClip().duration * 0.3; next.timeScale = 0; } // fists up, held
+    else if (want === 'Guard') { next.time = 0; next.timeScale = 0; } // boxing guard: first frame of the punch clip, fists up by the chin
     else next.timeScale = 1;
     next.play();
     if (prev && prev !== next) prev.crossFadeTo(next, 0.12, false);

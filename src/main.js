@@ -52,7 +52,7 @@ function rebuildEnv() {
   envSun.copy(sunDir); sky2.material.uniforms.sunPosition.value.copy(sunDir);
   const rt = pmrem.fromScene(envScene, 0.04); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
 }
-scene.fog = new THREE.Fog(0xb87a52, 30, LOW ? 170 : 260);
+scene.fog = new THREE.Fog(0xb87a52, 45, LOW ? 180 : 270);
 const hemi = new THREE.HemisphereLight(0xc8a080, 0x4a3226, 0.9);
 const sun = new THREE.DirectionalLight(0xffa060, 2.2);
 if (!LOW) { sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; }
@@ -74,7 +74,7 @@ const city = buildCity(scene, LOW, S().blocks, BASE);
 
 // day and night
 // warm smoggy haze: peach by day, burnt orange at sunset, plum blue at night
-const fogDay = new THREE.Color(0xc8a888), fogDusk = new THREE.Color(0xb8683e), fogNight = new THREE.Color(0x16141e);
+const fogDay = new THREE.Color(0xb48a66), fogDusk = new THREE.Color(0xb8683e), fogNight = new THREE.Color(0x16141e);
 const sunDay = new THREE.Color(0xfff0dd), sunDusk = new THREE.Color(0xffa060);
 let night = 0, lastNightSet = -1;
 function updateDay() {
@@ -86,12 +86,12 @@ function updateDay() {
   const day = THREE.MathUtils.smoothstep(elev, -0.08, 0.25);
   const dusk = 1 - Math.abs(THREE.MathUtils.clamp(elev / 0.25, -1, 1));
   night = 1 - THREE.MathUtils.smoothstep(elev, -0.12, 0.05);
-  sun.intensity = 2.6 * day + 0.25 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
+  sun.intensity = 2.0 * day + 0.25 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8090c0); }
-  hemi.intensity = 0.35 + 0.75 * day; hemi.color.setHex(night > 0.5 ? 0x46507a : dusk > 0.5 ? 0xb8846a : 0xc8a888);
-  scene.environmentIntensity = 0.12 + 0.5 * day;
+  hemi.intensity = 0.3 + 0.45 * day; hemi.color.setHex(night > 0.5 ? 0x46507a : dusk > 0.5 ? 0xb8846a : 0xc8a888);
+  scene.environmentIntensity = 0.1 + 0.3 * day;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
-  renderer.toneMappingExposure = 0.75 + 0.25 * night;
+  renderer.toneMappingExposure = 0.62 + 0.1 * dusk + 0.3 * night;
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
     for (const [m, base] of city.emissive) m.emissiveIntensity = base * (0.15 + 0.85 * Math.max(night, dusk * 0.6));
@@ -546,6 +546,7 @@ function frame(now) {
   look.set(pv.x - Math.sin(yaw) * 1.2 + Math.cos(yaw) * (pcar ? 0 : 0.6), h, pv.z - Math.cos(yaw) * 1.2 - Math.sin(yaw) * (pcar ? 0 : 0.6));
   camera.lookAt(look);
   if (shake > 0) { shake = Math.max(0, shake - rdt * 2.2); camera.position.x += (Math.random() - 0.5) * shake * 0.5; camera.position.y += (Math.random() - 0.5) * shake * 0.5; camera.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
+  if (window.__camOv) { const o = window.__camOv; camera.position.set(o.x, o.y, o.z); camera.lookAt(o.lx, o.ly, o.lz); } // test hook for close-up shots
   if (camKick > 0) { camera.rotateX(camKick * 0.06); camKick = Math.max(0, camKick - rdt * 6); }
   fovKick = Math.max(0, fovKick - rdt * 20);
   const wantFov = 62 + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;

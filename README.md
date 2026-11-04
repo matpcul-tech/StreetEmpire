@@ -102,3 +102,12 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 - Code: `startMission` sets up `s.mission` and its `target` marker, `missionCheck` handles car events, `missionStep` runs each tick for win and fail (timer). `passMission` and `failMission` pay out and emit `mission` fx. The client (`src/main.js` `missionTarget`) turns the target into the beacon, radar dot and edge arrow.
 - Add one: append an entry to `MISSIONS`; for a new `kind`, add its setup in `startMission` and its win check in `missionStep`, then add a section to `tools/missions-test.mjs`.
 - Test: `npm run test:missions` (optionally a seed) plays all four missions headless with a bot.
+
+## v0.6 character proportions
+
+- Closer to the v0.2 look: longer abdomen (x1.3), thighs and shins (x1.3), upper arms (x1.2) and a smaller head (x0.56), done with bone scales on the shared Quaternius rig (`PROP` and `BONE_SCALE` in `src/chars.js`). Each model is measured once in pose, lifted to the ground and scaled to 1.8 m.
+- Clips keep only the hips translation and no scale tracks, so the proportions survive every animation.
+- Caps and bandanas ride the head bone and shrink with it. Bone names lose their dots on load (`FistR`), which also fixes the bat and pistol never showing in hand before.
+- Block uses a real boxing guard (first frame of the punch clip, held).
+- Daytime exposure and haze toned down so midday no longer washes out.
+- `tools/closeup.mjs <url> <out.png> [block]` takes a close-up of four characters.
