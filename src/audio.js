@@ -115,3 +115,36 @@ export function chime(good) {
   const t = ctx.currentTime, notes = good ? [392, 494, 587, 784] : [330, 262, 196];
   notes.forEach((fr, i) => { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle'; o.frequency.value = fr; g.gain.setValueAtTime(0, t + i * 0.12); g.gain.linearRampToValueAtTime(0.1, t + i * 0.12 + 0.02); g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.5); o.connect(g).connect(master); o.start(t + i * 0.12); o.stop(t + i * 0.12 + 0.6); });
 }
+
+// ---- v0.5 combat and driving sounds ----
+function burst(t, { freq = 1000, q = 1, type = 'bandpass', vol = 0.3, len = 0.1 }) {
+  const n = noiseSrc(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  f.type = type; f.frequency.value = freq; f.Q.value = q;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+  n.connect(f).connect(g).connect(master); n.start(t, Math.random()); n.stop(t + len + 0.02);
+}
+function thump(t, f0, f1, vol, len) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + len);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+  o.connect(g).connect(master); o.start(t); o.stop(t + len + 0.02);
+}
+// layered impact: body thump, slap and a crack for heavy hits and knockouts
+export function impact(kind, vol = 1) {
+  if (!ctx) return; const t = ctx.currentTime;
+  if (kind === 'bat') { thump(t, 120, 40, 0.6 * vol, 0.22); burst(t, { freq: 900, q: 3, vol: 0.4 * vol, len: 0.09 }); burst(t, { freq: 3200, q: 6, vol: 0.18 * vol, len: 0.05 }); }
+  else if (kind === 'knuckles') { thump(t, 170, 50, 0.6 * vol, 0.16); burst(t, { freq: 2600, q: 8, vol: 0.2 * vol, len: 0.06 }); burst(t, { freq: 500, q: 1, vol: 0.3 * vol, len: 0.06 }); }
+  else if (kind === 'bullet') { thump(t, 140, 60, 0.35 * vol, 0.1); burst(t, { freq: 1500, q: 1, vol: 0.25 * vol, len: 0.05 }); }
+  else { thump(t, 190, 45, 0.5 * vol, 0.15); burst(t, { freq: 1800, q: 0.8, type: 'lowpass', vol: 0.32 * vol, len: 0.05 }); }
+}
+export function knockout(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thump(t, 90, 30, 0.8 * vol, 0.45); burst(t + 0.05, { freq: 300, q: 0.7, type: 'lowpass', vol: 0.35 * vol, len: 0.3 }); }
+export function block(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thump(t, 260, 120, 0.3 * vol, 0.08); burst(t, { freq: 2400, q: 10, vol: 0.25 * vol, len: 0.12 }); }
+export function shotgun(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thump(t, 110, 35, 0.9 * vol, 0.35); burst(t, { freq: 900, q: 0.6, type: 'lowpass', vol: 0.8 * vol, len: 0.3 }); burst(t, { freq: 4000, q: 1, vol: 0.3 * vol, len: 0.08 }); burst(t + 0.35, { freq: 2200, q: 8, vol: 0.12, len: 0.05 }); burst(t + 0.48, { freq: 1800, q: 8, vol: 0.12, len: 0.05 }); }
+export function shell(vol = 0.5) { if (!ctx) return; const t = ctx.currentTime + 0.25; burst(t, { freq: 5200, q: 20, vol: 0.08 * vol, len: 0.08 }); burst(t + 0.09, { freq: 4800, q: 20, vol: 0.05 * vol, len: 0.06 }); }
+export function scrape(vol = 1) { if (!ctx) return; const t = ctx.currentTime; burst(t, { freq: 3000, q: 2, vol: 0.25 * vol, len: 0.25 }); }
+let skidGain = null;
+export function setSkid(v) {
+  if (!ctx) return;
+  if (!skidGain) { const n = noiseSrc(true), f = ctx.createBiquadFilter(); skidGain = ctx.createGain(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 4; skidGain.gain.value = 0; n.connect(f).connect(skidGain).connect(master); n.start(); }
+  skidGain.gain.setTargetAtTime(0.16 * v, ctx.currentTime, 0.05);
+}

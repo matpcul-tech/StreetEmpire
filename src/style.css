@@ -58,3 +58,9 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 #intro .credit{position:fixed;left:10px;bottom:6px;color:rgba(255,230,200,.5);font-size:11px}
 #intro.hidden{display:none}
 @media (orientation:portrait){#intro .card{max-height:48vh;font-size:13px}#intro .keys{display:none}}
+/* v0.5 objective arrow and combat buttons */
+#objArrow{position:fixed;display:none;transform:translate(-50%,-50%);z-index:3;pointer-events:none;text-align:center}
+#objArrow .tri{width:0;height:0;margin:0 auto;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:26px solid #ffcc33;filter:drop-shadow(0 0 6px rgba(255,190,60,.9));transform:rotate(var(--rot,0deg))}
+#objArrow span{display:block;font:bold 15px Impact,sans-serif;color:#ffcc33;text-shadow:0 0 4px #000,0 0 2px #000;margin-top:4px}
+#objArrow.on .tri{border-bottom-width:18px;border-left-width:10px;border-right-width:10px}
+#bBlock.on,#bDrift.on{background:rgba(120,160,255,.55)}

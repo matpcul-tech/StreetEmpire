@@ -88,3 +88,17 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 - Crew caps, do-rags and neck bandanas. Cars merged into one body mesh plus wheels with chrome and dirt shading, new lowrider.
 - Day-following sky reflections, warm haze fog, LUT grade, vignette, film grain (toggle on the title screen or G). `?nofx` turns post off.
 - Title screen, key art, loading bar, app icon, manifest, og and twitter preview.
+
+## v0.5 combat, driving and mission fixes
+
+- Combat: knockback lean and knockout launch, hit sparks and dust, camera kick, hit stop, slow motion on your knockouts, layered impact sounds. Brass knuckles and a shotgun join fists, bat and pistol; guns get muzzle flash, recoil and shell casings. Lock-on aim assist (red ring), dodge roll with a short invulnerable window (C or DODGE), hold block (V or BLOCK).
+- Driving: speed-sensitive steering, handbrake drift (Space or DRIFT), tire smoke, skid marks, suspension pitch and roll, crash bounce, sparks from crashes and scrapes, chase camera with speed-based field of view.
+- Missions: recruits walk in formation and only fight next to you; at most three defenders of a block chase one target and only inside their block; fixed a pathfinding ping-pong that froze walkers; the Package Run drop sits in a Harbor parking lane with a tall pulsing beacon, a floating package, a radar dot and an on-screen arrow with distance.
+
+### How missions work
+
+- Data: `MISSIONS` in `src/state.js` is an ordered list of `{ title, intro, kind, reward, rep, time?, need?, crew? }`. Unc hands them out in order (`s.missionIdx`).
+- Kinds: `fetch` (walk to a drop, bring it back), `beat` (knock out `need` members of `crew`), `chop` (steal a muscle car and deliver it), `take` (capture a marked block).
+- Code: `startMission` sets up `s.mission` and its `target` marker, `missionCheck` handles car events, `missionStep` runs each tick for win and fail (timer). `passMission` and `failMission` pay out and emit `mission` fx. The client (`src/main.js` `missionTarget`) turns the target into the beacon, radar dot and edge arrow.
+- Add one: append an entry to `MISSIONS`; for a new `kind`, add its setup in `startMission` and its win check in `missionStep`, then add a section to `tools/missions-test.mjs`.
+- Test: `npm run test:missions` (optionally a seed) plays all four missions headless with a bot.

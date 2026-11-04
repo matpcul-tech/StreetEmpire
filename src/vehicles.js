@@ -120,6 +120,7 @@ export function makeCar(c) {
   const g = new THREE.Group();
   const model = new THREE.Group();
   model.scale.setScalar(T.scale); model.position.y = -T.minY * T.scale; model.rotation.y = Math.PI; // kit faces -z
+  model.rotation.order = 'YXZ';
   const geo = carGeometry(c.type, c.paint);
   const body = new THREE.Mesh(geo.body, bodyMaterial()); body.castShadow = true;
   if (c.type === 'lowrider') body.position.y = -0.1 / T.scale;
@@ -139,7 +140,7 @@ export function makeCar(c) {
     siren = [new THREE.Mesh(P.sirenGeo, P.sirenR), new THREE.Mesh(P.sirenGeo, P.sirenB)];
     siren[0].position.set(-0.25, 1.75, -0.1); siren[1].position.set(0.25, 1.75, -0.1); g.add(...siren);
   }
-  g.userData = { wheels, spinA: 0, siren, model, body, burnt: false };
+  g.userData = { wheels, spinA: 0, siren, model, body, burnt: false, baseY: model.position.y };
   return g;
 }
 let lampGeo = null;
@@ -160,7 +161,14 @@ export function updateCar(g, c, dt, night, now) {
   g.rotation.y += Math.abs(d) > 0.01 ? d * Math.min(1, dt * (c.ai ? 6 : 30)) : d;
   g.position.x += (c.x - g.position.x) * Math.min(1, dt * (c.ai ? 8 : 40));
   g.position.z += (c.z - g.position.z) * Math.min(1, dt * (c.ai ? 8 : 40));
-  u.model.rotation.z = -c.steer * Math.min(1, Math.abs(c.v) / 20) * 0.12;
+  // suspension: springy pitch under throttle and brakes, body roll in turns and
+  // slides, and a vertical bounce kicked by crashes (u.bounce)
+  const acc = dt > 0 ? (c.v - (u.lastV ?? c.v)) / dt : 0; u.lastV = c.v;
+  const tPitch = THREE.MathUtils.clamp(-acc * 0.0035, -0.07, 0.07), tRoll = -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
+  u.pv = ((u.pv || 0) + ((tPitch - (u.pitch || 0)) * 90 - (u.pv || 0) * 9) * dt); u.pitch = (u.pitch || 0) + u.pv * dt;
+  u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * 80 - (u.rv || 0) * 8) * dt); u.roll = (u.roll || 0) + u.rv * dt;
+  u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
+  u.model.rotation.x = u.pitch; u.model.rotation.z = u.roll; u.model.position.y = u.baseY + by;
   for (const ch of g.children) if (ch.userData.beam) ch.visible = night && !c.wrecked;
   if (u.siren) { const on = c.siren && Math.floor(now / 180) % 2 === 0; u.siren[0].visible = !c.siren || on; u.siren[1].visible = !c.siren || !on; }
   if (c.wrecked && !u.burnt) { u.burnt = true; u.model.traverse((o) => { if (o.isMesh) o.material = parts().burnt; }); }

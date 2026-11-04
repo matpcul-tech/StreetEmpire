@@ -57,7 +57,7 @@ function materialFor(base, col) {
 }
 
 // Caps, do-rags and neck bandanas, parented to the head and neck bones.
-export const ACC = { y: 0.3, z: 0.0, r: 0.25, neckY: 0.0, neckR: 0.13 };
+export const ACC = { y: 0.42, z: 0.02, r: 0.33, neckY: 0.02, neckR: 0.17 };
 let accGeo = null;
 const accMats = new Map();
 function accMat(c) { if (!accMats.has(c)) accMats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 })); return accMats.get(c); }
@@ -124,6 +124,7 @@ export function animate(g, e, dt, sitting) {
   const u = g.userData;
   let want, speed = 1;
   if (sitting) want = 'SitDown';
+  else if (e.block && e.hp > 0) want = 'Guard';
   else if (e.hp <= 0) want = 'Death';
   else if (e.swing > 0) { want = e.weapon === 'pistol' ? 'Shoot_OneHanded' : e.weapon === 'bat' ? 'SwordSlash' : 'Punch'; }
   else if (e.hitT > 0.05) want = 'RecieveHit';
@@ -134,11 +135,12 @@ export function animate(g, e, dt, sitting) {
   const swingStart = e.swing > 0 && (u.lastSwing ?? 0) <= 0;
   u.lastSwing = e.swing;
   if (want !== u.cur || swingStart) {
-    const next = u.act[want] || u.act.Idle, prev = u.act[u.cur];
+    const next = want === 'Guard' ? (u.act.Guard ||= u.mixer.clipAction(u.act.Punch.getClip().clone())) : u.act[want] || u.act.Idle, prev = u.cur === 'Guard' ? u.act.Guard : u.act[u.cur];
     next.reset(); next.enabled = true;
     if (want === 'Punch' || want === 'SwordSlash' || want === 'Shoot_OneHanded') next.timeScale = next.getClip().duration / Math.max(0.25, (e.swing || 0.3) + 0.15);
     else if (want === 'RecieveHit') next.timeScale = 1.6;
     else if (want === 'SitDown') { next.time = next.getClip().duration; next.timeScale = 1; }
+    else if (want === 'Guard') { next.time = next.getClip().duration * 0.3; next.timeScale = 0; } // fists up, held
     else next.timeScale = 1;
     next.play();
     if (prev && prev !== next) prev.crossFadeTo(next, 0.12, false);

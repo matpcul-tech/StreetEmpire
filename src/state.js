@@ -33,7 +33,13 @@ export const CAR_TYPES = {
   van: { max: 22, acc: 12, hp: 160 }, taxi: { max: 28, acc: 16, hp: 100 }, police: { max: 34, acc: 20, hp: 150 },
   lowrider: { max: 26, acc: 15, hp: 110 },
 };
-export const WEAPONS = { fists: { range: 2.8, dmg: 20, cd: 0.42, swing: 0.32 }, bat: { range: 3.3, dmg: 34, cd: 0.7, swing: 0.5 }, pistol: { range: 28, dmg: 26, cd: 0.35, swing: 0.25 } };
+// kb: knockback speed on hit. Ranged weapons spend ammo (pistol) or shells (shotgun).
+export const WEAPONS = {
+  fists: { range: 2.8, dmg: 20, cd: 0.42, swing: 0.32, kb: 4 }, knuckles: { range: 2.9, dmg: 30, cd: 0.5, swing: 0.3, kb: 8 },
+  bat: { range: 3.3, dmg: 34, cd: 0.7, swing: 0.5, kb: 9 }, pistol: { range: 28, dmg: 26, cd: 0.35, swing: 0.25, kb: 5 },
+  shotgun: { range: 13, dmg: 24, cd: 0.95, swing: 0.3, kb: 12 },
+};
+export const AIM_ASSIST = 1.35; // a client lock-on target is honored out to this multiple of weapon range
 
 const OFF = (GRID - 1) / 2;
 export function blockCenter(b) { return { x: (b.gx - OFF) * PITCH, z: (b.gz - OFF) * PITCH }; }
@@ -55,7 +61,7 @@ export function createState(seed = 1, cfg = {}) {
     for (let i = 0; i < n; i++) spawnUnit(s, b.owner, 'defender', b.id);
   }
   const c = blockCenter(s.blocks[0]);
-  s.ents.push(newEnt(s, { kind: 'player', crew: 'player', x: c.x + BLOCK / 2 + 3, z: c.z, hp: 100, weapon: 'fists', ammo: 0, hasBat: false, heat: 0, calmT: 0, busted: 0 }));
+  s.ents.push(newEnt(s, { kind: 'player', crew: 'player', x: c.x + BLOCK / 2 + 3, z: c.z, hp: 100, weapon: 'fists', ammo: 0, hasBat: false, hasKnux: false, shells: 0, block: false, dodgeT: 0, dodgeCd: 0, heat: 0, calmT: 0, busted: 0 }));
   s.ents.push(newEnt(s, { kind: 'giver', crew: 'player', name: 'Unc', x: c.x + 6, z: c.z + 6, ry: Math.PI, hp: 999 }));
   // parked cars along the curbs, one or two per block
   const types = ['sedan', 'muscle', 'suv', 'lowrider', 'van', 'taxi', 'sedan', 'lowrider'];
@@ -65,7 +71,7 @@ export function createState(seed = 1, cfg = {}) {
     if (i % 2 === 0) s.cars.push(makeCar(s, bc.x - 8 + (i % 4) * 3, bc.z - PITCH / 2 + 5.6, Math.PI / 2, types[(i + 2) % types.length], false));
   });
   // pickups in alleys
-  [[1, 'bat'], [6, 'pistol'], [12, 'bat'], [18, 'pistol'], [8, 'bat'], [16, 'pistol']].forEach(([bi, type], k) => {
+  [[1, 'bat'], [6, 'pistol'], [12, 'knuckles'], [18, 'shotgun'], [8, 'bat'], [16, 'pistol'], [3, 'knuckles'], [22, 'shotgun']].forEach(([bi, type], k) => {
     const bc = blockCenter(s.blocks[bi]); s.pickups.push({ id: 'pk' + k, type, x: bc.x + (k % 2 ? 10 : -10), z: bc.z, respawnT: 0 });
   });
   for (let i = 0; i < s.cfg.traffic; i++) spawnTraffic(s, true);
@@ -142,10 +148,16 @@ function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math
 export function applyAction(s, playerId, a) {
   const p = s.ents.find((e) => e.id === playerId);
   if (!p || p.hp <= 0) return;
-  if (a.type === 'attack' && p.cd <= 0 && !p.car) attack(s, p);
+  if (a.type === 'attack' && p.cd <= 0 && !p.car && !p.block && p.dodgeT <= 0) attack(s, p, a.target);
+  else if (a.type === 'block') p.block = !!a.on && !p.car;
+  else if (a.type === 'dodge' && !p.car && p.dodgeCd <= 0) {
+    let dx = a.dx ?? -Math.sin(p.ry), dz = a.dz ?? -Math.cos(p.ry); const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    p.dodgeT = 0.42; p.dodgeCd = 0.85; p.kx = dx * 15; p.kz = dz * 15; p.block = false;
+    s.fx.push({ type: 'dodge', x: p.x, z: p.z, to: p.id });
+  }
   else if (a.type === 'jump' && !p.car && p.jumpT <= 0) p.jumpT = 0.8;
   else if (a.type === 'weapon') {
-    const list = ['fists', ...(p.hasBat ? ['bat'] : []), ...(p.ammo > 0 ? ['pistol'] : [])];
+    const list = ['fists', ...(p.hasKnux ? ['knuckles'] : []), ...(p.hasBat ? ['bat'] : []), ...(p.ammo > 0 ? ['pistol'] : []), ...(p.shells > 0 ? ['shotgun'] : [])];
     p.weapon = list[(list.indexOf(p.weapon) + 1) % list.length];
   } else if (a.type === 'recruit') {
     const cr = s.crews[p.crew];
@@ -185,48 +197,73 @@ function exitCar(s, p) {
   p.x = c.x - Math.cos(c.ry) * 2.4; p.z = c.z + Math.sin(c.ry) * 2.4;
 }
 
-function attack(s, p) {
-  let w = WEAPONS[p.weapon] || WEAPONS.fists;
-  if (p.weapon === 'pistol' && p.ammo <= 0) { p.weapon = 'fists'; w = WEAPONS.fists; }
+const meleeFallback = (p) => (p.hasBat ? 'bat' : p.hasKnux ? 'knuckles' : 'fists');
+function attack(s, p, targetId) {
+  if (p.weapon === 'pistol' && p.ammo <= 0) p.weapon = meleeFallback(p);
+  if (p.weapon === 'shotgun' && !(p.shells > 0)) p.weapon = meleeFallback(p);
+  const w = WEAPONS[p.weapon] || WEAPONS.fists;
   p.cd = w.cd; p.swing = w.swing; p.combo = (p.combo + 1) % 2;
+  // aim assist: a lock-on target from the client wins if it is valid and close enough
+  if (targetId != null) {
+    const t = s.ents.find((e) => e.id === targetId);
+    if (t && t !== p && t.hp > 0 && !t.car && hostile(p, t) && dist2(t, p) < (w.range * AIM_ASSIST) ** 2) p.ry = Math.atan2(t.x - p.x, t.z - p.z);
+  }
   const fx = Math.sin(p.ry), fz = Math.cos(p.ry);
-  if (p.weapon === 'pistol') {
-    p.ammo--;
-    let best = null, bs = -1;
+  if (p.weapon === 'pistol' || p.weapon === 'shotgun') {
+    const gun = p.weapon;
+    if (gun === 'pistol') p.ammo--; else p.shells--;
+    const hits = [];
     for (const e of s.ents) if (e !== p && e.hp > 0 && hostile(p, e) && !e.car) {
       const d = Math.sqrt(dist2(e, p)); if (d > w.range) continue;
       const dot = ((e.x - p.x) * fx + (e.z - p.z) * fz) / (d || 1);
-      if (dot > 0.9 && clearLine(p, e) && dot - d * 0.01 > bs) { bs = dot - d * 0.01; best = e; }
+      if (dot > (gun === 'shotgun' ? 0.8 : 0.9) && clearLine(p, e)) hits.push([dot - d * 0.01, e, d]);
     }
-    if (best) p.ry = Math.atan2(best.x - p.x, best.z - p.z);
-    const tx = best ? best.x : p.x + fx * 22, tz = best ? best.z : p.z + fz * 22;
-    s.fx.push({ type: 'shot', x: p.x, z: p.z, tx, tz, by: p.id });
-    addHeat(s, p, 8); panic(s, p.x, p.z, 30);
-    if (best) damage(s, best, w.dmg, p, true);
-    if (p.ammo <= 0) p.weapon = p.hasBat ? 'bat' : 'fists';
+    hits.sort((a2, b2) => b2[0] - a2[0]);
+    const best = hits[0] ? hits[0][1] : null;
+    if (best && gun === 'pistol') p.ry = Math.atan2(best.x - p.x, best.z - p.z);
+    const tx = best ? best.x : p.x + Math.sin(p.ry) * 22, tz = best ? best.z : p.z + Math.cos(p.ry) * 22;
+    s.fx.push({ type: 'shot', x: p.x, z: p.z, tx, tz, by: p.id, gun, ry: p.ry });
+    addHeat(s, p, gun === 'shotgun' ? 10 : 8); panic(s, p.x, p.z, 30);
+    if (gun === 'pistol') { if (best) damage(s, best, w.dmg, p, true, w.kb); }
+    else for (const [, e, d] of hits.slice(0, 3)) damage(s, e, Math.round(w.dmg * (1.6 - d / w.range)), p, true, w.kb * (1.3 - d / w.range));
+    if (gun === 'pistol' && p.ammo <= 0) p.weapon = meleeFallback(p);
+    if (gun === 'shotgun' && p.shells <= 0) p.weapon = meleeFallback(p);
     return;
   }
   let best = null, bs = -1e9;
   for (const e of s.ents) if (e !== p && e.hp > 0 && hostile(p, e) && !e.car) {
     const d = Math.sqrt(dist2(e, p)); if (d > w.range) continue;
     const dot = d > 0.01 ? ((e.x - p.x) * fx + (e.z - p.z) * fz) / d : 1;
-    const sc = dot * 2 - d * 0.5 + (d < 1.4 ? 1 : 0) + (e.kind === 'ped' ? -1 : 0);
+    const sc = dot * 2 - d * 0.5 + (d < 1.4 ? 1 : 0) + (e.kind === 'ped' ? -1 : 0) + (e.id === targetId ? 3 : 0);
     if (dot > -0.2 && sc > bs) { bs = sc; best = e; }
   }
-  if (best) { p.ry = Math.atan2(best.x - p.x, best.z - p.z); damage(s, best, p.weapon === 'bat' ? w.dmg : p.combo ? 28 : 20, p, p.combo === 1 || p.weapon === 'bat'); }
+  if (best) {
+    p.ry = Math.atan2(best.x - p.x, best.z - p.z);
+    const fist = p.weapon === 'fists';
+    damage(s, best, fist ? (p.combo ? 28 : 20) : w.dmg, p, !fist || p.combo === 1, fist && p.combo ? 6 : w.kb);
+  } else s.fx.push({ type: 'whiff', x: p.x, z: p.z, by: p.id });
 }
 
 function panic(s, x, z, r) { for (const e of s.ents) if (e.kind === 'ped' && e.hp > 0 && (e.x - x) ** 2 + (e.z - z) ** 2 < r * r) { e.flee = 6 + R(s) * 4; e.fromX = x; e.fromZ = z; } }
 
-function damage(s, e, amt, src, heavy) {
+function damage(s, e, amt, src, heavy, kb) {
   if (e.hp <= 0 || e.kind === 'giver') return;
-  e.hp -= amt; e.hitT = 0.3; e.stun = heavy ? 0.6 : 0.35;
-  if (src) {
-    const d = Math.sqrt(dist2(e, src)) || 1, k = heavy ? 7 : 4;
-    e.kx = (e.x - src.x) / d * k; e.kz = (e.z - src.z) / d * k;
+  // dodge rolls have a short invulnerable window
+  if (e.dodgeT > 0.12) { s.fx.push({ type: 'evade', x: e.x, z: e.z, to: e.id }); return; }
+  // blocking soaks most of a melee hit from the front
+  if (e.block && src && src.kind && dist2(e, src) < 16) {
+    const d0 = Math.sqrt(dist2(e, src)) || 1, front = ((src.x - e.x) * Math.sin(e.ry) + (src.z - e.z) * Math.cos(e.ry)) / d0;
+    if (front > 0.2) { amt = Math.ceil(amt * 0.2); e.hp -= amt; e.kx = (e.x - src.x) / d0 * 2; e.kz = (e.z - src.z) / d0 * 2; s.fx.push({ type: 'block', x: e.x, z: e.z, to: e.id, by: src.id }); if (e.hp <= 0) e.hp = 1; return; }
   }
+  e.hp -= amt; e.hitT = heavy ? 0.45 : 0.3; e.stun = heavy ? 0.7 : 0.4;
   const ko = e.hp <= 0;
-  s.fx.push({ type: 'hit', x: e.x, z: e.z, by: src ? src.id : 0, to: e.id, heavy: !!heavy, ko });
+  let dx = 0, dz = 0;
+  if (src) {
+    const d = Math.sqrt(dist2(e, src)) || 1, k = (kb ?? (heavy ? 7 : 4)) * (ko ? 1.7 : 1);
+    dx = (e.x - src.x) / d; dz = (e.z - src.z) / d;
+    e.kx = dx * k; e.kz = dz * k;
+  }
+  s.fx.push({ type: 'hit', x: e.x, z: e.z, by: src ? src.id : 0, to: e.id, heavy: !!heavy, ko, dx, dz, amt });
   if (src && src.kind === 'player') {
     addHeat(s, src, e.kind === 'ped' ? 7 : e.kind === 'cop' ? 18 : 2);
     if (ko) addHeat(s, src, e.kind === 'ped' ? 8 : e.kind === 'cop' ? 15 : 4);
@@ -252,32 +289,49 @@ function onPlayerDown(s, p) {
   if (p.car) exitCar(s, p);
   const c = blockCenter(own[0]);
   p.x = c.x + BLOCK / 2 + 3; p.z = c.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0;
-  if (busted) { p.ammo = 0; p.weapon = p.hasBat ? 'bat' : 'fists'; }
+  if (busted) { p.ammo = 0; p.shells = 0; p.weapon = meleeFallback(p); }
   for (const e of s.ents) if (e.kind === 'cop') e.leave = true;
   if (s.mission) failMission(s, 'You went down. Mission failed.');
 }
 
 // ---------- cars ----------
-function driveCar(s, c, throttle, steerIn, dt, driverEnt) {
+// Handling: steering lock shrinks with speed, the travel direction (mh) lags
+// the nose by a grip rate, and the handbrake drops rear grip for drifts.
+// c.slip and c.skid are read by the client for smoke and skid marks.
+const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   if (c.wrecked) { c.v *= 1 - 3 * dt; return; }
   const T = CAR_TYPES[c.type];
-  c.steer += (steerIn * 0.55 - c.steer) * Math.min(1, dt * 6);
+  if (c.mh == null || Math.abs(c.v) < 1) c.mh = c.ry;
+  const sp = Math.abs(c.v) / T.max;
+  const lock = 0.6 * (1 - Math.min(0.5, sp * 0.55)) * (handbrake ? 1.25 : 1);
+  c.steer += (steerIn * lock - c.steer) * Math.min(1, dt * (Math.abs(steerIn) > 0.05 ? 7 : 10));
   const braking = throttle * c.v < 0;
-  c.v += throttle * (braking ? 32 : c.v < 0 ? 10 : T.acc) * dt;
-  c.v *= 1 - (Math.abs(throttle) < 0.05 ? 0.9 : 0.25) * dt;
+  c.v += throttle * (braking ? 34 : c.v < 0 ? 10 : T.acc) * dt;
+  c.v *= 1 - (handbrake ? 0.7 : Math.abs(throttle) < 0.05 ? 0.9 : 0.25) * dt;
   c.v = Math.max(-9, Math.min(T.max, c.v));
-  c.ry -= (c.v / 2.7) * Math.tan(c.steer) * dt;
-  c.x += Math.sin(c.ry) * c.v * dt; c.z += Math.cos(c.ry) * c.v * dt;
+  c.ry -= (c.v / 2.7) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
+  const grip = handbrake ? 1.1 : 6.5 - sp * 2;
+  c.mh += angDiff(c.ry, c.mh) * Math.min(1, dt * grip);
+  c.slip = Math.abs(angDiff(c.ry, c.mh));
+  c.skid = (c.slip > 0.14 && Math.abs(c.v) > 6) || (braking && Math.abs(c.v) > 9) || (throttle > 0.5 && c.v > 0 && c.v < 5 && sp < 0.15) ? 1 : 0;
+  if (!handbrake && c.slip > 0.6) c.v *= 1 - 1.2 * dt; // spinning out scrubs speed
+  c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt;
   clampWorld(c);
-  collideBuildings(c, 1.6, () => { carHurt(s, c, Math.abs(c.v) * 1.6); c.v *= -0.25; });
+  c.scrapeT = Math.max(0, (c.scrapeT || 0) - dt);
+  collideBuildings(c, 1.6, () => {
+    const n = Math.abs(c.v);
+    if (c.scrapeT <= 0 && n > 3) { c.scrapeT = 0.15; s.fx.push({ type: n > 10 ? 'crash' : 'scrape', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0, n }); }
+    carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 0.85; c.mh = c.ry;
+  });
   for (const o of s.cars) if (o !== c && dist2(o, c) < 9) {
     const d = Math.sqrt(dist2(o, c)) || 1, push = (3 - d) / 2;
     c.x -= (o.x - c.x) / d * push; c.z -= (o.z - c.z) / d * push; o.x += (o.x - c.x) / d * push; o.z += (o.z - c.z) / d * push;
-    if (Math.abs(c.v) > 4) { s.fx.push({ type: 'crash', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0 }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); }
+    if (Math.abs(c.v) > 4) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); }
     c.v *= 0.5;
   }
   if (Math.abs(c.v) > 6) for (const e of s.ents) if (e !== driverEnt && e.hp > 0 && !e.car && e.kind !== 'giver' && dist2(e, c) < 5) {
-    if (!driverEnt || driverEnt.kind === 'player' ? e.crew !== 'player' : hostile(driverEnt, e)) damage(s, e, 30, c, true);
+    if (!driverEnt || driverEnt.kind === 'player' ? e.crew !== 'player' : hostile(driverEnt, e)) damage(s, e, 30, c, true, 10);
     else { const d = Math.sqrt(dist2(e, c)) || 1; e.kx = (e.x - c.x) / d * 6; e.kz = (e.z - c.z) / d * 6; }
     if (driverEnt && driverEnt.kind === 'player') addHeat(s, driverEnt, e.kind === 'ped' ? 10 : 3);
     c.v *= 0.6;
@@ -298,11 +352,12 @@ export function movePlayer(s, p, mx, mz, sprint, dt) {
   if (p.hp <= 0) return;
   if (p.car) {
     const c = s.cars.find((c) => c.id === p.car);
-    driveCar(s, c, mz, mx, dt, p);
+    driveCar(s, c, mz, mx, dt, p, sprint);
     p.x = c.x; p.z = c.z; p.ry = c.ry; p.moving = 0;
     return;
   }
-  const sp = sprint ? 9 : 5;
+  if (p.dodgeT > 0) { p.moving = 0; clampWorld(p); collideBuildings(p, 0.5); return; }
+  const sp = p.block ? 2.2 : sprint ? 9 : 5;
   const l = Math.hypot(mx, mz);
   if (l > 0.05 && !(p.swing > 0.1)) {
     p.x += mx * sp * dt; p.z += mz * sp * dt;
@@ -314,6 +369,8 @@ export function movePlayer(s, p, mx, mz, sprint, dt) {
   for (const k of s.pickups) if (k.respawnT <= 0 && dist2(k, p) < 2.5) {
     k.respawnT = 40;
     if (k.type === 'bat') { p.hasBat = true; p.weapon = 'bat'; log(s, 'Picked up a bat.'); }
+    else if (k.type === 'knuckles') { p.hasKnux = true; p.weapon = 'knuckles'; log(s, 'Picked up brass knuckles.'); }
+    else if (k.type === 'shotgun') { p.shells = (p.shells || 0) + 10; p.weapon = 'shotgun'; log(s, 'Picked up a shotgun (+10).'); }
     else { p.ammo += 24; p.weapon = 'pistol'; log(s, 'Picked up a pistol (+24).'); }
     s.fx.push({ type: 'pickup', x: k.x, z: k.z });
   }
@@ -407,9 +464,9 @@ function findPath(a, b) {
 function steerPoint(e, goal) {
   e.losT = (e.losT || 0) - 1;
   if (dist2(e, goal) < 36) { e.path = null; return goal; }
-  if (e.losT <= 0) { e.losT = 15; e.los = clearLine(e, goal); }
+  if (e.losT <= 0) { e.losT = 15; e.los = dist2(e, goal) < 40 * 40 && clearLine(e, goal); } // long sight lines skim corners and ping-pong
   if (e.los) { e.path = null; return goal; }
-  if (!e.path || e.pathT <= 0 || dist2(e.path[e.path.length - 1], goal) > 25) { e.path = findPath(e, goal); e.pathT = 2.5; }
+  if (!e.path || e.pathT <= 0 || dist2(e.path[e.path.length - 1], goal) > 25) { e.path = findPath(e, goal); e.pathT = 2.5; while (e.path.length > 1 && dist2(e, e.path[1]) < dist2(e.path[0], e.path[1])) e.path.shift(); } // skip a start node we are already past
   while (e.path.length > 1 && dist2(e, e.path[0]) < 6) e.path.shift();
   return e.path[0];
 }
@@ -563,7 +620,11 @@ function pedStep(s, e, dt, p) {
 function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t += 0.05) { const q = perimeter(t, c, BLOCK / 2 + 1), d = dist2(q, e); if (d < bd) { bd = d; bt = t; } } return bt; }
 
 // ---------- missions ----------
-const MISSIONS = [
+// Missions: Unc hands them out in order. Each entry is data; the behavior for
+// each kind lives in startMission (setup), missionCheck (car events) and
+// missionStep (per tick win and fail checks). s.mission.target is the marker
+// the client shows (beacon, radar icon and edge arrow).
+export const MISSIONS = [
   { title: 'Package Run', intro: 'Unc: "Grab my package from the Harbor drop and bring it back. You got 120 seconds."', kind: 'fetch', time: 120, reward: 250, rep: 20 },
   { title: 'Send a Message', intro: 'Unc: "The Red Kings been testing us. Knock out 3 of them."', kind: 'beat', crew: 'reds', need: 3, reward: 300, rep: 30 },
   { title: 'Chop Job', intro: 'Unc: "Find a muscle car and drop it at the chop shop on the marker."', kind: 'chop', reward: 400, rep: 30 },
@@ -574,7 +635,13 @@ function startMission(s, p) {
   if (s.missionIdx >= MISSIONS.length) { log(s, 'Unc: "No more work today. Keep the blocks tight."'); return; }
   const M = MISSIONS[s.missionIdx];
   const m = { idx: s.missionIdx, title: M.title, kind: M.kind, stage: 0, timer: M.time || 0, count: 0, need: M.need || 0, crew: M.crew, reward: M.reward, rep: M.rep, target: null };
-  if (M.kind === 'fetch') { const b = s.blocks[GRID * GRID - 3]; const c = blockCenter(b); m.target = { x: c.x - 10, z: c.z }; }
+  if (M.kind === 'fetch') {
+    // the drop sits in the Harbor parking lane, outside any crew's guard area,
+    // preferring a block that is not held by a rival crew
+    const harbor = s.blocks.filter((b) => districtOf(b) === 2);
+    const b = harbor.find((b) => b.owner === 'neutral' || b.owner === 'player') || harbor[0];
+    const c = blockCenter(b); m.target = { x: c.x - BLOCK / 2 - 5, z: c.z + 6 }; m.block = b.id;
+  }
   if (M.kind === 'chop') { m.target = null; }
   if (M.kind === 'take') {
     const mine = s.blocks.filter((b) => b.owner === 'player');
@@ -635,8 +702,9 @@ export function step(s, dt) {
   for (const c of traffic) if (dist2(c, p) > 180 * 180) c.remove = true;
   if (traffic.length < s.cfg.traffic && R(s) < dt) spawnTraffic(s, false);
   // entities
+  const chasers = new Map();
   for (const e of s.ents) {
-    if (e.cd > 0) e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.swing > 0) e.swing -= dt; if (e.stun > 0) e.stun -= dt; if (e.pathT > 0) e.pathT -= dt; if (e.jumpT > 0) e.jumpT -= dt;
+    if (e.cd > 0) e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.swing > 0) e.swing -= dt; if (e.stun > 0) e.stun -= dt; if (e.pathT > 0) e.pathT -= dt; if (e.jumpT > 0) e.jumpT -= dt; if (e.dodgeT > 0) e.dodgeT -= dt; if (e.dodgeCd > 0) e.dodgeCd -= dt;
     if (e.kx || e.kz) { e.x += e.kx * dt; e.z += e.kz * dt; e.kx *= 1 - 6 * dt; e.kz *= 1 - 6 * dt; if (Math.abs(e.kx) + Math.abs(e.kz) < 0.1) e.kx = e.kz = 0; collideBuildings(e, 0.5); clampWorld(e); }
     if (e.kind === 'ped') { pedStep(s, e, dt, p); if (dist2(e, p) > 130 * 130 && e.hp > 0) { e.remove = true; } continue; }
     if (e.kind !== 'npc' || e.hp <= 0) continue;
@@ -644,15 +712,30 @@ export function step(s, dt) {
     if (e.stun > 0) continue;
     let foe = null, fd = 12 ** 2;
     for (const o of s.ents) if (o.hp > 0 && hostile(e, o) && !(o.kind === 'player' && o.car)) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
-    let goal;
+    let goal, followSpeed = 0;
     if (e.role === 'follower') {
+      // recruits walk in a loose formation behind you and only fight foes right next to you
       const l = s.ents.find((x) => x.id === e.leader);
-      goal = foe && dist2(foe, l || e) < 100 ? foe : l;
-      if (goal === l && l && dist2(l, e) < 9) goal = null;
+      if (foe && !(l && dist2(foe, l) < 7 * 7)) foe = null;
+      if (foe) goal = foe;
+      else if (l) {
+        const slot = (e.slot ??= s.ents.filter((x) => x.role === 'follower' && x.leader === e.leader).indexOf(e));
+        const side = (slot % 2 ? 1 : -1) * (1.2 + Math.floor(slot / 2) * 0.9), back = 2.4 + Math.floor(slot / 2) * 1.3;
+        const fx = Math.sin(l.ry), fz = Math.cos(l.ry);
+        const spot = { x: l.x - fx * back + fz * side, z: l.z - fz * back - fx * side };
+        const ds = Math.sqrt(dist2(spot, e));
+        if (ds > 1.0) { goal = spot; followSpeed = ds > 12 ? 9.6 : ds > 4 ? 6 : 3.2; }
+      }
       if (l && l.car && dist2(l, e) > 40 * 40) { e.x = l.x + 3; e.z = l.z + 3; } // catch up after a drive
     } else {
+      // defenders guard their own block and at most three of them chase one foe
       const c = blockCenter(s.blocks[e.target]);
-      if (foe && (e.role === 'attacker' || dist2(foe, c) < (PITCH / 2) ** 2)) goal = foe;
+      if (foe && e.role !== 'attacker') {
+        const inBlock = Math.abs(foe.x - c.x) < BLOCK / 2 + 2 && Math.abs(foe.z - c.z) < BLOCK / 2 + 2;
+        const n = chasers.get(foe.id) || 0;
+        if (!inBlock || n >= 3) foe = null; else chasers.set(foe.id, n + 1);
+      }
+      if (foe) goal = foe;
       else if (dist2(e, c) > 16) goal = c;
     }
     if (goal) {
@@ -664,7 +747,7 @@ export function step(s, dt) {
       } else if (d > 0.5) {
         const wp = steerPoint(e, goal);
         const dx = wp.x - e.x, dz = wp.z - e.z, dd = Math.hypot(dx, dz) || 1;
-        const sp = e.role === 'follower' && d > 8 ? 7 : 4;
+        const sp = followSpeed && goal !== foe ? followSpeed : 4;
         let sx = 0, sz = 0;
         for (const o of s.ents) if (o !== e && o.hp > 0 && o.kind === 'npc') { const q = dist2(o, e); if (q < 1 && q > 0) { sx += (e.x - o.x) / q; sz += (e.z - o.z) / q; } }
         e.x += (dx / dd * sp + sx * 0.6) * dt; e.z += (dz / dd * sp + sz * 0.6) * dt;
@@ -745,3 +828,4 @@ function aiThink(s, k, dt) {
 
 export const serialize = (s) => JSON.stringify(s, (k, v) => (k === 'path' ? undefined : v));
 export const deserialize = (j) => JSON.parse(j);
+export { steerPoint as navPoint }; // used by the headless mission tests

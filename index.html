@@ -38,6 +38,7 @@
 <div id="capture"></div>
 <div id="mission"><b id="mtitle"></b> <span id="mtext"></span> <span id="mtimer"></span></div>
 <div id="msg"></div>
+<div id="objArrow"><div class="tri"></div><span id="objDist"></span></div>
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
   <div id="steer"><button id="bLeft">&#9664;</button><button id="bRight">&#9654;</button></div>
@@ -45,9 +46,12 @@
     <button id="bWeapon" class="small">FISTS</button>
     <button id="bRecruit" class="small">+CREW $100</button>
     <button id="bCtx" class="ctx hidden">CAR</button>
+    <button id="bDodge" class="foot">DODGE</button>
+    <button id="bBlock" class="foot">BLOCK</button>
     <button id="bJump" class="foot">JUMP</button>
     <button id="bSprint" class="foot">RUN</button>
     <button id="bAttack" class="foot big">HIT</button>
+    <button id="bDrift" class="drive">DRIFT</button>
     <button id="bBrake" class="drive">BRAKE</button>
     <button id="bGas" class="drive big">GAS</button>
   </div>
@@ -58,7 +62,7 @@
   <p>You are a youngster on the Eastside with one block to your name. Three crews run the rest of the city, from Eastside through Downtown to the Harbor, and they want yours too.</p>
   <p>Beat a block's defenders, then hold its ring to take it. Every block runs a hustle that pays you. Spend cash on crew. Talk to Unc (the man in the suit) for jobs. Fighting, carjacking and shooting raise your wanted level and the cops will come.</p>
   <p><b>Win:</b> wipe out the three rival crews. <b>Lose:</b> lose all your turf.</p>
-  <p class="keys">Desktop: WASD move, mouse look (click to lock), Shift sprint, Space jump, click or F attack, Q switch weapon, E car or talk, R recruit.<br/>Phone: left thumb moves, drag the right side to look, buttons change with what you are doing.</p>
+  <p class="keys">Desktop: WASD move, mouse look (click to lock), Shift sprint, Space jump, click or F attack, Q switch weapon, E car or talk, R recruit, C dodge, hold V block, Space handbrake drift.<br/>Phone: left thumb moves, drag the right side to look, buttons change with what you are doing. Attacks lock on to the nearest enemy in front of you.</p>
   <label class="opt"><input type="checkbox" id="grain" checked /> Film grain (G)</label>
   <div id="load"><div id="loadbar"></div></div>
   <button id="start">HIT THE STREETS</button>
