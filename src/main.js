@@ -146,7 +146,7 @@ if (!LOW) { playerCarLight = new THREE.SpotLight(0xfff0d0, 260, 70, 0.62, 0.55, 
 
 // ---------- characters ----------
 const charViz = new Map();
-const cine = createCine({ camera, sfx, charViz, blocked: (x, z, y) => insideBuilding(x, z, 0.4, y) });
+const cine = createCine({ camera, scene, sfx, charViz, blocked: (x, z, y) => insideBuilding(x, z, 0.4, y) });
 let prevCar = null, pendingBig = null, pendingBrief = null, pendingJack = null, wasDown = false;
 let peopleReady = false;
 const MAXIMP = 120;

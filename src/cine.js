@@ -16,7 +16,8 @@ export const BRIEFS = [
   ['Unc: "Look around. This block is ours because we hold it."', 'Unc: "Now we hold one more."'],
 ];
 
-export function createCine({ camera, sfx, charViz, blocked }) {
+export function createCine({ camera, sfx, charViz, blocked, scene }) {
+  const ray = new THREE.Raycaster();
   const ui = document.createElement('div'); ui.id = 'cine';
   ui.innerHTML = '<div class="bar top"></div><div class="bar bot"></div><div id="cineSub"><b id="cineWho"></b><span id="cineLine"></span></div><div id="cineSkip">Tap to skip</div>';
   document.body.appendChild(ui);
@@ -177,27 +178,32 @@ export function createCine({ camera, sfx, charViz, blocked }) {
     const drift = (c.t % c.per) / c.per; // slow push in on every cut
     const line = c.lines[shot] || '', you = line.startsWith('You');
     const mode = you ? 2 : shot === 0 ? 0 : 1; // open over the shoulder, then cut to whoever talks
-    if (mode === 0) { // over the shoulder of the player toward Unc
-      const d = 1.5 - drift * 0.2; camera.position.set(px - fx * d + rx * 0.7, 1.85, pz - fz * d + rz * 0.7);
-      camera.lookAt(ux, 1.35, uz);
-    } else if (mode === 1) { // three quarter medium close up on Unc
-      const d = 1.0 + drift * 0.1; camera.position.set(px + fx * d + rx * 1.35, 1.68, pz + fz * d + rz * 1.35);
-      camera.lookAt(ux, 1.52, uz);
-    } else { // reverse three quarter on the player
-      const d = 1.0 + drift * 0.1; camera.position.set(ux - fx * d + rx * 1.35, 1.68, uz - fz * d + rz * 1.35);
-      camera.lookAt(px, 1.52, pz);
+    if (c.camShot !== shot) { // choose a clear camera for this cut (walls and props block some angles)
+      c.camShot = shot;
+      const tx = mode === 2 ? px : ux, tz = mode === 2 ? pz : uz;
+      const cands = mode === 0
+        ? [[px - fx * 1.5 + rx * 0.7, 1.85, pz - fz * 1.5 + rz * 0.7], [px - fx * 1.5 - rx * 0.7, 1.85, pz - fz * 1.5 - rz * 0.7], [px + rx * 2.6, 1.9, pz + rz * 2.6], [px - rx * 2.6, 1.9, pz - rz * 2.6]]
+        : mode === 1
+          ? [[px + fx + rx * 1.35, 1.68, pz + fz + rz * 1.35], [px + fx - rx * 1.35, 1.68, pz + fz - rz * 1.35], [px - fx * 0.6 + rx * 0.6, 1.8, pz - fz * 0.6 + rz * 0.6], [px - fx * 0.6 - rx * 0.6, 1.8, pz - fz * 0.6 - rz * 0.6]]
+          : [[ux - fx + rx * 1.35, 1.68, uz - fz + rz * 1.35], [ux - fx - rx * 1.35, 1.68, uz - fz - rz * 1.35], [ux + fx * 0.6 + rx * 0.6, 1.8, uz + fz * 0.6 + rz * 0.6], [ux + fx * 0.6 - rx * 0.6, 1.8, uz + fz * 0.6 - rz * 0.6]];
+      c.cam = cands.find((q) => clear(tx, tz, q)) || cands[0]; c.tgt = [tx, tz];
     }
-    // keep the camera out of walls: slide it toward the subject until the line is clear
-    const lx = mode === 2 ? px : ux, lz = mode === 2 ? pz : uz;
-    if (blocked) {
-      const cx = camera.position.x, cz = camera.position.z, cy = camera.position.y, L = Math.hypot(cx - lx, cz - lz);
-      let ok = L;
-      for (let d = 0.5; d <= L; d += 0.2) { const k = d / L; if (blocked(lx + (cx - lx) * k, lz + (cz - lz) * k, cy)) { ok = Math.max(0.9, d - 0.3); break; } }
-      if (ok < L) { const k = ok / L; camera.position.set(lx + (cx - lx) * k, cy, lz + (cz - lz) * k); camera.lookAt(lx, 1.52, lz); }
-    }
+    const [tx, tz] = c.tgt, q = c.cam, k = 1 - drift * 0.12;
+    camera.position.set(tx + (q[0] - tx) * k, q[1], tz + (q[2] - tz) * k);
+    camera.lookAt(tx, mode === 0 ? 1.35 : 1.52, tz);
     camera.fov = 45; camera.updateProjectionMatrix();
   }
 
+  const from = new THREE.Vector3(), dir = new THREE.Vector3();
+  const isChar = (o) => { for (const g of charViz.values()) if (g === o) return true; return false; };
+  // true when nothing solid sits between the subject's head and the camera spot
+  function clear(tx, tz, q) {
+    if (blocked && blocked(q[0], q[2], q[1])) return false;
+    from.set(tx, 1.5, tz); dir.set(q[0] - tx, q[1] - 1.5, q[2] - tz); const L = dir.length(); dir.normalize();
+    ray.set(from, dir); ray.far = L + 0.3;
+    const hits = []; for (const ch of scene.children) { if (ch.isLight || ch.isCamera) continue; try { ray.intersectObject(ch, true, hits); } catch {} }
+    return !hits.some((h) => { let o = h.object; if (!o.visible || o.isSkinnedMesh || o.isSprite || o.isPoints || o.isLine || (o.material && o.material.transparent) || h.distance < 0.35) return false; while (o) { if (isChar(o)) return false; o = o.parent; } return true; });
+  }
   // put the cameras on the open side of the pair (away from walls)
   function pickSide(ux, uz, toU) {
     const fx = Math.sin(toU), fz = Math.cos(toU);
