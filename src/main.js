@@ -40,6 +40,21 @@ const sky = new Sky(); sky.scale.setScalar(1000);
 const su = sky.material.uniforms;
 su.turbidity.value = 9; su.rayleigh.value = 2.6; su.mieCoefficient.value = 0.008; su.mieDirectionalG.value = 0.88;
 scene.add(sky);
+// twilight glow (v0.8.1): warm sunset band toward the sun plus a city light haze, so dusk never reads as a black sky
+const glowU = { uSun: { value: new THREE.Vector3(1, 0, 0) }, uDusk: { value: 0 }, uNight: { value: 0 } };
+const skyGlow = new THREE.Mesh(new THREE.SphereGeometry(420, 32, 16), new THREE.ShaderMaterial({
+  uniforms: glowU, side: THREE.BackSide, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending, fog: false,
+  vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); vec4 p = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w * 0.9999; }',
+  fragmentShader: `uniform vec3 uSun; uniform float uDusk, uNight; varying vec3 vD;
+    void main(){ vec3 d = normalize(vD); float up = max(d.y, 0.0);
+      vec2 sh = normalize(uSun.xz + 1e-4); float toward = max(dot(normalize(d.xz + 1e-4), sh), 0.0);
+      float band = exp(-up * 5.0);
+      vec3 sunset = mix(vec3(0.55, 0.32, 0.42), vec3(1.0, 0.5, 0.18), pow(toward, 2.0)) * band * (0.55 + 0.6 * pow(toward, 3.0));
+      vec3 zen = vec3(0.16, 0.18, 0.36) * (1.0 - band * 0.5);
+      vec3 haze = vec3(0.30, 0.24, 0.30) * exp(-up * 3.0);
+      gl_FragColor = vec4(uDusk * (sunset + zen) + uNight * haze, 1.0); }`,
+}));
+skyGlow.renderOrder = -1; skyGlow.frustumCulled = false; scene.add(skyGlow);
 const sunDir = new THREE.Vector3();
 // Reflections follow the day: the sky is re-baked into the environment map
 // whenever the sun has moved far enough.
@@ -103,6 +118,7 @@ function updateDay() {
     for (const o of city.nightOnly) o.visible = night > 0.3 || dusk > 0.6;
   }
   sky.visible = true;
+  skyGlow.position.copy(camera.position); glowU.uSun.value.copy(sunDir); glowU.uDusk.value = Math.max(dusk, (1 - day) * (1 - night)); glowU.uNight.value = night * 0.6;
   rebuildEnv();
   if (grade) { grade.uniforms.uNight.value = night; grade.uniforms.uDusk.value = dusk; }
   return h;
@@ -163,7 +179,7 @@ function tracer(x, z, tx, tz) { const t = tracers[tracerI = (tracerI + 1) % trac
 // ---------- input ----------
 const keys = {};
 let yaw = Math.PI, pitch = 0.3, lookIdle = 0;
-let attackQueued = false, sprintTouch = false, started = false;
+let attackBuf = 0, attackQueued = false, sprintTouch = false, started = false;
 const drive = { left: false, right: false, gas: false, brake: false, drift: false };
 function context() {
   const s = S(), p = player(s);
@@ -441,7 +457,7 @@ function frame(now) {
       let mx = fx * f + rx * r, mz = fz * f + rz * r; const l = Math.hypot(mx, mz); if (l > 1) { mx /= l; mz /= l; }
       session.input(mx, mz, sprint, dt);
     }
-    if (attackQueued) { const before = p.cd; session.send({ type: 'attack', target: lockId }); if (p.cd > before && p.weapon !== 'pistol' && p.weapon !== 'shotgun') sfx.whoosh(); attackQueued = false; }
+    if (attackQueued) { if (!attackBuf) attackBuf = 0.4; const before = p.cd; session.send({ type: 'attack', target: lockId }); if (p.cd > before && p.weapon !== 'pistol' && p.weapon !== 'shotgun') sfx.whoosh(); attackBuf = p.cd > before ? 0 : Math.max(0, attackBuf - dt); attackQueued = attackBuf > 0; } // buffer taps made during cooldown
     session.tick(dt);
     for (const ev of session.drainEvents()) showMsg(ev.text);
     handleFx(session.drainFx());
@@ -606,6 +622,6 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
-window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter };
+window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

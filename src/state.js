@@ -237,6 +237,14 @@ function attack(s, p, targetId) {
     const sc = dot * 2 - d * 0.5 + (d < 1.4 ? 1 : 0) + (e.kind === 'ped' ? -1 : 0) + (e.id === targetId ? 3 : 0);
     if (dot > -0.2 && sc > bs) { bs = sc; best = e; }
   }
+  // lunge: a locked target just out of reach (knockback, tap timing) still gets hit, same on touch and keyboard
+  if (!best && targetId != null) {
+    const t = s.ents.find((e) => e.id === targetId);
+    if (t && t !== p && t.hp > 0 && !t.car && hostile(p, t)) {
+      const d = Math.sqrt(dist2(t, p));
+      if (d <= w.range * 1.6) { const k = Math.max(0, d - w.range * 0.75) / (d || 1); p.x += (t.x - p.x) * k; p.z += (t.z - p.z) * k; best = t; }
+    }
+  }
   if (best) {
     p.ry = Math.atan2(best.x - p.x, best.z - p.z);
     const fist = p.weapon === 'fists';

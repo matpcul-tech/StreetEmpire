@@ -10,8 +10,7 @@ import fs from 'node:fs';
 const url = process.argv[2], dir = process.argv[3] || '/workspace/screenshots/qa';
 fs.mkdirSync(dir, { recursive: true });
 // thresholds (luma 0..255)
-// closeups are a staged camera framing mostly sky and ground, so their whole scene floor is lower; character limits still apply
-const LIMIT = { nightMean: 38, closeupMean: 30, nightP10: 6, charMean: 40, charContrast: 14 };
+const LIMIT = { nightMean: 38, nightP10: 6, charMean: 40, charContrast: 14 };
 const TIMES = { day: 424, dusk: 6, night: 95 };
 const lum = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
 async function stats(file, rect) {
@@ -46,6 +45,12 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
           if (pts.some((v) => v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1)) continue;
           const W = innerWidth, H = innerHeight, y0 = (1 - pts[1].y) / 2 * H, y1 = (1 - pts[0].y) / 2 * H, h = y1 - y0, cx = (pts[0].x + 1) / 2 * W;
           if (h < 40) continue;
+          // skip characters hidden behind a wall: a ray from the camera to the chest must reach this character first
+          const chest = g.position.clone(); chest.y += 1.1; const dir = chest.clone().sub(cam.position); const len = dir.length();
+          const rc = new D.Raycaster(cam.position, dir.normalize(), 0.1, len);
+          const hits = []; for (const ch of D.scene.children) { if (ch.isLight || ch.isCamera) continue; try { rc.intersectObject(ch, true, hits); } catch {} } hits.sort((a, b) => a.distance - b.distance);
+          const hit = hits.find((h) => h.object.visible && !h.object.isSprite && !h.object.isPoints && h.object.material && !h.object.material.transparent);
+          if (hit) { let o = hit.object, mine = false; while (o) { if (o === g) { mine = true; break; } o = o.parent; } if (!mine && hit.distance < len - 0.6) continue; }
           out.push({ id, x: cx - h * 0.16, y: y0, w: h * 0.32, h });
         }
         return out.slice(0, 4);
@@ -57,7 +62,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
       for (const r of rects) chars.push(await stats(file, { x: r.x * scale, y: r.y * scale, w: r.w * scale, h: r.h * scale }));
       const rec = { dev, tod, kind, file, whole, chars };
       if (tod !== 'day') {
-        { const lim = kind === 'closeup' ? LIMIT.closeupMean : LIMIT.nightMean; if (whole.mean < lim) fail.push(`${dev} ${tod} ${kind}: mean ${whole.mean} < ${lim}`); }
+        { const lim = LIMIT.nightMean; if (whole.mean < lim) fail.push(`${dev} ${tod} ${kind}: mean ${whole.mean} < ${lim}`); }
         if (whole.p10 < LIMIT.nightP10) fail.push(`${dev} ${tod} ${kind}: p10 ${whole.p10} < ${LIMIT.nightP10}`);
         for (const c of chars) if (c.mean < LIMIT.charMean || c.sd < LIMIT.charContrast) fail.push(`${dev} ${tod} ${kind}: character silhouette (mean ${c.mean}, contrast ${c.sd})`);
       }

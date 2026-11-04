@@ -40,8 +40,9 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 .keys{font-size:13px;color:#aaa}
 @media (max-width:500px){#radar{width:118px;height:118px}#cash{font-size:24px}#clock{font-size:18px}#stars{font-size:18px}#hp{width:120px}}
 .driving #touch button.small{display:none}
-.touch #msg{bottom:auto;top:46%}
-.touch #mission{bottom:auto;top:40%}
+.touch #msg{bottom:auto;top:172px;left:12px;right:12px;font-size:12px;line-height:1.25;background:rgba(0,0,0,.45);border-radius:6px;padding:3px 8px;max-height:3.9em;overflow:hidden}.touch #msg:empty{display:none}
+.touch #mission{bottom:auto;top:140px;left:12px;right:12px;font-size:12px;line-height:1.25;background:rgba(0,0,0,.5);border-radius:6px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.touch #mission:has(#mtitle:empty){display:none}
+.touch #big{top:214px;font-size:22px;letter-spacing:2px}
 @media (max-width:500px){#steer button{width:70px;height:70px}#touch button{width:60px;height:60px}#touch button.big{width:80px;height:80px}}
 /* v0.4 title screen and loading */
 #intro{position:fixed;inset:0;z-index:5;background:#120c08 url(../art/title.webp) left center/cover no-repeat;display:flex;align-items:flex-end;justify-content:flex-end;font-family:Arial,sans-serif;line-height:1.4}

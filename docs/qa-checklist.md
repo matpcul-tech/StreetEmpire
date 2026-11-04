@@ -15,9 +15,9 @@ red gate. Record the results in `docs/playtests/vX.Y.md`.
 
 Visual QA captures day, dusk and night shots (on foot, character close up,
 driving, mission) on desktop and phone. It fails the release when a night shot
-has mean luma under 38 (30 for the staged character close up) or 10th percentile luma under 6, or when any character
+has mean luma under 38 or 10th percentile luma under 6, or when any character
 near the player has mean luma under 40 or contrast (luma standard deviation)
-under 14 inside its screen box, which means it reads as a silhouette. Results go
+under 14 inside its screen box, which means it reads as a silhouette. Characters hidden behind a wall (a ray from the camera hits something else first) are not scored. Results go
 to `report.json` in the output folder.
 
 ## 2. Structured playthrough (desktop and phone layout)
