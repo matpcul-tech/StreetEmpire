@@ -86,16 +86,17 @@ function updateDay() {
   const day = THREE.MathUtils.smoothstep(elev, -0.08, 0.25);
   const dusk = 1 - Math.abs(THREE.MathUtils.clamp(elev / 0.25, -1, 1));
   night = 1 - THREE.MathUtils.smoothstep(elev, -0.12, 0.05);
+  const dark = Math.max(night, Math.min(1, (1 - day) * 1.15)); // bridges dusk so twilight is never darker than night
   // night (v0.8): blue purple moonlight plus a strong sky fill so nothing goes black
   sun.intensity = 2.0 * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8c96e0); }
-  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.35) * night; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0xb8846a : 0xc8a888);
+  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0xb8846a : 0xc8a888);
   hemi.groundColor.setHex(night > 0.5 ? 0x5a4434 : 0x4a3226);
   scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 45 - 15 * night;
-  renderer.toneMappingExposure = 0.62 + 0.1 * dusk + (LOW ? 0.6 : 0.58) * night;
-  charNight(night);
+  renderer.toneMappingExposure = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark;
+  charNight(Math.min(1.25, dark * 1.25));
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
     for (const [m, base] of city.emissive) m.emissiveIntensity = base * (0.15 + 0.85 * Math.max(night, dusk * 0.6));

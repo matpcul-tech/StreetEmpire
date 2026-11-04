@@ -10,7 +10,8 @@ import fs from 'node:fs';
 const url = process.argv[2], dir = process.argv[3] || '/workspace/screenshots/qa';
 fs.mkdirSync(dir, { recursive: true });
 // thresholds (luma 0..255)
-const LIMIT = { nightMean: 38, nightP10: 6, charMean: 40, charContrast: 14 };
+// closeups are a staged camera framing mostly sky and ground, so their whole scene floor is lower; character limits still apply
+const LIMIT = { nightMean: 38, closeupMean: 30, nightP10: 6, charMean: 40, charContrast: 14 };
 const TIMES = { day: 424, dusk: 6, night: 95 };
 const lum = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
 async function stats(file, rect) {
@@ -55,8 +56,8 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
       const chars = [];
       for (const r of rects) chars.push(await stats(file, { x: r.x * scale, y: r.y * scale, w: r.w * scale, h: r.h * scale }));
       const rec = { dev, tod, kind, file, whole, chars };
-      if (tod === 'night') {
-        if (whole.mean < LIMIT.nightMean) fail.push(`${dev} ${tod} ${kind}: mean ${whole.mean} < ${LIMIT.nightMean}`);
+      if (tod !== 'day') {
+        { const lim = kind === 'closeup' ? LIMIT.closeupMean : LIMIT.nightMean; if (whole.mean < lim) fail.push(`${dev} ${tod} ${kind}: mean ${whole.mean} < ${lim}`); }
         if (whole.p10 < LIMIT.nightP10) fail.push(`${dev} ${tod} ${kind}: p10 ${whole.p10} < ${LIMIT.nightP10}`);
         for (const c of chars) if (c.mean < LIMIT.charMean || c.sd < LIMIT.charContrast) fail.push(`${dev} ${tod} ${kind}: character silhouette (mean ${c.mean}, contrast ${c.sd})`);
       }

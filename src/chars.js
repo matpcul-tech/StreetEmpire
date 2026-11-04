@@ -233,7 +233,7 @@ function clothMat(L) {
     Object.assign(sh.uniforms, u, NIGHT);
     sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
     sh.fragmentShader = 'uniform float uRim;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint();')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\ntotalEmissiveRadiance += uRim * (vec3(0.4, 0.5, 0.9) * fr * 0.45 + diffuseColor.rgb * vec3(0.2, 0.16, 0.12));');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\ntotalEmissiveRadiance += uRim * (vec3(0.4, 0.5, 0.9) * fr * 0.5 + diffuseColor.rgb * vec3(0.26, 0.22, 0.18));');
   };
   m.customProgramCacheKey = () => 'ualcloth';
   matCache.set(key, m); return m;

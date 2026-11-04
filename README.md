@@ -121,3 +121,22 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 - Women are 1.68 m with narrower shoulders, so they read as a different build instead of a stretched one.
 - Animations from the library: idle, walk, jog, sprint, jab and cross combos, a melee swing for the bat, pistol shooting (also the shotgun), a dodge roll, the boxing guard (end of the punch enter clip), hits, death, jump and a seated driving pose. The bat, pistol, shotgun and knuckles are parented to the right hand bone.
 - Distance stand ins (capsules) on phones are unchanged.
+
+## v0.8 night lighting
+
+- Blue purple moonlight and a much stronger sky fill at night, a lighter blue brown haze, a night exposure and a grade that lifts the shadows, so nothing goes pure black. Phones get a little more fill and exposure.
+- Sodium street lamps: warm orange pools on the ground on every platform, plus six real point lights on the nearest lamps on desktop.
+- Neon signs spill their color onto the sidewalk below as cheap additive pools.
+- Characters get a cool rim light and a warm fill at night, so they read against dark streets.
+- Headlights: a stronger spotlight on desktop and a headlight throw decal on the road on every platform. Parked cars keep their lights off.
+
+## v0.8b car art
+
+- One paint shader with four wear levels per car: rust at the low panels and arches, scratches, dents, sun bleached roof and hood, primer spots and mismatched panels, and dirt.
+- Taxi checker band, police door panels, muscle car stripes, van side stripes and crew stickers. Rims vary between chrome, black and gold.
+- Tinted see-through glass that shows the drivers.
+- Glowing taillights, brake lights that flare when braking or stopped, and headlight flares at night.
+
+## Release QA
+
+See `docs/qa-checklist.md`. Tools: `tools/visual-qa.mjs` (brightness and silhouette gate), `tools/playtest.mjs` (scripted playthrough), `tools/night.mjs` and `tools/carshots.mjs` (review shots).
