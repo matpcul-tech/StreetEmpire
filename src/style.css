@@ -140,3 +140,12 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
 #btns{right:calc(var(--sr) + 14px);bottom:calc(var(--sb) + 18px)}
 #bWeapon{grid-column:1}#bRecruit{grid-column:2}#bSquad{grid-column:3}
 body.cine-on #lcol{visibility:hidden}
+
+/* v0.10.1b: big moment text is a centered chip, not a full width band; landscape strip beside the radar */
+#big,.touch #big{left:50%;right:auto;transform:translateX(-50%);white-space:nowrap;width:auto}
+@media (max-height:500px) and (orientation:landscape){
+  #lcol{top:calc(var(--st) + 10px);left:calc(var(--sl) + var(--rad) + 22px);width:250px}
+  #msg,.touch #msg{left:calc(var(--sl) + var(--rad) + 290px);right:calc(var(--sr) + 170px);font-size:12px}
+  .touch #big{top:calc(var(--st) + 110px)}
+}
+@media (max-height:500px) and (orientation:landscape){.touch #big{top:calc(var(--st) + 98px)}}

@@ -447,7 +447,15 @@ function handleFx(list) {
 }
 
 // objective arrow pinned to the screen edge, with distance, when the marker is off screen
-const arrowEl = document.getElementById('objArrow'), arrowTxt = document.getElementById('objDist'), projV = new THREE.Vector3();
+const radarEl = document.getElementById('radar'), arrowEl = document.getElementById('objArrow'), arrowTxt = document.getElementById('objDist'), projV = new THREE.Vector3();
+// keep the arrow off the radar, the HUD column and the thumb controls
+function arrowClear(ax, ay, ex, W, H) {
+  const rr = radarEl.getBoundingClientRect();
+  if (ax < rr.right + 24 && ay < rr.bottom + 28) { if (ex < 0) ay = rr.bottom + 34; else ax = rr.right + 30; }
+  if (isTouch && ay > H - 200 && (ax < 200 || ax > W - 250)) ay = H - 210;
+  if (ax > W - 190 && ay < 150) ay = 160;
+  return [ax, ay];
+}
 function objArrow(tgt, p) {
   if (!tgt || !started) { arrowEl.style.display = 'none'; return; }
   const dist = Math.hypot(tgt.x - p.x, tgt.z - p.z);
@@ -458,11 +466,12 @@ function objArrow(tgt, p) {
   arrowEl.style.display = 'block';
   arrowTxt.textContent = (tgt.label ? tgt.label + ' ' : '') + Math.round(dist) + ' m';
   const W = innerWidth, H = innerHeight;
-  if (on) { arrowEl.classList.add('on'); arrowEl.style.left = ((x + 1) / 2 * W) + 'px'; arrowEl.style.top = ((1 - y) / 2 * H - 40) + 'px'; arrowEl.style.setProperty('--rot', '180deg'); return; }
+  if (on) { arrowEl.classList.add('on'); const [ax, ay] = arrowClear((x + 1) / 2 * W, (1 - y) / 2 * H - 40, x, W, H); arrowEl.style.left = ax + 'px'; arrowEl.style.top = ay + 'px'; arrowEl.style.setProperty('--rot', '180deg'); return; }
   arrowEl.classList.remove('on');
   const a = Math.atan2(y, x), m = Math.max(Math.abs(Math.cos(a)) / 0.86, Math.abs(Math.sin(a)) / 0.74);
   const ex = Math.cos(a) / m, ey = Math.sin(a) / m;
-  arrowEl.style.left = ((ex + 1) / 2 * W) + 'px'; arrowEl.style.top = ((1 - ey) / 2 * H) + 'px';
+  const [ax, ay] = arrowClear((ex + 1) / 2 * W, (1 - ey) / 2 * H, ex, W, H);
+  arrowEl.style.left = ax + 'px'; arrowEl.style.top = ay + 'px';
   arrowEl.style.setProperty('--rot', (90 - a * 180 / Math.PI) + 'deg');
 }
 
@@ -489,11 +498,11 @@ function startGame() {
   scuffleT = 2.5; onb.step = onb.done ? -1 : 0; renderOnb();
 }
 // ---------- v0.10 onboarding: opening scuffle, 3 steps, waypoint to the next thing to do ----------
-let scuffleT = -1, scufflerId = null;
+let scuffleT = -1, scufflerId = null, onbMission = false;
 const onb = { step: -1, done: localStorage.getItem('se-onb') === '3' };
 const ONB = () => isTouch ? ['Knock out the Local: HIT', 'Talk to Unc: TALK', 'Take a block: clear it, stand in the ring'] : ['Knock out the Local: F or click', 'Talk to Unc: E', 'Take a block: clear it, stand in the ring'];
 function renderOnb() {
-  const el = $('onb'); if (onb.step < 0 || onb.step > 2) { el.classList.add('hidden'); return; }
+  const el = $('onb'); if (onb.step < 0 || onb.step > 2 || (S().mission && onb.step === 2)) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
   el.innerHTML = `<i>${onb.step + 1}/3</i> ${ONB()[onb.step]}`;
 }
@@ -675,6 +684,7 @@ function frame(now) {
   if (onb.step === 0 && scuffleT <= 0 && scufflerId == null) onbAdvance(1);
   if (onb.step === 1 && (s.mission || s.missionIdx > 0)) onbAdvance(2);
   if (onb.step === 2 && s.blocks.filter((b) => b.owner === 'player').length >= 2) onbAdvance(3);
+  if (!!s.mission !== onbMission) { onbMission = !!s.mission; renderOnb(); }
   const tgt = missionTarget(s) || (started ? guideTarget(s, p) : null);
   beacon.visible = !!tgt && tgt.label !== 'LOCAL'; if (tgt) { beacon.position.set(tgt.x, 60, tgt.z); beacon.material.opacity = 0.28 + Math.sin(now / 250) * 0.1; }
   const isPkg = s.mission && s.mission.kind === 'fetch' && s.mission.stage === 0;
