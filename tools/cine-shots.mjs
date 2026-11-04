@@ -48,7 +48,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
     if (dev === 'phone') await page.touchscreen.tap(200, 300); else await page.mouse.click(640, 300);
     await waitIdle(5000); const d = (Date.now() - t0) / 1000;
     await ev(() => window.__game.send({ type: 'car' })); await page.evaluate(() => window.__cine.skip()); await waitIdle();
-    return { ok: d < 0.6, skipped_after_s: +d.toFixed(2) };
+    return { ok: d < 1.5, skipped_after_s: +d.toFixed(2) }; // an unskipped entry takes about 12 s of wall time in headless software rendering
   });
   // 2. Unc briefing cutscenes, one per mission
   for (let i = 0; i < 4; i++) await rec('brief-' + (i + 1), async () => {
