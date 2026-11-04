@@ -12,22 +12,31 @@ import { loadCars, makeCar, updateCar, Smoke } from './vehicles.js';
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
-import { DOWN_TIME, MISSIONS, debugDown } from './state.js';
+import { DOWN_TIME, MISSIONS, debugDown, openingScuffle } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 
-const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+const VERSION = 'v0.10';
+// ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
-const LOW = (isTouch || params.has('low')) && !params.has('high');
+const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
+const LOW = (isTouch || POTATO || params.has('low') || params.get('q') === 'low') && !params.has('high') && params.get('q') !== 'high';
+document.getElementById('ver').textContent = VERSION + (POTATO ? ' potato' : LOW ? ' low' : ' high');
 if (isTouch) document.body.classList.add('touch');
+// a touchscreen can appear after load (device emulation, convertibles): switch the touch layout on at the first touch
+addEventListener('touchstart', () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); } }, { capture: true, passive: true });
+// no long press menus, callouts or text selection over the game
+addEventListener('contextmenu', (e) => { if (!e.target.closest || !e.target.closest('input,textarea')) e.preventDefault(); });
 const LOD_DIST = LOW ? 34 : 60, CAR_DIST = LOW ? 90 : 170, DRIVER_DIST = LOW ? 30 : 50;
 const BASE = import.meta.env.BASE_URL;
 
-const session = new LocalSession({ traffic: LOW ? 8 : 12, peds: LOW ? 10 : 18 });
+const session = new LocalSession({ traffic: POTATO ? 5 : LOW ? 8 : 12, peds: POTATO ? 6 : LOW ? 10 : 18 });
 const S = () => session.state;
 
 // ---------- renderer, sky and light ----------
 const renderer = new THREE.WebGLRenderer({ antialias: !LOW, powerPreference: 'high-performance' });
-let pixelRatio = Math.min(devicePixelRatio, LOW ? 1.25 : 1.75);
+const PR_MAX = () => Math.min(devicePixelRatio, POTATO ? 0.75 : LOW ? 1.25 : 1.75);
+let pixelRatio = PR_MAX();
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = !LOW;
@@ -76,7 +85,7 @@ if (!LOW) { sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.as
 scene.add(hemi, sun, sun.target);
 
 // post: tone map, then a warm LUT grade, light film grain and vignette
-const FX = !params.has('nofx');
+const FX = !params.has('nofx') && !POTATO;
 let composer = null, grade = null;
 if (FX) {
   const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW ? 0 : 4 });
@@ -193,7 +202,13 @@ function context() {
   if (nearestCar(s, p, 5)) return 'CAR';
   return null;
 }
-function doContext() { const c = context(); if (c === 'TALK') session.send({ type: 'talk' }); else if (c) session.send({ type: 'car' }); }
+function doContext() {
+  const c = context(); if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c) { session.send({ type: 'car' }); return; }
+  // nothing in reach: say why and where to go instead of silently ignoring the key
+  const s = S(), p = player(s), g = s.ents.find((e) => e.kind === 'giver');
+  if (g && s.mission) { const d = Math.hypot(g.x - p.x, g.z - p.z); showMsg(d < 4 ? `Unc: "Finish ${s.mission.title} first."` : 'Nothing to use here. Follow the yellow marker for your job.'); }
+  else if (g) { const d = Math.round(Math.hypot(g.x - p.x, g.z - p.z)); showMsg(`Nothing to use here. Unc is ${d} m away: follow the yellow UNC arrow and press E next to him.`); }
+}
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (!started) return;
@@ -285,6 +300,8 @@ function pickLock() {
 const $ = (id) => document.getElementById(id);
 const radar = $('radar').getContext('2d');
 let msgT = 0, bigT = 0;
+let incT = 0, starWant = 0, starShown = 0, starHold = 0;
+function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
 function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = 3; }
 function drawRadar(now) {
@@ -345,6 +362,19 @@ function missionTarget(s) {
 
 // ---------- feel ----------
 let hitStop = 0, shake = 0;
+// ---------- v0.10 pause menu ----------
+let paused = false;
+function setPaused(on) {
+  if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
+  if (on && document.pointerLockElement) document.exitPointerLock();
+}
+addEventListener('keydown', (e) => { if ((e.code === 'Escape' || e.code === 'KeyP') && started && !cine.active) setPaused(!paused); });
+document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && started && !paused && !isTouch && !cine.active) setPaused(true); });
+$('bPause').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setPaused(true); });
+$('pResume').onclick = () => setPaused(false);
+$('pRestart').onclick = () => location.reload();
+for (const b of document.querySelectorAll('#pause [data-q]')) b.onclick = () => { localStorage.setItem('se-q', b.dataset.q); const u = new URL(location.href); u.searchParams.set('q', b.dataset.q); location.href = u.toString(); };
+document.addEventListener('visibilitychange', () => { if (document.hidden && started) setPaused(true); });
 function handleFx(list) {
   const s = S(), p = player(s);
   const byId = (id) => s.ents.find((e) => e.id === id);
@@ -394,7 +424,7 @@ function handleFx(list) {
     else if (f.type === 'pickup') sfx.chime(true);
     else if (f.type === 'wasted') { showBig('WASTED', true); cine.down(false); }
     else if (f.type === 'busted') { showBig('BUSTED', true); cine.down(true); }
-    else if (f.type === 'mission') { if (f.state === 'pass') { cine.passed(f.title, f.reward, f.rep); sfx.chime(true); } else if (f.state === 'fail') { showBig('MISSION FAILED', true); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
+    else if (f.type === 'mission') { if (f.state === 'pass') { cine.passed(f.title, f.reward, f.rep); pop(`+$${f.reward} mission: ${f.title}`); sfx.chime(true); } else if (f.state === 'fail') { showBig('MISSION FAILED', true); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
   }
 }
 
@@ -408,7 +438,7 @@ function objArrow(tgt, p) {
   let x = projV.x, y = projV.y; if (behind) { x = -x; y = -y; }
   const on = !behind && Math.abs(x) < 0.85 && Math.abs(y) < 0.8;
   arrowEl.style.display = 'block';
-  arrowTxt.textContent = Math.round(dist) + ' m';
+  arrowTxt.textContent = (tgt.label ? tgt.label + ' ' : '') + Math.round(dist) + ' m';
   const W = innerWidth, H = innerHeight;
   if (on) { arrowEl.classList.add('on'); arrowEl.style.left = ((x + 1) / 2 * W) + 'px'; arrowEl.style.top = ((1 - y) / 2 * H - 40) + 'px'; arrowEl.style.setProperty('--rot', '180deg'); return; }
   arrowEl.classList.remove('on');
@@ -422,19 +452,46 @@ function objArrow(tgt, p) {
 const camPos = new THREE.Vector3(), tmp = new THREE.Vector3(), look = new THREE.Vector3();
 
 // ---------- loop ----------
+let slowFor = 0, potatoOffered = false;
 let last = performance.now(), radarT = 0, frameAvg = 16, resT = 0, camInit = false;
 const startBtn = $('start');
-startBtn.disabled = true; startBtn.textContent = 'LOADING...';
+let loaded = false, wantStart = false;
+startBtn.textContent = 'LOADING... TAP TO START WHEN READY';
 THREE.DefaultLoadingManager.onProgress = (url, done, total) => { $('loadbar').style.width = Math.round((done / total) * 100) + '%'; };
 const grainBox = $('grain'); grainBox.checked = localStorage.getItem('se-grain') !== '0'; grainBox.onchange = () => setGrain(grainBox.checked);
 Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }).catch((e) => console.error(e)),
   loadCars(BASE).then(() => { carsReady = true; }).catch((e) => console.error(e)),
-]).finally(() => { peopleReady = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
-startBtn.onclick = () => {
-  $('intro').classList.add('hidden'); started = true; last = performance.now(); sfx.initAudio();
-  showMsg('Talk to Unc for work, or take the block next door: knock out the Locals and stand in the ring.');
-};
+]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
+startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
+function startGame() {
+  if (started) return;
+  $('intro').classList.add('hidden'); $('bPause').classList.add('show'); started = true; last = performance.now(); sfx.initAudio();
+  showMsg('Welcome to the Eastside. Watch your back.');
+  scuffleT = 2.5; onb.step = onb.done ? -1 : 0; renderOnb();
+}
+// ---------- v0.10 onboarding: opening scuffle, 3 steps, waypoint to the next thing to do ----------
+let scuffleT = -1, scufflerId = null;
+const onb = { step: -1, done: localStorage.getItem('se-onb') === '3' };
+const ONB = ['Knock out the Local (F or click / HIT)', 'Talk to Unc, the man in the suit (E / TALK)', 'Take a block: beat its Locals, then stand in the ring'];
+function renderOnb() {
+  const el = $('onb'); if (onb.step < 0 || onb.step > 2) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  el.innerHTML = ONB.map((t, i) => `<div class="${i < onb.step ? 'ok' : i === onb.step ? 'now' : ''}"><b>${i < onb.step ? '&#10003;' : i + 1}</b> ${t}</div>`).join('');
+}
+function onbAdvance(to) { if (onb.step >= 0 && to > onb.step) { onb.step = to; if (to > 2) { localStorage.setItem('se-onb', '3'); showMsg('You know the streets now. Build your empire.'); } renderOnb(); sfx.chime(true); } }
+// next place to go when no mission is running: the scuffle, then Unc, then the nearest block ring to take
+function guideTarget(s, p) {
+  if (onb.step === 0 && scufflerId != null) { const e = s.ents.find((x) => x.id === scufflerId && x.hp > 0); if (e) return { x: e.x, z: e.z, label: 'LOCAL' }; }
+  const g = s.ents.find((e) => e.kind === 'giver');
+  if (onb.step <= 1 && g && s.missionIdx < MISSIONS.length && !s.mission) return { x: g.x, z: g.z, label: 'UNC' };
+  if (onb.step === 2) {
+    let best = null, bd = 1e12;
+    for (const b of s.blocks) if (b.owner !== 'player') { const c = blockCenter(b); const d = (c.x - p.x) ** 2 + (c.z - p.z) ** 2; if (d < bd) { bd = d; best = c; } }
+    if (best) return { x: best.x, z: best.z, label: 'RING' };
+  }
+  return null;
+}
 
 const DRIVER_DROP = 0.55; // seat height minus the hips of the Driving_Loop pose
 function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' ? 0.8 : 0.55; }
@@ -442,14 +499,19 @@ function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' ? 0.8 :
 function frame(now) {
   requestAnimationFrame(frame);
   renderer.info.reset();
-  let rdt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
-  frameAvg = frameAvg * 0.95 + rdt * 1000 * 0.05;
-  if ((resT += rdt) > 2) { resT = 0; const max = Math.min(devicePixelRatio, LOW ? 1.25 : 1.75); const target = frameAvg > 24 ? Math.max(0.7, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
+  const rawMs = Math.max(0, now - last);
+  let rdt = Math.max(0, Math.min(0.05, rawMs / 1000)); last = now;
+  frameAvg = frameAvg * 0.95 + Math.min(1000, rawMs) * 0.05;
+  // sustained very low FPS after start: offer potato quality once
+  if (started && !POTATO && !paused && frameAvg > 70 && (slowFor += rdt) > 6 && !potatoOffered) { potatoOffered = true; showMsg('Running slow. Pause (Esc / II) and pick POTATO quality, or add ?q=potato to the address.'); pixelRatio = 0.5; renderer.setPixelRatio(pixelRatio); composer = null; }
+  else if (frameAvg < 50) slowFor = 0;
+  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.7, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
   if (p.downT > 0) dt *= 0.4; // down beat in slow motion
-  if (started && !s.over && !cine.pausesSim) {
+  if (paused) dt = 0;
+  if (started && !s.over && !cine.pausesSim && !paused) {
     let f = 0, r = 0;
     if (keys.KeyW || keys.ArrowUp) f += 1; if (keys.KeyS || keys.ArrowDown) f -= 1;
     if (keys.KeyD || keys.ArrowRight) r += 1; if (keys.KeyA || keys.ArrowLeft) r -= 1;
@@ -589,8 +651,14 @@ function frame(now) {
     v.flag.rotation.y = Math.sin(now / 600 + i) * 0.15;
     v.prog.visible = !!b.capBy; if (b.capBy) { v.prog.material.color.setHex(CREWS[b.capBy].color); const k = Math.max(0.01, b.capT / CAPTURE_TIME); v.prog.scale.set(k, k, 1); }
   });
-  const tgt = missionTarget(s);
-  beacon.visible = !!tgt; if (tgt) { beacon.position.set(tgt.x, 60, tgt.z); beacon.material.opacity = 0.28 + Math.sin(now / 250) * 0.1; }
+  // onboarding progress and the opening scuffle
+  if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A Local is stepping to you. Knock him out: F or click (HIT on phone).'); } }
+  if (onb.step === 0 && scufflerId != null && !s.ents.some((e) => e.id === scufflerId && e.hp > 0)) onbAdvance(1);
+  if (onb.step === 0 && scuffleT <= 0 && scufflerId == null) onbAdvance(1);
+  if (onb.step === 1 && (s.mission || s.missionIdx > 0)) onbAdvance(2);
+  if (onb.step === 2 && s.blocks.filter((b) => b.owner === 'player').length >= 2) onbAdvance(3);
+  const tgt = missionTarget(s) || (started ? guideTarget(s, p) : null);
+  beacon.visible = !!tgt && tgt.label !== 'LOCAL'; if (tgt) { beacon.position.set(tgt.x, 60, tgt.z); beacon.material.opacity = 0.28 + Math.sin(now / 250) * 0.1; }
   const isPkg = s.mission && s.mission.kind === 'fetch' && s.mission.stage === 0;
   pkgMesh.visible = !!isPkg; if (isPkg) { pkgMesh.position.set(tgt.x, 0.9 + Math.sin(now / 300) * 0.15, tgt.z); pkgMesh.rotation.y = now / 600; }
   objArrow(tgt, p);
@@ -624,16 +692,31 @@ function frame(now) {
   // HUD
   const cr = s.crews.player;
   $('cash').textContent = '$' + String(Math.floor(cr.cash)).padStart(8, '0');
+  // income popups: turf pays every second, so sum it and say where it came from
+  if (started && !paused) {
+    incT += dt; if (incT >= 5) {
+      const mine = s.blocks.filter((b) => b.owner === 'player'), amt = mine.reduce((a, b) => a + b.rate, 0) * incT; incT = 0;
+      if (amt >= 1) pop(`+$${Math.round(amt)} ${mine.length === 1 ? mine[0].hustle + ' hustle' : 'from ' + mine.length + ' blocks'}`);
+    }
+  }
   $('rep').textContent = 'Rep ' + Math.floor(cr.rep);
   $('turf').textContent = `Turf ${s.blocks.filter((b) => b.owner === 'player').length}/${s.blocks.length}`;
   $('hpbar').style.width = (p.hp / p.max) * 100 + '%';
   $('clock').textContent = String(Math.floor(hour)).padStart(2, '0') + ':' + String(Math.floor((hour % 1) * 60)).padStart(2, '0');
   const wn = p.weapon.toUpperCase();
   $('wname').textContent = wn; const am = p.weapon === 'pistol' ? p.ammo : p.weapon === 'shotgun' ? p.shells : ''; $('ammo').textContent = am; $('bWeapon').textContent = wn + (am !== '' ? ' ' + am : '');
-  const st = stars(p); const si = $('stars').children; for (let i = 0; i < 5; i++) si[i].classList.toggle('on', i < st);
-  $('stars').classList.toggle('flash', st > 0 && Math.floor(now / 300) % 2 === 0);
+  // wanted stars: a new level must hold for 0.5 s before it shows (no flicker at a threshold);
+  // with no heat the row is a faint outline, so dark empty stars never read as earned ones
+  const stRaw = stars(p); if (stRaw !== starWant) { starWant = stRaw; starHold = 0.5; } else if (starHold > 0 && (starHold -= rdt) <= 0) starShown = starWant;
+  if (stRaw > starShown && starShown === 0) starShown = stRaw; // going wanted shows at once
+  const st = starShown, si = $('stars').children; for (let i = 0; i < 5; i++) si[i].classList.toggle('on', i < st);
+  $('stars').classList.toggle('none', st === 0);
+  $('stars').classList.toggle('flash', st > 0 && p.calmT < 3 && Math.floor(now / 400) % 2 === 0);
   document.body.classList.toggle('driving', !!p.car);
   const ctxName = context(); const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName;
+  // desktop prompt for the E key, so walking up to Unc or a car says what E will do
+  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? 'E  Get in' : ctxName === 'EXIT' ? 'E  Get out' : '';
+  if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
   const here = blockAt(s, p.x, p.z);
   $('capture').textContent = here && here.capBy ? `${CREWS[here.capBy].name} taking ${here.hustle}: ${Math.round((here.capT / CAPTURE_TIME) * 100)}%` : '';
@@ -647,7 +730,17 @@ function frame(now) {
   if (composer) { grade.uniforms.uTime.value = now / 1000; composer.render(); } else renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
-addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
+let sizeW = 0, sizeH = 0, sizeDpr = 0;
+function fitCanvas() {
+  if (innerWidth === sizeW && innerHeight === sizeH && devicePixelRatio === sizeDpr) return;
+  sizeW = innerWidth; sizeH = innerHeight; sizeDpr = devicePixelRatio;
+  pixelRatio = Math.min(pixelRatio, PR_MAX()); renderer.setPixelRatio(pixelRatio);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
+  if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight); }
+}
+addEventListener('resize', fitCanvas);
+// device emulation and rotation do not always fire resize, so also check the size every half second
+setInterval(fitCanvas, 500);
 window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

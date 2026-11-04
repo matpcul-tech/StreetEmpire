@@ -38,6 +38,11 @@
 <div id="capture"></div>
 <div id="mission"><b id="mtitle"></b> <span id="mtext"></span> <span id="mtimer"></span></div>
 <div id="msg"></div>
+<div id="onb" class="hidden"></div>
+<div id="prompt" class="hidden"></div>
+<div id="pops"></div>
+<button id="bPause" aria-label="Pause">II</button>
+<div id="pause" class="panel hidden"><h1>PAUSED</h1><button id="pResume">RESUME</button><div class="qrow">Quality: <button data-q="potato">POTATO</button><button data-q="low">LOW</button><button data-q="high">HIGH</button></div><p class="pkeys">Esc or P pauses. Quality change reloads the game.</p><button id="pRestart">RESTART</button></div>
 <div id="objArrow"><div class="tri"></div><span id="objDist"></span></div>
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
@@ -67,7 +72,7 @@
   <div id="load"><div id="loadbar"></div></div>
   <button id="start">HIT THE STREETS</button>
  </div>
- <div class="credit">v0.4</div>
+ <div class="credit" id="ver">v0.10</div>
 </div>
 <div id="end" class="panel hidden"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>
 <script type="module" src="./src/main.js"></script>
