@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#1a1410" />
+<title>Street Empire v0.1</title>
+<link rel="icon" href="data:," />
+<link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+<div id="app"></div>
+<div id="hud">
+  <div id="stats"><span id="cash">$0</span> <span id="rep">Rep 0</span> <span id="turf">Turf 0/9</span></div>
+  <div id="hp"><div id="hpbar"></div></div>
+  <div id="msg"></div>
+  <div id="capture"></div>
+</div>
+<canvas id="minimap" width="160" height="160"></canvas>
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div id="btns">
+    <button id="bAttack">PUNCH</button>
+    <button id="bSprint">RUN</button>
+    <button id="bCar">CAR</button>
+    <button id="bRecruit">RECRUIT $100</button>
+  </div>
+</div>
+<div id="intro" class="panel">
+  <h1>STREET EMPIRE</h1>
+  <p>You are a youngster on the corner of Eastside with one block to your name. Three crews run the rest of the neighborhood, and they want yours too.</p>
+  <p>Beat a block's defenders, then hold its zone to take it. Every block runs a hustle that pays you over time. Spend cash on recruits who follow and fight for you. Steal a car to get around fast.</p>
+  <p><b>Win:</b> own all 9 blocks. <b>Lose:</b> lose all your turf.</p>
+  <p class="keys">Desktop: WASD move, mouse look (click to lock), Shift sprint, Click or F punch, E enter or exit car, R recruit.<br/>Phone: left stick moves, drag right side to look, buttons for the rest.</p>
+  <button id="start">HIT THE STREETS</button>
+</div>
+<div id="end" class="panel hidden"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
