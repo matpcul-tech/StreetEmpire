@@ -121,8 +121,8 @@ function updateDay() {
   scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 45 - 15 * night;
-  renderer.toneMappingExposure = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark + (composer ? 0 : 0.16) * (dark + 0.5 * dusk);
-  charNight(Math.min(1.25, dark * 1.25), composer ? 1.15 : 1.8);
+  renderer.toneMappingExposure = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark + (composer ? 0 : 0.26) * (dark + 0.5 * dusk);
+  charNight(Math.min(1.25, dark * 1.25), composer ? 1.15 : 1.9);
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
     for (const [m, base] of city.emissive) m.emissiveIntensity = base * (0.15 + 0.85 * Math.max(night, dusk * 0.6));
