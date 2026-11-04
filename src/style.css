@@ -150,3 +150,4 @@ body.cine-on #lcol{visibility:hidden}
 }
 @media (max-height:500px) and (orientation:landscape){.touch #big{top:calc(var(--st) + 98px)}}
 @media (max-height:500px) and (orientation:landscape){.touch #bPause.show{top:auto;bottom:calc(var(--sb) + 10px)}#pops,.touch #pops{top:calc(var(--st) + 124px)}}
+@media (max-height:500px) and (orientation:landscape){#pops,.touch #pops{top:calc(var(--st) + 52px);right:calc(var(--sr) + 178px)}}
