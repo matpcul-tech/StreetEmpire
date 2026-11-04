@@ -399,6 +399,7 @@ startBtn.onclick = () => {
   showMsg('Talk to Unc for work, or take the block next door: knock out the Locals and stand in the ring.');
 };
 
+const DRIVER_DROP = 0.55; // seat height minus the hips of the Driving_Loop pose
 function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' ? 0.8 : 0.55; }
 
 function frame(now) {
@@ -459,8 +460,7 @@ function frame(now) {
     g.rotation.order = 'YXZ';
     const kl = Math.hypot(e.kx || 0, e.kz || 0), back = kl > 0.3 ? -((e.kx * Math.sin(e.ry) + e.kz * Math.cos(e.ry)) / kl) : 0;
     const lean = e.hp > 0 ? Math.min(0.55, kl * 0.06) * back : 0;
-    g.rotation.x += ((e.dodgeT > 0 ? -(1 - e.dodgeT / 0.42) * Math.PI * 2 : -lean) - g.rotation.x) * Math.min(1, rdt * (e.dodgeT > 0 ? 60 : 14));
-    if (e.dodgeT > 0) g.position.y = 0.24 + Math.sin((1 - e.dodgeT / 0.42) * Math.PI) * 0.25;
+    g.rotation.x += ((e.dodgeT > 0 ? 0 : -lean) - g.rotation.x) * Math.min(1, rdt * 14); // the dodge roll is the Roll clip
     if (e.kind === 'player' && e.moving > 0.05 && started && e.jumpT <= 0) {
       g.userData.stepT = (g.userData.stepT || 0) - dt * (e.moving > 1.3 ? 3.4 : 2.6);
       if (g.userData.stepT <= 0) { g.userData.stepT = 1; sfx.footstep(e.moving > 1.3 ? 1 : 0.7); }
@@ -496,7 +496,7 @@ function frame(now) {
     const u = g.userData;
     if (wantDriver && !u.driver) {
       const look = c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
-      if (modelReady(look.model)) { u.driver = makeCharacter(look, false); u.driver.position.set(-0.42, sitOffset(c.type) - 0.55, 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
+      if (modelReady(look.model)) { u.driver = makeCharacter(look, false); u.driver.position.set(-0.42, sitOffset(c.type) - DRIVER_DROP, 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
     } else if (!wantDriver && u.driver) { g.remove(u.driver); u.driver = null; }
     if (u.driver) animate(u.driver, { hp: 1 }, rdt, true);
     // damage smoke

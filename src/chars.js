@@ -1,190 +1,356 @@
-// Clothed, rigged people from Quaternius' Ultimate Animated Character Pack
-// (CC0). All models share one rig, so one set of animation clips drives all.
+// Rigged people built on Quaternius' Universal Animation Library mannequin
+// (CC0). One slim, near real figure and one rig for everyone. Outfits, faces
+// and grit are painted in the shader from bind pose coordinates (meters,
+// T pose, +z forward), so all characters share one geometry and one skeleton.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-export const MODELS = ['Casual_Male', 'Casual2_Male', 'Casual3_Male', 'Casual_Female', 'Suit_Male', 'BlueSoldier_Male'];
-const templates = {};
-let clips = {};
-const matCache = new Map();
+let tmpl = null;
+const clips = {};
 
 export async function loadPeople(base, onFirst) {
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  const load = async (n) => {
-    const g = await loader.loadAsync(`${base}models/people/${n}.glb`);
-    const box = new THREE.Box3().setFromObject(g.scene);
-    templates[n] = { scene: g.scene, scale: 1.75 / (box.max.y - box.min.y) };
-    // Bone scales set in code (proportions) must not be overwritten by the
-    // clips, so drop scale tracks and every translation track except the hips.
-    if (g.animations.length) for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('Hips.'))); clips[c.name] = c; }
-  };
-  await load('Casual_Male');
+  const g = await loader.loadAsync(`${base}models/ual.glb`);
+  // bone scales set in code (female build) must survive the clips, so drop
+  // scale tracks and every translation track except the hips
+  for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('DEF-hips.'))); clips[c.name] = c; }
+  tmpl = g.scene;
+  bakeBind(tmpl);
   onFirst && onFirst();
-  await Promise.all(MODELS.slice(1).map(load));
 }
-export const ready = (n) => !!templates[n];
+// The GLB is quantized, so raw positions are not in meters. Skin each vertex
+// once in the rest pose and store that (meters, feet at 0) plus the rest normal
+// as attributes the paint shader reads.
+function bakeBind(scene) {
+  scene.updateMatrixWorld(true);
+  const meshes = []; scene.traverse((o) => o.isSkinnedMesh && meshes.push(o));
+  const v = new THREE.Vector3(), nv = new THREE.Vector3(), m = new THREE.Matrix4(), t = new THREE.Matrix4(), n3 = new THREE.Matrix3();
+  let lo = 1e9, hi = -1e9; const out = [];
+  for (const o of meshes) {
+    o.skeleton.pose(); o.updateMatrixWorld(true); o.skeleton.update();
+    const G = o.geometry, P = G.attributes.position, N = G.attributes.normal, J = G.attributes.skinIndex, W = G.attributes.skinWeight;
+    const bp = new Float32Array(P.count * 3), bn = new Float32Array(P.count * 3);
+    for (let i = 0; i < P.count; i++) {
+      o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); bp.set([v.x, v.y, v.z], i * 3); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y);
+      m.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+      for (let k = 0; k < 4; k++) { const w = W.getComponent(i, k); if (!w) continue; const b = J.getComponent(i, k); t.multiplyMatrices(o.skeleton.bones[b].matrixWorld, o.skeleton.boneInverses[b]); for (let q = 0; q < 16; q++) m.elements[q] += t.elements[q] * w; }
+      n3.setFromMatrix4(t.multiplyMatrices(m, o.bindMatrix)).invert().transpose();
+      nv.fromBufferAttribute(N, i).applyMatrix3(n3).normalize(); bn.set([nv.x, nv.y, nv.z], i * 3);
+    }
+    out.push([G, bp, bn]);
+  }
+  const k = 1.829 / (hi - lo);
+  fit = { k: 1 / (hi - lo), lo };
+  for (const [G, bp, bn] of out) { for (let i = 0; i < bp.length; i += 3) { bp[i] *= k; bp[i + 1] = (bp[i + 1] - lo) * k; bp[i + 2] *= k; } G.setAttribute('bpos', new THREE.BufferAttribute(bp, 3)); G.setAttribute('bnrm', new THREE.BufferAttribute(bn, 3)); }
+}
+export const ready = () => !!tmpl;
 
 const SKINS = [0x8d5a3b, 0x5a3825, 0xc49272, 0x3e2a1e, 0xa8714d, 0xe0b090];
 const HAIR = [0x111111, 0x2a1a10, 0x4a3020, 0x111111, 0x6a5040];
-const SHIRTS = [0x555555, 0x7a2a2a, 0x2a4a7a, 0xb0a080, 0x2a5a3a, 0x6a3a6a, 0xd0d0d0, 0x8a6a2a, 0x222222];
-const PANTS = [0x2a3550, 0x1a1a1a, 0x4a4030, 0x3a3a40, 0x5a5a60];
+const TOPS = [0x555555, 0x7a2a2a, 0x2a4a7a, 0xb0a080, 0x2a5a3a, 0x6a3a6a, 0xd0d0d0, 0x8a6a2a, 0x222222, 0xc06a30, 0x4a7a8a];
+const PANTS = [0x2a3a5a, 0x1a1a1a, 0x4a4030, 0x3a3a40, 0x5a6a80, 0x6a5a40];
+const SHOES = [0xe8e8e0, 0x1a1a1a, 0xe8e8e0, 0x8a5a30, 0xb03030, 0xe8e8e0];
 
-// Look: { model, colors: { MaterialName: hex } }
+// styles: top 0 tee, 1 hoodie, 2 jersey, 3 police uniform, 4 suit, 5 tank, 6 jacket
+// pants 0 jeans, 1 slacks; hair 0 short, 1 long, 2 bald
+function look(o) { return { model: 'ual', female: false, top: 0, trim: 0xffffff, pants: 0, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.5, num: -1, beard: 0, acc: {}, ...o }; }
+
 export function lookFor(e, CREWS) {
   const v = e.look ?? (e.id * 7);
-  const skin = SKINS[v % SKINS.length], hair = HAIR[(v >> 1) % HAIR.length];
-  if (e.kind === 'player') return { model: 'Casual_Male', colors: { Skin: 0x7a4a30, Shirt: 0x2f8f4a, Pants: 0x2a3550, Hair: 0x111111, Belt: 0x111111 }, acc: { cap: 0x1e6a34, back: true, neck: 0x2f8f4a } };
-  if (e.kind === 'giver') return { model: 'Suit_Male', colors: { Skin: 0x5a3825, Shirt: 0xd8d0c0, Black: 0x2a2a30, Hair: 0x777777 } };
-  if (e.kind === 'cop') return { model: 'BlueSoldier_Male', colors: { Skin: skin, Main: 0x1a2a55, Black: 0x111111, Grey: 0x2a2a3a, Helmet: 0x101830 } };
+  const skin = SKINS[v % SKINS.length], hairC = HAIR[(v >> 1) % HAIR.length];
+  if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0x2f8f4a, trim: 0x1e6a34, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1e6a34, back: true, neck: 0x2f8f4a } });
+  if (e.kind === 'giver') return look({ skin: 0x5a3825, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hairC: 0x8a8a8a, hair: 0, beard: 2, grit: 0.15, acc: { hat: 0x1a1a1e } });
+  if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x1a2a55, trim: 0xd0b040, pants: 1, legs: 0x141a30, shoes: 0x0e0e0e, hairC, grit: 0.15, acc: { police: 0x141e40 } });
   if (e.kind === 'ped') {
-    const m = ['Casual_Male', 'Casual2_Male', 'Casual3_Male', 'Casual_Female', 'Suit_Male'][v % 5];
-    return { model: m, colors: { Skin: skin, Hair: hair, Shirt: SHIRTS[(v >> 2) % SHIRTS.length], Pants: PANTS[(v >> 3) % PANTS.length], Black: 0x222228 }, acc: v % 4 === 1 && m !== 'Suit_Male' ? { cap: SHIRTS[(v >> 4) % SHIRTS.length] } : {} };
+    const female = v % 3 === 1;
+    const top = [0, 6, 0, 1, 5, 4, 0][(v >> 2) % 7];
+    return look({ skin, female, top, topC: TOPS[(v >> 2) % TOPS.length], trim: TOPS[(v >> 5) % TOPS.length], pants: top === 4 ? 1 : (v >> 3) % 3 === 2 ? 1 : 0, legs: PANTS[(v >> 3) % PANTS.length], shoes: SHOES[(v >> 4) % SHOES.length],
+      hair: female ? 1 : (v >> 6) % 5 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 3 === 0 ? 1 : 0, grit: 0.3, acc: !female && v % 4 === 1 ? { cap: TOPS[(v >> 4) % TOPS.length] } : {} });
   }
   const c = CREWS[e.crew];
-  const model = e.crew === 'neutral' ? (v % 2 ? 'Casual_Female' : 'Casual3_Male') : c.model;
-  // crew uniforms: a cap or a bandana in crew colors, worn a little differently per crew
-  const acc = { reds: { rag: c.shirt }, blues: { neck: c.shirt, cap: 0x1a1a1a }, golds: { cap: c.shirt }, neutral: v % 3 ? {} : { cap: 0x3a3a3a } }[e.crew] || {};
-  return { model, colors: { Skin: skin, Hair: hair, Shirt: c.shirt, Pants: c.pants }, acc };
+  const female = e.crew === 'neutral' ? v % 2 === 1 : v % 5 === 3;
+  const base = { skin, female, topC: c.shirt, legs: c.pants, hair: female ? 1 : (v >> 3) % 4 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 2, grit: 0.7 };
+  if (e.crew === 'reds') return look({ ...base, top: v % 2 ? 2 : 5, trim: 0xf0f0f0, num: v % 100, legs: 0x1a1a1a, shoes: 0xe8e8e0, acc: female ? {} : { rag: c.shirt } });
+  if (e.crew === 'blues') return look({ ...base, top: v % 2 ? 1 : 2, trim: 0xe8e8f0, num: v % 100, legs: 0x3a4a66, shoes: 0x1a1a1a, acc: { neck: c.shirt, ...(female ? {} : { cap: 0x1a1a1a }) } });
+  if (e.crew === 'golds') return look({ ...base, top: v % 2 ? 2 : 6, trim: 0x1a1a1a, num: v % 100, legs: 0x4a3a28, shoes: 0xc89a18, acc: female ? {} : { cap: c.shirt } });
+  return look({ ...base, top: [0, 1, 6][v % 3], legs: PANTS[v % PANTS.length], grit: 0.4, acc: !female && v % 3 === 0 ? { cap: 0x3a3a3a } : {} });
 }
 
-function materialFor(base, col) {
-  const key = base.name + ':' + base.uuid + ':' + (col ?? 'x');
+// ---- painted clothing shader ----
+const PAINT = /* glsl */`
+uniform vec3 uSkin, uTop, uTrim, uLegs, uShoes, uHairC;
+uniform vec4 uStyle; // top, pants, hair, beard
+uniform vec2 uMisc;  // grit, number
+varying vec3 vB; varying vec3 vBN;
+float h31(vec3 p){ p = fract(p*0.3183099+0.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float vn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(h31(i),h31(i+vec3(1,0,0)),f.x),mix(h31(i+vec3(0,1,0)),h31(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(h31(i+vec3(0,0,1)),h31(i+vec3(1,0,1)),f.x),mix(h31(i+vec3(0,1,1)),h31(i+vec3(1,1,1)),f.x),f.y),f.z); }
+float box(vec2 p, vec2 a, vec2 b){ return step(a.x,p.x)*step(p.x,b.x)*step(a.y,p.y)*step(p.y,b.y); }
+// seven segment digit in a 1x2 cell
+float seg7(int d, vec2 p){
+  int m = d==0?119: d==1?36: d==2?93: d==3?109: d==4?46: d==5?107: d==6?123: d==7?37: d==8?127: 111;
+  float t=0.22, o=0.0;
+  if((m&1)>0)  o=max(o,box(p,vec2(0.0,1.78),vec2(1.0,2.0)));
+  if((m&2)>0)  o=max(o,box(p,vec2(0.0,1.0),vec2(t,2.0)));
+  if((m&4)>0)  o=max(o,box(p,vec2(1.0-t,1.0),vec2(1.0,2.0)));
+  if((m&8)>0)  o=max(o,box(p,vec2(0.0,0.89),vec2(1.0,1.11)));
+  if((m&16)>0) o=max(o,box(p,vec2(0.0,0.0),vec2(t,1.0)));
+  if((m&32)>0) o=max(o,box(p,vec2(1.0-t,0.0),vec2(1.0,1.0)));
+  if((m&64)>0) o=max(o,box(p,vec2(0.0,0.0),vec2(1.0,0.22)));
+  return o;
+}
+vec3 paint(){
+  vec3 p = vB; float ax = abs(p.x), y = p.y;
+  int top = int(uStyle.x+0.5), pants = int(uStyle.y+0.5), hair = int(uStyle.z+0.5);
+  bool front = vBN.z > 0.25, back = vBN.z < -0.35;
+  float n1 = vn(p*60.0), n2 = vn(p*9.0);
+  vec3 c = uSkin; float cloth = 0.0;
+  float sleeve = top==5 ? 0.17 : (top==0||top==2) ? 0.34 : 0.735;
+  if (y > 1.3 && ax > 0.185) {
+    // arms: sleeves then skin, hands past 0.735
+    if (ax < sleeve) { c = uTop; cloth = 1.0;
+      if (top==2 && ax > sleeve-0.025) c = uTrim;
+      if ((top==1||top==3||top==6) && ax > 0.70) c *= 0.75;
+      if (top==4 && ax > 0.715) { c = vec3(0.92); }
+      if (top==3 && ax > 0.24 && ax < 0.31 && y > 1.44) c = mix(c, uTrim, 0.6);
+    }
+  } else if (y > 1.565) {
+    // head: skin, hair, painted face
+    float hz = p.z - 0.006;
+    bool hairOn = hair==0 ? (y > 1.775 - 0.02*smoothstep(0.0,0.1,-hz) || (hz < -0.045 && y > 1.63) || (ax > 0.078 && y > 1.71 && hz < 0.03))
+                : hair==1 ? (y > 1.765 || (hz < -0.02 && y > 1.56) || (ax > 0.07 && y > 1.6 && hz < 0.045))
+                : false;
+    if (hairOn) { c = uHairC * (0.8 + 0.4*n1); cloth = 0.5; }
+    if (front && !hairOn) {
+      vec2 e = vec2(ax - 0.034, (y - 1.708) * 1.5);
+      float ed = length(e);
+      if (ed < 0.0135) c = vec3(0.93,0.91,0.88);
+      if (length(vec2(ax-0.034, y-1.708)) < 0.0075) c = vec3(0.12,0.08,0.05);
+      if (length(vec2(ax-0.034, y-1.708)) < 0.003) c = vec3(0.02);
+      if (y > 1.725 && y < 1.734 && ax > 0.016 && ax < 0.054 - (y-1.725)*1.2) c = uHairC*0.8;
+      if (y > 1.66 && y < 1.70 && ax < 0.013) c *= 0.9 + 0.1*smoothstep(0.0,0.013,ax)*0.0 + (ax > 0.008 ? -0.08 : 0.06);
+      if (y > 1.642 && y < 1.654 && ax < 0.024 - abs(y-1.648)*1.5) c = mix(uSkin, vec3(0.45,0.18,0.16), 0.55);
+      if (y > 1.6475 && y < 1.6495 && ax < 0.022) c *= 0.5;
+      int beard = int(uStyle.w+0.5);
+      bool jaw = y < 1.635 || (ax > 0.03 && y < 1.67) || (y > 1.654 && y < 1.662 && ax < 0.028);
+      if (beard > 0 && jaw && !(y > 1.642 && y < 1.654 && ax < 0.024)) c = mix(c, uHairC, beard==2 ? 0.8 : 0.3 + 0.15*n1);
+      if (beard==2 && y < 1.672 && y > 1.655 && ax < 0.03) c = mix(c, uHairC, 0.85);
+    }
+    if (!hairOn && y < 1.655 && !front && ax > 0.05) c *= 0.92;
+    // hoodie hood bunched behind the neck
+    if (top==1 && y < 1.64 && hz < -0.02) { c = uTop*0.9; cloth = 1.0; }
+  } else if (y > 1.49) {
+    // neck, collars
+    if (top==1 && (p.z < 0.0 || y < 1.515)) { c = uTop*0.9; cloth = 1.0; }
+    if ((top==3||top==4||top==6) && y < 1.53) { c = top==3 ? uTop : top==4 ? vec3(0.92) : uTop; cloth = 1.0; }
+    if (top==2 && y < 1.505) { c = uTrim; cloth = 1.0; }
+  } else if (y > 0.985) {
+    // torso
+    c = uTop; cloth = 1.0;
+    if (top==5 && y > 1.38 && (abs(ax - 0.06) > 0.022 && (y > 1.43 || ax > 0.08))) { c = uSkin; cloth = 0.0; }
+    if (top==0 && front && y > 1.47 && ax < 0.06 - (1.49-y)*0.0) c = uSkin;
+    if (top==1) {
+      if (front && y > 1.04 && y < 1.15 && ax < 0.09) c = uTop*0.82;
+      if (front && y > 1.38 && y < 1.48 && abs(ax-0.032) < 0.004) c = vec3(0.9);
+      if (y < 1.02) c = uTop*0.75;
+    }
+    if (top==2) {
+      if (ax > 0.13) c = uTrim;
+      int d = int(uMisc.y+0.5);
+      if (d >= 0) {
+        vec2 q = back ? vec2(-p.x, y) : vec2(p.x, y);
+        float hgt = back ? 0.2 : 0.09, y0 = back ? 1.13 : 1.3, w = hgt*0.5, gap = w*0.35;
+        vec2 l = vec2((q.x + w + gap*0.5)/w, (q.y - y0)/(hgt*0.5));
+        vec2 r = vec2((q.x - gap*0.5)/w, (q.y - y0)/(hgt*0.5));
+        float s = (d >= 10 ? seg7(d/10, l) : 0.0) + seg7(d - (d/10)*10, d >= 10 ? r : vec2((q.x + w*0.5)/w, (q.y-y0)/(hgt*0.5)));
+        if ((back || (front && p.x < 0.0)) && s > 0.5) c = uTrim;
+      }
+      if (y > 1.47 && front && ax < 0.06) c = uTrim;
+    }
+    if (top==3) {
+      if (front && p.x > 0.05 && p.x < 0.08 && y > 1.36 && y < 1.40) c = uTrim;
+      if (front && ax < 0.006 && y > 1.0) c *= 0.7;
+      if (front && ax > 0.04 && ax < 0.1 && y > 1.30 && y < 1.33) c *= 0.75;
+      if (y < 1.03) c = vec3(0.05);
+      if (y < 1.03 && front && ax < 0.02) c = uTrim;
+    }
+    if (top==4) {
+      float v = (y - 1.25) * 0.24;
+      if (front && y > 1.25 && ax < v) { c = vec3(0.92); if (ax < 0.012 && y < 1.47) c = uTrim; }
+      if (front && abs(ax - v) < 0.005 && y > 1.25) c *= 0.6;
+      if (front && ax < 0.004 && y < 1.2) c *= 0.6;
+    }
+    if (top==6) {
+      if (front && ax < 0.006) c = vec3(0.6);
+      if (y < 1.03) c *= 0.7;
+      if (y > 1.45 && front && ax < 0.07) c = uTrim;
+    }
+  } else if (y > 0.115) {
+    // pants with a belt
+    c = uLegs; cloth = 1.0;
+    if (y > 0.955) c = pants==1 ? vec3(0.06) : vec3(0.15,0.1,0.07);
+    else if (pants==0) {
+      c *= 0.82 + 0.3*vn(vec3(p.x*400.0+p.y*400.0, p.y*40.0, p.z*400.0));
+      c *= 1.0 + 0.25*smoothstep(0.08, 0.0, abs(y-0.52)) * (front ? 1.0 : 0.3);
+      if (y < 0.15) c *= 0.75;
+      if (abs(ax - 0.165) < 0.004 && y < 0.95) c = mix(c, vec3(0.75,0.6,0.35), 0.5);
+      if (y > 0.87 && back && abs(ax-0.07) < 0.04 && y < 0.93) c *= 0.85;
+    } else {
+      if (front && abs(ax-0.095) < 0.003) c *= 0.75;
+    }
+  } else {
+    // sneakers or dress shoes
+    c = uShoes; cloth = 0.6;
+    if (y < 0.03) c = dot(uShoes, vec3(0.33)) > 0.5 ? vec3(0.85,0.84,0.8) : vec3(0.05);
+    if (dot(uShoes, vec3(0.33)) > 0.4 && y > 0.04 && y < 0.07 && !front) c = mix(c, uTop, 0.8);
+    if (front && p.z > 0.05 && y > 0.05 && abs(ax - 0.093) < 0.012 && fract(p.z*120.0) < 0.5) c = vec3(0.9);
+  }
+  // grit: grime, dust at the hems and fabric noise
+  float g = uMisc.x;
+  c *= 1.0 - cloth * g * (0.25*smoothstep(0.45,0.85,n2) + 0.08*n1);
+  c = mix(c, vec3(0.42,0.35,0.27), cloth * g * 0.35 * smoothstep(0.45, 0.0, y) * n2);
+  c *= 0.97 + 0.06*n1*(1.0-cloth);
+  return c;
+}
+`;
+
+const matCache = new Map();
+const col = (h) => new THREE.Color(h);
+function clothMat(L) {
+  const key = [L.skin, L.top, L.topC, L.trim, L.pants, L.legs, L.shoes, L.hair, L.hairC, L.beard, L.grit, L.num].join(',');
   if (matCache.has(key)) return matCache.get(key);
-  const m = new THREE.MeshStandardMaterial({ color: col ?? base.color, roughness: base.name === 'Face' ? 0.4 : 0.85, metalness: 0 });
-  if (base.name === 'Skin' || base.name === 'Face') m.roughness = 0.6;
+  const u = { uSkin: { value: col(L.skin) }, uTop: { value: col(L.topC) }, uTrim: { value: col(L.trim) }, uLegs: { value: col(L.legs) }, uShoes: { value: col(L.shoes) }, uHairC: { value: col(L.hairC) },
+    uStyle: { value: new THREE.Vector4(L.top, L.pants, L.hair, L.beard) }, uMisc: { value: new THREE.Vector2(L.grit, L.num) } };
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0 });
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
+    sh.fragmentShader = PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint();');
+  };
+  m.customProgramCacheKey = () => 'ualcloth';
   matCache.set(key, m); return m;
 }
 
-// Caps, do-rags and neck bandanas, parented to the head and neck bones.
-export const ACC = { y: 0.42, z: 0.02, r: 0.33, neckY: 0.02, neckR: 0.17 };
+// ---- head and neck accessories, in head bone space (meters, +y up the bone) ----
+export const ACC = { y: 0.165, z: 0.01, r: 0.106, neckY: 0.045, neckR: 0.068, fwd: -1 };
 let accGeo = null;
 const accMats = new Map();
-function accMat(c) { if (!accMats.has(c)) accMats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 })); return accMats.get(c); }
+function accMat(c, rough = 0.85) { const k = c + ':' + rough; if (!accMats.has(k)) accMats.set(k, new THREE.MeshStandardMaterial({ color: c, roughness: rough })); return accMats.get(k); }
 function accessories() {
   if (accGeo) return accGeo;
-  const r = ACC.r;
-  const dome = new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2); dome.scale(1, 0.8, 1.08);
-  const brim = new THREE.CylinderGeometry(r * 0.9, r * 0.9, 0.015, 12, 1, false, -Math.PI / 2, Math.PI); brim.scale(1, 1, 1.1); brim.translate(0, 0.0, r * 0.35);
-  const cap = mergeGeometries([dome, brim]);
-  const rag = new THREE.SphereGeometry(r * 1.03, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.55); rag.scale(1, 0.85, 1.1);
-  const tail = new THREE.ConeGeometry(0.05, 0.16, 4); tail.rotateX(-Math.PI / 2 - 0.6); tail.translate(0, -0.02, -r * 1.05);
+  const r = ACC.r, f = ACC.fwd;
+  const dome = new THREE.SphereGeometry(r, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2); dome.scale(1, 0.9, 1.08);
+  const brim = new THREE.CylinderGeometry(r * 0.85, r * 0.85, 0.008, 14, 1, false, -Math.PI / 2, Math.PI); brim.scale(1, 1, 1.15); brim.translate(0, 0.004, f * r * 0.45); if (f < 0) brim.rotateY(Math.PI);
+  const btn = new THREE.SphereGeometry(0.01, 6, 3); btn.translate(0, r * 0.9, 0);
+  const cap = mergeGeometries([dome, brim, btn].map((g) => g.toNonIndexed()));
+  const rag = new THREE.SphereGeometry(r * 1.02, 14, 7, 0, Math.PI * 2, 0, Math.PI * 0.55); rag.scale(1, 0.92, 1.1);
+  const tail = new THREE.ConeGeometry(0.022, 0.13, 4); tail.rotateX(-Math.PI / 2 - 0.9 * f); tail.translate(0, -0.01, -f * r * 1.08);
   const doRag = mergeGeometries([rag.toNonIndexed(), tail.toNonIndexed()]);
-  const neck = new THREE.CylinderGeometry(ACC.neckR, ACC.neckR * 1.25, 0.12, 10, 1, true); neck.translate(0, 0, 0);
-  accGeo = { cap, doRag, neck }; return accGeo;
+  const neck = new THREE.CylinderGeometry(ACC.neckR, ACC.neckR * 1.45, 0.07, 12, 1, true);
+  const knot = new THREE.ConeGeometry(0.035, 0.08, 4); knot.rotateX(Math.PI); knot.translate(0, -0.05, f * ACC.neckR * 1.25);
+  const neckB = mergeGeometries([neck.toNonIndexed(), knot.toNonIndexed()]);
+  // police peaked cap and a short brim hat
+  const crown = new THREE.CylinderGeometry(r * 1.12, r * 0.98, 0.07, 14); crown.translate(0, 0.035, 0);
+  const visor = new THREE.CylinderGeometry(r * 0.8, r * 0.8, 0.008, 14, 1, false, -Math.PI / 2, Math.PI); visor.scale(1, 1, 0.9); visor.translate(0, 0, f * r * 0.55); if (f < 0) visor.rotateY(Math.PI);
+  const police = mergeGeometries([crown.toNonIndexed(), visor.toNonIndexed()]);
+  const hatC = new THREE.CylinderGeometry(r * 0.85, r * 1.0, 0.09, 14); hatC.translate(0, 0.045, 0);
+  const hatB = new THREE.CylinderGeometry(r * 1.55, r * 1.55, 0.008, 16);
+  const hat = mergeGeometries([hatC.toNonIndexed(), hatB.toNonIndexed()]);
+  const pony = new THREE.SphereGeometry(0.04, 8, 6); pony.scale(0.8, 1.6, 0.8); pony.translate(0, 0.02, -f * 0.115);
+  accGeo = { cap, doRag, neck: neckB, police, hat, pony }; return accGeo;
 }
 
-// Proportions (v0.6): closer to the v0.2 look. Longer abdomen and legs and a
-// smaller head, done with bone scales on the shared rig. The parent of a scaled
-// spine bone is counter scaled so the arms and head do not inherit the stretch.
-export const PROP = { abdomen: 1.3, thigh: 1.3, shin: 1.3, head: 0.56, arm: 1.2, height: 1.8 };
-const BONE_SCALE = {
-  Abdomen: [1, PROP.abdomen, 1], Torso: [1, 1 / PROP.abdomen, 1],
-  'UpperLegL': [1, PROP.thigh, 1], 'UpperLegR': [1, PROP.thigh, 1],
-  'LowerLegL': [1, PROP.shin / PROP.thigh, 1], 'LowerLegR': [1, PROP.shin / PROP.thigh, 1],
-  Head: [PROP.head, PROP.head, PROP.head],
-  UpperArmL: [1, PROP.arm, 1], UpperArmR: [1, PROP.arm, 1],
-};
-const fitCache = {};
-// measure the posed, reproportioned mesh once per model: lift the feet to the
-// ground and scale the whole figure to PROP.height
-function fit(model, root, mixer, act) {
-  if (fitCache[model]) return fitCache[model];
-  act.Idle.play(); mixer.update(0); root.updateMatrixWorld(true);
-  let lo = 1e9, hi = -1e9; const v = new THREE.Vector3();
-  root.traverse((o) => { if (!o.isSkinnedMesh) return; const n = o.geometry.attributes.position.count; for (let i = 0; i < n; i += 5) { o.getVertexPosition(i, v); o.localToWorld(v); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y); } });
-  const k = PROP.height / (hi - lo);
-  return (fitCache[model] = { k, lift: -lo * k });
-}
-
-// Guard pose for blocking: fixed local rotations for both arms, blended in
-// over the current animation. Values sampled from the punch clip (see v0.6 notes).
-export const GUARD = {};
-function guardBones(root) { const b = {}; root.traverse((o) => { if (o.isBone && /^(UpperArm|LowerArm|Fist)[LR]$/.test(o.name)) b[o.name] = o; }); return b; }
-
-// Simple weapons parented to the right fist bone.
+// ---- weapons in the right hand (hand bone space, +y along the fingers) ----
+export const GRIP = { x: 0, y: 0.07, z: 0.02 };
 let weaponGeo = null;
 function weapons() {
   if (weaponGeo) return weaponGeo;
-  const bat = new THREE.CylinderGeometry(0.035, 0.06, 0.85, 8); bat.translate(0, 0.38, 0);
-  const pistol = new THREE.BoxGeometry(0.05, 0.12, 0.22); pistol.translate(0, 0.02, 0.06);
-  weaponGeo = { bat, pistol, batMat: new THREE.MeshStandardMaterial({ color: 0x8a5a30, roughness: 0.6 }), gunMat: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.7 }) };
+  const bat = mergeGeometries([new THREE.CylinderGeometry(0.014, 0.032, 0.78, 8).translate(0, 0.33, 0), new THREE.CylinderGeometry(0.02, 0.02, 0.012, 8).translate(0, -0.06, 0)].map((g) => g.toNonIndexed()));
+  bat.rotateX(Math.PI / 2); // handle across the palm
+  const pistol = mergeGeometries([new THREE.BoxGeometry(0.03, 0.035, 0.17).translate(0, 0.03, 0.05), new THREE.BoxGeometry(0.028, 0.09, 0.035).translate(0, -0.01, 0)].map((g) => g.toNonIndexed()));
+  pistol.rotateX(-Math.PI / 2);
+  const shotgun = mergeGeometries([new THREE.CylinderGeometry(0.014, 0.014, 0.62, 6).rotateX(Math.PI / 2).translate(0, 0.035, 0.25), new THREE.BoxGeometry(0.04, 0.06, 0.32).translate(0, 0.0, -0.12), new THREE.BoxGeometry(0.035, 0.035, 0.14).translate(0, 0.0, 0.2)].map((g) => g.toNonIndexed()));
+  shotgun.rotateX(-Math.PI / 2);
+  const knux = new THREE.TorusGeometry(0.045, 0.009, 5, 12, Math.PI); knux.rotateY(Math.PI / 2);
+  weaponGeo = { bat, pistol, shotgun, knux, batMat: new THREE.MeshStandardMaterial({ color: 0x8a5a30, roughness: 0.6 }), gunMat: new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.7 }), goldMat: new THREE.MeshStandardMaterial({ color: 0xc8a040, roughness: 0.3, metalness: 0.9 }) };
   return weaponGeo;
 }
 
-export function makeCharacter(look, shadow) {
-  const T = templates[look.model] || templates.Casual_Male;
-  const root = skeletonClone(T.scene);
-  root.scale.setScalar(T.scale);
-  let hand = null, head = null, neckB = null;
+const HEIGHT = { m: 1.8, f: 1.68 };
+const F_BONES = { 'DEF-shoulderL': [0.9, 0.9, 0.9], 'DEF-shoulderR': [0.9, 0.9, 0.9], 'DEF-spine003': [0.9, 1, 0.94], 'DEF-head': [1.04, 1.04, 1.04] };
+let fit = null;
+const once = new Set(['Punch_Jab', 'Punch_Cross', 'Punch_Enter', 'Sword_Attack', 'Pistol_Shoot', 'Death01', 'Hit_Chest', 'Hit_Head', 'Roll', 'Jump_Start']);
+
+export function makeCharacter(L, shadow) {
+  const root = skeletonClone(tmpl);
+  const mat = clothMat(L);
+  let hand = null, head = null, neckB = null, hips = null;
   root.traverse((o) => {
-    if (o.isSkinnedMesh || o.isMesh) {
-      const mats = Array.isArray(o.material) ? o.material : [o.material];
-      const out = mats.map((m) => materialFor(m, look.colors[m.name]));
-      o.material = Array.isArray(o.material) ? out : out[0];
-      o.castShadow = !!shadow; o.frustumCulled = false;
+    if (o.isMesh) { o.material = mat; o.castShadow = !!shadow; o.frustumCulled = false; }
+    if (o.isBone) {
+      if (L.female && F_BONES[o.name]) o.scale.set(...F_BONES[o.name]);
+      if (o.name === 'DEF-handR') hand = o; else if (o.name === 'DEF-head') head = o; else if (o.name === 'DEF-neck') neckB = o; else if (o.name === 'DEF-hips') hips = o;
     }
-    if (o.isBone && BONE_SCALE[o.name]) o.scale.set(...BONE_SCALE[o.name]);
-    if (o.isBone && o.name === 'FistR') hand = o;
-    if (o.isBone && o.name === 'Head') head = o;
-    if (o.isBone && o.name === 'Neck') neckB = o;
   });
+  const sc = fit.k * (L.female ? HEIGHT.f : HEIGHT.m);
+  root.scale.setScalar(sc); root.position.y = -fit.lo * sc;
   const W = weapons();
-  const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat);
-  bat.visible = gun.visible = false;
-  if (hand) { const s = 1 / T.scale; bat.scale.setScalar(s); gun.scale.setScalar(s); bat.rotation.x = Math.PI / 2; hand.add(bat, gun); }
-  const A = look.acc || {}, AG = accessories(), si = 1 / T.scale;
-  if (head && (A.cap || A.rag)) {
-    const m = new THREE.Mesh(A.rag ? AG.doRag : AG.cap, accMat(A.rag || A.cap)); m.scale.setScalar(si); m.position.set(0, ACC.y * si, ACC.z * si);
-    if (A.back) m.rotation.y = Math.PI; m.castShadow = !!shadow; head.add(m);
+  const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat), shotgun = new THREE.Mesh(W.shotgun, W.gunMat), knux = new THREE.Mesh(W.knux, W.goldMat);
+  for (const w of [bat, gun, shotgun, knux]) { w.visible = false; w.position.set(GRIP.x, GRIP.y, GRIP.z); hand && hand.add(w); }
+  knux.position.set(0, 0.075, 0.03);
+  const A = L.acc || {}, AG = accessories();
+  const put = (bone, geo, c, y, z = 0, rough) => { const m = new THREE.Mesh(geo, accMat(c, rough)); m.position.set(0, y, z); m.castShadow = !!shadow; bone.add(m); return m; };
+  if (head) {
+    if (A.cap) { const m = put(head, AG.cap, A.cap, ACC.y, ACC.z); if (A.back) m.rotation.y = Math.PI; }
+    else if (A.rag) put(head, AG.doRag, A.rag, ACC.y - 0.008, ACC.z);
+    else if (A.police) { put(head, AG.police, A.police, ACC.y + 0.01, ACC.z); put(head, new THREE.BoxGeometry(0.025, 0.025, 0.004), 0xd0b040, ACC.y + 0.045, ACC.z + ACC.fwd * 0.118, 0.3); }
+    else if (A.hat) put(head, AG.hat, A.hat, ACC.y + 0.03, ACC.z);
+    if (L.female && L.hair === 1) put(head, AG.pony, L.hairC, ACC.y - 0.01, ACC.z);
   }
-  if (neckB && A.neck) { const m = new THREE.Mesh(AG.neck, accMat(A.neck)); m.scale.setScalar(si); m.position.y = ACC.neckY * si; neckB.add(m); }
+  if (neckB && A.neck) put(neckB, AG.neck, A.neck, ACC.neckY);
   const g = new THREE.Group(); g.add(root);
   const mixer = new THREE.AnimationMixer(root);
   const act = {};
-  for (const n in clips) act[n] = mixer.clipAction(clips[n]);
-  for (const n of ['Punch', 'SwordSlash', 'Shoot_OneHanded', 'Death', 'RecieveHit', 'Jump', 'SitDown']) if (act[n]) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; }
-  // fit the reproportioned body: unit scale first, measure, then apply
-  const base = root.scale.x; root.scale.setScalar(1);
-  const f = fit(look.model, root, mixer, act);
-  root.scale.setScalar(f.k); root.position.y = f.lift;
-  for (const o of [...(hand ? hand.children : []), ...(head ? head.children : []), ...(neckB ? neckB.children : [])].filter((o) => o.isMesh)) o.scale.multiplyScalar(base / f.k);
-  for (const o of head ? head.children : []) if (o.isMesh) o.position.multiplyScalar(base / f.k);
-  if (neckB) for (const o of neckB.children) if (o.isMesh) o.position.multiplyScalar(base / f.k);
-  act.Idle.play();
-  g.userData = { mixer, act, cur: 'Idle', root, bat, gun, arms: guardBones(root) };
+  for (const n in clips) { act[n] = mixer.clipAction(clips[n]); if (once.has(n)) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; } }
+  act.Idle_Loop.play();
+  g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips, punchN: 0 };
   return g;
 }
 
 export function animate(g, e, dt, sitting) {
   const u = g.userData;
   let want, speed = 1;
-  if (sitting) want = 'SitDown';
-  else if (e.block && e.hp > 0) want = 'Guard';
-  else if (e.hp <= 0) want = 'Death';
-  else if (e.swing > 0) { want = e.weapon === 'pistol' ? 'Shoot_OneHanded' : e.weapon === 'bat' ? 'SwordSlash' : 'Punch'; }
-  else if (e.hitT > 0.05) want = 'RecieveHit';
-  else if (e.jumpT > 0) want = 'Jump';
-  else if (e.moving > 0.62) { want = 'Run'; speed = 0.8 + e.moving * 0.25; }
-  else if (e.moving > 0.05) { want = 'Walk'; speed = Math.max(0.7, e.moving * 2.4); }
-  else want = 'Idle';
+  if (sitting) want = 'Driving_Loop';
+  else if (e.hp <= 0) want = 'Death01';
+  else if (e.dodgeT > 0) want = 'Roll';
+  else if (e.block) want = 'Punch_Enter';
+  else if (e.swing > 0) { const w = e.weapon; want = w === 'pistol' || w === 'shotgun' ? 'Pistol_Shoot' : w === 'bat' ? 'Sword_Attack' : (u.punchN % 2 ? 'Punch_Cross' : 'Punch_Jab'); }
+  else if (e.hitT > 0.05) want = e.hitT > 0.2 ? 'Hit_Head' : 'Hit_Chest';
+  else if (e.jumpT > 0) want = 'Jump_Start';
+  else if (e.moving > 0.62) { want = e.moving > 0.9 ? 'Sprint_Loop' : 'Jog_Fwd_Loop'; speed = 0.85 + e.moving * 0.2; }
+  else if (e.moving > 0.05) { want = 'Walk_Loop'; speed = Math.max(0.7, e.moving * 2.4); }
+  else want = e.weapon === 'pistol' || e.weapon === 'shotgun' ? 'Pistol_Idle_Loop' : 'Idle_Loop';
   const swingStart = e.swing > 0 && (u.lastSwing ?? 0) <= 0;
+  if (swingStart) { u.punchN++; if (want.startsWith('Punch_')) want = u.punchN % 2 ? 'Punch_Cross' : 'Punch_Jab'; }
   u.lastSwing = e.swing;
   if (want !== u.cur || swingStart) {
-    const next = want === 'Guard' ? (u.act.Guard ||= u.mixer.clipAction(u.act.Punch.getClip().clone())) : u.act[want] || u.act.Idle, prev = u.cur === 'Guard' ? u.act.Guard : u.act[u.cur];
+    const next = u.act[want] || u.act.Idle_Loop, prev = u.act[u.cur];
     next.reset(); next.enabled = true;
-    if (want === 'Punch' || want === 'SwordSlash' || want === 'Shoot_OneHanded') next.timeScale = next.getClip().duration / Math.max(0.25, (e.swing || 0.3) + 0.15);
-    else if (want === 'RecieveHit') next.timeScale = 1.6;
-    else if (want === 'SitDown') { next.time = next.getClip().duration; next.timeScale = 1; }
-    else if (want === 'Guard') { next.time = 0; next.timeScale = 0; } // boxing guard: first frame of the punch clip, fists up by the chin
+    const d = next.getClip().duration;
+    if (want.startsWith('Punch_') || want === 'Sword_Attack' || want === 'Pistol_Shoot') next.timeScale = d / Math.max(0.25, (e.swing || 0.3) + 0.15);
+    else if (want.startsWith('Hit_')) next.timeScale = 1.6;
+    else if (want === 'Roll') next.timeScale = d / 0.45;
+    else if (want === 'Punch_Enter') { next.time = d * 0.98; next.timeScale = 0; } // boxing guard: hands up by the chin
     else next.timeScale = 1;
     next.play();
-    if (prev && prev !== next) prev.crossFadeTo(next, 0.12, false);
+    if (prev && prev !== next) prev.crossFadeTo(next, want === 'Punch_Enter' ? 0.1 : 0.14, false);
     u.cur = want;
   }
-  if (want === 'Run' || want === 'Walk') u.act[want].timeScale = speed;
-  u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol';
+  if (want === 'Jog_Fwd_Loop' || want === 'Sprint_Loop' || want === 'Walk_Loop') u.act[want].timeScale = speed;
+  u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol'; u.shotgun.visible = e.weapon === 'shotgun'; u.knux.visible = e.weapon === 'knuckles';
   u.mixer.update(dt);
 }

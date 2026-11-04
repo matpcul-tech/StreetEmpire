@@ -33,7 +33,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.3
 
-- Clothed people with faces from Quaternius' Ultimate Animated Character Pack: crews wear their own colors, police wear uniforms, Unc wears a suit, and pedestrians vary.
+- People on Quaternius' Universal Animation Library mannequin, with painted outfits and faces: crews wear their own colors, police wear uniforms, Unc wears a suit, and pedestrians vary.
 - Kenney Car Kit vehicles: sedan, muscle car, SUV, van, taxi and police cruiser, with visible drivers, damage smoke and wrecks.
 - Traffic lights at every intersection. Traffic stops on red and for people in the road.
 - Wanted level (five stars): fighting, carjacking, hitting people with cars and shooting raise heat. Police cruisers chase you, officers get out and fight, and at three stars they shoot. Lose them and the heat fades. Get knocked out while wanted and you are BUSTED.
@@ -57,7 +57,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## Credits
 
-- People: Ultimate Animated Character Pack by Quaternius, CC0 1.0 (`public/models/people/LICENSE-Quaternius-CC0.txt`).
+- People: Universal Animation Library (standard, free version) by Quaternius, CC0 1.0, via the glTF mirror at github.com/J-Ponzo/gltf-universal-animation-library (`public/models/LICENSE-Quaternius-CC0.txt`). Trimmed with `tools/trim-ual.mjs`.
 - Cars: Car Kit by Kenney, CC0 1.0 (`public/models/cars/LICENSE-Kenney-CC0.txt`).
 - Both are trimmed and compressed with meshopt by `tools/pack-assets.mjs`.
 - Everything else (city, cars, textures and sound) is generated in code.
@@ -111,3 +111,13 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 - Block uses a real boxing guard (first frame of the punch clip, held).
 - Daytime exposure and haze toned down so midday no longer washes out.
 - `tools/closeup.mjs <url> <out.png> [block]` takes a close-up of four characters.
+
+## v0.7 characters on the Universal Animation Library
+
+- Everyone now uses the slim, near real Quaternius Universal Animation Library mannequin from v0.2 (`public/models/ual.glb`, one 1.8 MB file instead of six character models).
+- Outfits are painted in a shader from the rest pose (meters, baked once at load in `bakeBind`): tees, hoodies with pocket and drawstrings, numbered jerseys with side stripes, tank tops, zip jackets, police uniforms with badge and belt, and a suit with shirt and tie for Unc. Jeans get denim twill, knee fade and seams; sneakers get soles, laces and a color accent. Grit adds grime and dust at the hems.
+- Faces: painted eyes with whites and irises, brows, nose shading, lips and optional stubble or a beard, plus short, long or shaved hair.
+- Caps, do-rags, neck bandanas, a police peaked cap, Unc's hat and a ponytail sit on the head and neck bones.
+- Women are 1.68 m with narrower shoulders, so they read as a different build instead of a stretched one.
+- Animations from the library: idle, walk, jog, sprint, jab and cross combos, a melee swing for the bat, pistol shooting (also the shotgun), a dodge roll, the boxing guard (end of the punch enter clip), hits, death, jump and a seated driving pose. The bat, pistol, shotgun and knuckles are parented to the right hand bone.
+- Distance stand ins (capsules) on phones are unchanged.
