@@ -200,7 +200,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   function clear(tx, tz, q) {
     if (blocked && blocked(q[0], q[2], q[1])) return false;
     from.set(tx, 1.5, tz); dir.set(q[0] - tx, q[1] - 1.5, q[2] - tz); const L = dir.length(); dir.normalize();
-    ray.set(from, dir); ray.far = L + 0.3;
+    ray.set(from, dir); ray.far = L + 0.3; ray.camera = camera;
     const hits = []; for (const ch of scene.children) { if (ch.isLight || ch.isCamera) continue; try { ray.intersectObject(ch, true, hits); } catch {} }
     return !hits.some((h) => { let o = h.object; if (!o.visible || o.isSkinnedMesh || o.isSprite || o.isPoints || o.isLine || (o.material && o.material.transparent) || h.distance < 0.35) return false; while (o) { if (isChar(o)) return false; o = o.parent; } return true; });
   }

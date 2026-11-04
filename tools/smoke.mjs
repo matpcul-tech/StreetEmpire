@@ -37,8 +37,11 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
   console.log(name, 'drift', JSON.stringify(drift));
   // mission marker: start Package Run and look at the arrow
   await page.evaluate(() => { const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); if (p.car) g.send({ type: 'car' }); const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; g.send({ type: 'talk' }); });
+  // v0.9: the Unc briefing plays first; skip it with a tap like a player
+  const brief = await page.waitForFunction(() => window.__cine && window.__cine.active === 'brief', null, { timeout: 30000 }).then(() => true, () => false);
+  if (brief) { await page.evaluate(() => { window.__briefSeen = true; }); await page.mouse.click(20, 300); await page.waitForFunction(() => !window.__cine.active, null, { timeout: 30000 }); }
   await page.waitForTimeout(1500);
-  const arrow = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById('objArrow')).display, dist: document.getElementById('objDist').innerText, mission: window.__game.state.mission && window.__game.state.mission.title }));
+  const arrow = await page.evaluate(() => ({ shown: getComputedStyle(document.getElementById('objArrow')).display, dist: document.getElementById('objDist').innerText, mission: window.__game.state.mission && window.__game.state.mission.title, briefing: window.__briefSeen }));
   console.log(name, 'mission arrow', JSON.stringify(arrow));
   await page.screenshot({ path: `${dir}/${pre}-${name}-mission.png` });
   // wanted level and night
