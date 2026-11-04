@@ -214,6 +214,7 @@ export function makeCar(c) {
     siren[0].position.set(-0.25, 1.75, -0.1); siren[1].position.set(0.25, 1.75, -0.1); g.add(...siren);
   }
   g.userData = { wheels, spinA: 0, siren, model, body, burnt: false, baseY: model.position.y, tails, flares };
+  g.userData.paintHex = c.type === 'police' ? 0x1c1c22 : c.type === 'taxi' ? 0xd8a818 : c.type === 'lowrider' ? PAINT_LOW[c.paint % PAINT_LOW.length] : PAINT[c.paint % PAINT.length];
   return g;
 }
 let lampGeo = null;

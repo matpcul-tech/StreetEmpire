@@ -82,7 +82,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
     });
     await shot('mission', (t) => {
       clearInterval(window.__drv); const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); if (p.car) g.send({ type: 'car' });
-      const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; g.send({ type: 'talk' }); s.t = t;
+      const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; g.send({ type: 'talk' }); s.t = t; window.__skipCine = setInterval(() => window.__cine && window.__cine.active === 'brief' && window.__cine.skip(), 100); setTimeout(() => clearInterval(window.__skipCine), 6000); // briefings are covered by tools/cine-shots.mjs
     });
   }
   if (errs.length) fail.push(`${dev}: page errors ${errs.join('; ')}`);

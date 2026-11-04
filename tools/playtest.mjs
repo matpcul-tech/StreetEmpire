@@ -40,7 +40,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
   });
   await step('3-driving', async () => {
     await ev(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'), c = s.cars.find((c) => !c.driver && !c.wrecked && c.type !== 'police'); p.x = c.x + 2; p.z = c.z; window.__game.send({ type: 'car' }); });
-    await page.waitForTimeout(300);
+    await page.waitForFunction(() => !window.__cine.active, null, { timeout: 60000 }); // entry animation
     if (phone) { await page.locator('#bGas').dispatchEvent('pointerdown'); await waitGame(2.5); await page.locator('#bGas').dispatchEvent('pointerup'); }
     else { await page.keyboard.down('KeyW'); await waitGame(2.5); await page.keyboard.up('KeyW'); }
     const v = await ev(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'); const c = s.cars.find((c) => c.id === p.car); return c ? c.v : 0; });
@@ -61,9 +61,14 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
     return ev(() => { const s = window.__game.state, b = s.blocks.find((b) => b.id === window.__blk); return { ok: b.owner === 'player' || b.capT > 0, owner: b.owner, capT: +b.capT.toFixed(1), note: 'full take over flow is covered by the Take Over mission test' }; });
   });
   await step('6-package-run', async () => {
-    await ev(() => { const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; g.send({ type: 'talk' }); });
-    await page.waitForTimeout(1500);
-    return ev(() => ({ ok: getComputedStyle(document.getElementById('objArrow')).display !== 'none', mission: window.__game.state.mission?.title, arrow: document.getElementById('objDist').innerText }));
+    await ev(() => { const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1; p.z = u.z + 1; s.mission = null; s.missionIdx = 0; });
+    await page.waitForTimeout(2000); await ev(() => window.__game.send({ type: 'talk' }));
+    // v0.9: Unc briefs the mission in a letterboxed cutscene; tap to skip it like a player would
+    await page.waitForFunction(() => window.__cine.active === 'brief', null, { timeout: 60000 });
+    await page.screenshot({ path: `${dir}/${dev}-6a-briefing.png` });
+    if (phone) await page.touchscreen.tap(200, 300); else await page.mouse.click(640, 300);
+    await page.waitForFunction(() => !window.__cine.active, null, { timeout: 30000 }); await page.waitForTimeout(1500);
+    return ev(() => ({ ok: getComputedStyle(document.getElementById('objArrow')).display !== 'none', briefing: 'shown and skipped by tap', mission: window.__game.state.mission?.title, arrow: document.getElementById('objDist').innerText }));
   });
   await step('7-rivals', async () => {
     await ev(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'); const b = s.blocks.find((b) => b.owner === 'reds'); const c = window.__dbg.blockCenter(b); p.x = c.x; p.z = c.z; });

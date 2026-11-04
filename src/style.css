@@ -65,3 +65,20 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 #objArrow span{display:block;font:bold 15px Impact,sans-serif;color:#ffcc33;text-shadow:0 0 4px #000,0 0 2px #000;margin-top:4px}
 #objArrow.on .tri{border-bottom-width:18px;border-left-width:10px;border-right-width:10px}
 #bBlock.on,#bDrift.on{background:rgba(120,160,255,.55)}
+/* v0.9 cinematic moments */
+#cine .bar{position:fixed;left:0;right:0;height:0;background:#000;z-index:40;transition:height .35s ease;pointer-events:none}
+#cine .bar.top{top:0}#cine .bar.bot{bottom:0}
+body.cine-bars #cine .bar{height:12vh}
+body.cine-on #hud,body.cine-on #radar,body.cine-on #touch,body.cine-on #mission,body.cine-on #msg,body.cine-on #objArrow,body.cine-on #big,body.cine-on #capture{visibility:hidden}
+#cineSub{position:fixed;left:50%;bottom:calc(12vh + 14px);transform:translateX(-50%);max-width:min(86vw,640px);z-index:41;background:rgba(10,8,6,.72);border-left:3px solid #ffcc33;padding:8px 14px;font:bold 17px Arial,sans-serif;color:#fff;text-shadow:1px 1px 2px #000;opacity:0;transition:opacity .2s;pointer-events:none}
+#cineSub b{color:#ffcc33;margin-right:8px;text-transform:uppercase;letter-spacing:1px}
+#cineSkip{position:fixed;right:14px;bottom:calc(4vh);z-index:42;font:12px Arial,sans-serif;color:#bbb;display:none;pointer-events:none}
+body.cine-bars #cineSkip{display:block}
+.touch #cineSub{font-size:14px;padding:6px 10px}
+#passCard{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.9);z-index:39;min-width:260px;text-align:center;background:rgba(8,8,8,.78);border-top:3px solid #ffcc33;border-bottom:3px solid #ffcc33;padding:14px 26px;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;font-family:Arial,sans-serif}
+#passCard.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#passCard .pc-k{font-size:30px;letter-spacing:3px;color:#ffcc33;text-shadow:2px 2px 0 #000;font-weight:bold}
+#passCard .pc-t{font-size:16px;color:#eee;margin-top:4px}#passCard .pc-r{font-size:24px;color:#4c4;margin-top:8px;font-weight:bold}#passCard .pc-s{font-size:14px;color:#ccc;margin-top:2px}
+.touch #passCard{top:26%}.touch #passCard .pc-k{font-size:22px}
+#downTint{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .4s}
+#downTint.on{opacity:1}#downTint.wasted{background:radial-gradient(ellipse at center,rgba(60,0,0,.05),rgba(40,0,0,.55))}#downTint.busted{background:radial-gradient(ellipse at center,rgba(0,10,60,.05),rgba(0,20,60,.5))}

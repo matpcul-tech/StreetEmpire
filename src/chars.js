@@ -328,7 +328,9 @@ export function makeCharacter(L, shadow) {
 export function animate(g, e, dt, sitting) {
   const u = g.userData;
   let want, speed = 1;
-  if (sitting) want = 'Driving_Loop';
+  if ((u.cineHold || u.cineTalk) && u.cineAnim && u.act[u.cineAnim]) want = u.cineAnim;
+  else if (sitting) want = 'Driving_Loop';
+  else if (e.downT > 0 && e.downBusted) want = 'Punch_Enter'; // hands up, held still
   else if (e.hp <= 0) want = 'Death01';
   else if (e.dodgeT > 0) want = 'Roll';
   else if (e.block) want = 'Punch_Enter';

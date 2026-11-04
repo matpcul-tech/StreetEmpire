@@ -175,7 +175,7 @@ export function applyAction(s, playerId, a) {
         if (c.ai) {
           log(s, 'You jacked a ride.'); addHeat(s, p, 6);
           const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: 8, look: Math.floor(R(s) * 100), x: c.x - Math.cos(c.ry) * 2.2, z: c.z + Math.sin(c.ry) * 2.2, fromX: p.x, fromZ: p.z });
-          s.ents.push(d);
+          s.ents.push(d); s.fx.push({ type: 'jack', car: c.id, ped: d.id });
         }
         if (c.type === 'police') addHeat(s, p, 25);
         c.driver = p.id; c.ai = false; p.car = c.id;
@@ -293,8 +293,17 @@ function onPlayerDown(s, p) {
   const busted = p.heat >= 10;
   const cr = s.crews[p.crew]; const lost = Math.floor(cr.cash * (busted ? 0.4 : 0.25)); cr.cash -= lost;
   log(s, busted ? `BUSTED. Bail cost you $${lost}.` : `WASTED. You lost $${lost}. Back at your turf.`);
-  s.fx.push({ type: busted ? 'busted' : 'wasted' });
   if (p.car) exitCar(s, p);
+  s.fx.push({ type: busted ? 'busted' : 'wasted', x: p.x, z: p.z });
+  // a short down beat (the client plays it in slow motion) before the respawn
+  p.downT = DOWN_TIME; p.downBusted = busted;
+}
+export const DOWN_TIME = 1.1;
+// test hook: knock the player down now (used by the cinematic capture script)
+export function debugDown(s) { const p = player(s); if (p.hp <= 0) return; p.hp = 0; onPlayerDown(s, p); }
+function respawnPlayer(s, p) {
+  const own = s.blocks.filter((b) => b.owner === p.crew); if (!own.length) return;
+  const busted = p.downBusted; p.downT = 0;
   const c = blockCenter(own[0]);
   p.x = c.x + BLOCK / 2 + 3; p.z = c.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0;
   if (busted) { p.ammo = 0; p.shells = 0; p.weapon = meleeFallback(p); }
@@ -657,7 +666,7 @@ function startMission(s, p) {
     const b = opts[0] || s.blocks.find((b) => b.owner !== 'player');
     m.block = b.id; const c = blockCenter(b); m.target = { x: c.x, z: c.z };
   }
-  s.mission = m; log(s, M.intro); s.fx.push({ type: 'mission', state: 'start', title: M.title });
+  s.mission = m; log(s, M.intro); s.fx.push({ type: 'mission', state: 'start', title: M.title, idx: m.idx });
 }
 function missionCheck(s, p) {
   const m = s.mission; if (!m) return;
@@ -681,7 +690,7 @@ function missionStep(s, p, dt) {
 }
 function passMission(s) {
   const m = s.mission; s.crews.player.cash += m.reward; s.crews.player.rep += m.rep;
-  log(s, `MISSION PASSED: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward });
+  log(s, `MISSION PASSED: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep });
   s.mission = null; s.missionIdx++;
 }
 function failMission(s, why) { log(s, why); s.fx.push({ type: 'mission', state: 'fail', title: s.mission.title }); s.mission = null; }
@@ -696,6 +705,7 @@ export function step(s, dt) {
   // heat decays when nobody is chasing you
   p.calmT = (p.calmT || 0) + dt;
   const copNear = s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && dist2(e, p) < 30 * 30);
+  if (p.downT > 0) { p.downT -= dt; if (p.downT <= 0) respawnPlayer(s, p); }
   if (p.heat > 0 && p.calmT > 8 && !copNear) p.heat = Math.max(0, p.heat - 5 * dt);
   if (p.heat > 0 && p.calmT > 20) p.heat = Math.max(0, p.heat - 3 * dt);
   // cars

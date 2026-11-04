@@ -11,6 +11,8 @@ import { buildCity } from './city.js';
 import { loadCars, makeCar, updateCar, Smoke } from './vehicles.js';
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
+import { createCine } from './cine.js';
+import { DOWN_TIME, MISSIONS, debugDown } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -144,6 +146,8 @@ if (!LOW) { playerCarLight = new THREE.SpotLight(0xfff0d0, 260, 70, 0.62, 0.55, 
 
 // ---------- characters ----------
 const charViz = new Map();
+const cine = createCine({ camera, sfx, charViz, blocked: (x, z, y) => insideBuilding(x, z, 0.4, y) });
+let prevCar = null, pendingBig = null, pendingBrief = null, pendingJack = null, wasDown = false;
 let peopleReady = false;
 const MAXIMP = 120;
 const impostor = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.32, 1.1, 2, 6).translate(0, 0.9, 0), new THREE.MeshStandardMaterial({ roughness: 0.8 }), MAXIMP);
@@ -385,11 +389,12 @@ function handleFx(list) {
       if (f.by === p.id) { shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + (big ? 0.25 : 0.06); }
     }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
-    else if (f.type === 'capture') sfx.sting();
+    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) { cine.swing(blockCenter(b)); pendingBig = 'BLOCK CLAIMED'; } } }
+    else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'pickup') sfx.chime(true);
-    else if (f.type === 'wasted') showBig('WASTED', true);
-    else if (f.type === 'busted') showBig('BUSTED', true);
-    else if (f.type === 'mission') { if (f.state === 'pass') { showBig('MISSION PASSED'); sfx.chime(true); } else if (f.state === 'fail') { showBig('MISSION FAILED', true); sfx.chime(false); } else showBig(f.title.toUpperCase()); }
+    else if (f.type === 'wasted') { showBig('WASTED', true); cine.down(false); }
+    else if (f.type === 'busted') { showBig('BUSTED', true); cine.down(true); }
+    else if (f.type === 'mission') { if (f.state === 'pass') { cine.passed(f.title, f.reward, f.rep); sfx.chime(true); } else if (f.state === 'fail') { showBig('MISSION FAILED', true); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
   }
 }
 
@@ -443,7 +448,8 @@ function frame(now) {
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
-  if (started && !s.over) {
+  if (p.downT > 0) dt *= 0.4; // down beat in slow motion
+  if (started && !s.over && !cine.pausesSim) {
     let f = 0, r = 0;
     if (keys.KeyW || keys.ArrowUp) f += 1; if (keys.KeyS || keys.ArrowDown) f -= 1;
     if (keys.KeyD || keys.ArrowRight) r += 1; if (keys.KeyA || keys.ArrowLeft) r -= 1;
@@ -451,6 +457,7 @@ function frame(now) {
     else { f -= stickV.y; r += stickV.x; }
     f = Math.max(-1, Math.min(1, f)); r = Math.max(-1, Math.min(1, r));
     const sprint = keys.ShiftLeft || keys.ShiftRight || sprintTouch;
+    if (cine.holdsInput) { f = 0; r = 0; attackQueued = false; }
     if (p.car) session.input(r, f, drive.drift || keys.Space, dt);
     else {
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
@@ -472,7 +479,7 @@ function frame(now) {
   // characters (people in cars are drawn as drivers instead)
   const seen = new Set(); let imp = 0;
   if (peopleReady) for (const e of s.ents) {
-    if (e.car) continue;
+    if (e.car && !(e.kind === 'player' && (cine.active === 'car' || e.car !== prevCar))) continue;
     const d2 = (e.x - camX) ** 2 + (e.z - camZ) ** 2;
     const far = d2 > LOD_DIST * LOD_DIST && e.kind !== 'player';
     if (far) {
@@ -484,15 +491,16 @@ function frame(now) {
     seen.add(e.id);
     let g = charViz.get(e.id);
     if (!g || g.userData.model !== look.model) { if (g) scene.remove(g); g = makeCharacter(look, !LOW && e.kind === 'player'); g.userData.model = look.model; g.position.set(e.x, 0.24, e.z); scene.add(g); charViz.set(e.id, g); }
-    g.position.x += (e.x - g.position.x) * Math.min(1, rdt * 25); g.position.z += (e.z - g.position.z) * Math.min(1, rdt * 25);
-    g.position.y = 0.24 + (e.jumpT > 0 ? Math.sin((1 - e.jumpT / 0.8) * Math.PI) * 0.9 : 0);
-    let dr = e.ry - g.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); g.rotation.y += dr * Math.min(1, rdt * 18);
+    const held = g.userData.cineHold;
+    if (!held) g.position.x += (e.x - g.position.x) * Math.min(1, rdt * 25); if (!held) g.position.z += (e.z - g.position.z) * Math.min(1, rdt * 25);
+    if (!held) g.position.y = 0.24 + (e.jumpT > 0 ? Math.sin((1 - e.jumpT / 0.8) * Math.PI) * 0.9 : 0);
+    let dr = e.ry - g.rotation.y; dr = Math.atan2(Math.sin(dr), Math.cos(dr)); if (!held && !g.userData.cineTalk) g.rotation.y += dr * Math.min(1, rdt * 18);
     animate(g, e, dt, false);
     // ragdoll style lean away from the hit, a forward or backward roll on dodge
     g.rotation.order = 'YXZ';
     const kl = Math.hypot(e.kx || 0, e.kz || 0), back = kl > 0.3 ? -((e.kx * Math.sin(e.ry) + e.kz * Math.cos(e.ry)) / kl) : 0;
     const lean = e.hp > 0 ? Math.min(0.55, kl * 0.06) * back : 0;
-    g.rotation.x += ((e.dodgeT > 0 ? 0 : -lean) - g.rotation.x) * Math.min(1, rdt * 14); // the dodge roll is the Roll clip
+    if (!held) g.rotation.x += ((e.dodgeT > 0 ? 0 : -lean) - g.rotation.x) * Math.min(1, rdt * 14); // the dodge roll is the Roll clip
     if (e.kind === 'player' && e.moving > 0.05 && started && e.jumpT <= 0) {
       g.userData.stepT = (g.userData.stepT || 0) - dt * (e.moving > 1.3 ? 3.4 : 2.6);
       if (g.userData.stepT <= 0) { g.userData.stepT = 1; sfx.footstep(e.moving > 1.3 ? 1 : 0.7); }
@@ -538,6 +546,21 @@ function frame(now) {
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }
   }
   for (const [id, g] of carViz) if (!seenCars.has(id)) { scene.remove(g); carViz.delete(id); }
+  // car entry and exit moments
+  if (p.car !== prevCar) {
+    const pg = charViz.get(p.id);
+    if (p.car && p.hp > 0) cine.car('in', carViz.get(p.car), pg, pendingJack);
+    else if (!p.car && prevCar && p.hp > 0 && !(p.downT > 0) && !cine.pausesSim) { const cg = carViz.get(prevCar); if (cg && pg && Math.hypot(cg.position.x - p.x, cg.position.z - p.z) < 4) cine.car('out', cg, pg); }
+    prevCar = p.car; pendingJack = null;
+  }
+  // Unc briefing: starts as soon as both characters are drawn
+  if (pendingBrief) {
+    const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id);
+    if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, (MISSIONS[pendingBrief.idx] || {}).intro); pendingBig = pendingBrief.title.toUpperCase(); pendingBrief = null; }
+    else if ((pendingBrief.wait -= rdt) <= 0) { showBig(pendingBrief.title.toUpperCase()); pendingBrief = null; }
+  }
+  if (wasDown && !(p.downT > 0)) cine.up();
+  wasDown = p.downT > 0;
   smoke.update(rdt);
   sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
@@ -578,7 +601,8 @@ function frame(now) {
   const pv = pcar && carViz.get(pcar.id) ? carViz.get(pcar.id).position : (charViz.get(p.id)?.position ?? new THREE.Vector3(p.x, 0, p.z));
   lookIdle += rdt;
   if (pcar) { const head = pcar.ry * 0.6 + (pcar.mh ?? pcar.ry) * 0.4, target = head + Math.PI; let d = target - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); if (lookIdle > 0.5) yaw += d * Math.min(1, rdt * (2.2 + Math.abs(pcar.v) * 0.08)); }
-  const dist = pcar ? 8.8 + Math.abs(pcar.v) * 0.09 : 5.2, h = pcar ? 2.5 : 1.7;
+  const downK = p.downT > 0 ? 1 - p.downT / DOWN_TIME : 0;
+  const dist = (pcar ? 8.8 + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? 2.5 : 1.7) + downK * 3;
   let dd = dist;
   for (; dd > 1.5; dd -= 0.5) { const cx = pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, cy = h + Math.sin(pitch) * dd, cz = pv.z + Math.cos(yaw) * Math.cos(pitch) * dd; if (!insideBuilding(cx, cz, 0.3, cy)) break; }
   tmp.set(pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, Math.max(0.6, h + Math.sin(pitch) * dd), pv.z + Math.cos(yaw) * Math.cos(pitch) * dd);
@@ -588,11 +612,13 @@ function frame(now) {
   look.set(pv.x - Math.sin(yaw) * 1.2 + Math.cos(yaw) * (pcar ? 0 : 0.6), h, pv.z - Math.cos(yaw) * 1.2 - Math.sin(yaw) * (pcar ? 0 : 0.6));
   camera.lookAt(look);
   if (shake > 0) { shake = Math.max(0, shake - rdt * 2.2); camera.position.x += (Math.random() - 0.5) * shake * 0.5; camera.position.y += (Math.random() - 0.5) * shake * 0.5; camera.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
+  const cineCam = cine.update(rdt); if (cineCam) cine.blendCamera();
+  if (!cine.active && pendingBig) { if (!document.getElementById('passCard').classList.contains('show')) showBig(pendingBig); pendingBig = null; }
   if (window.__camOv) { const o = window.__camOv; camera.position.set(o.x, o.y, o.z); camera.lookAt(o.lx, o.ly, o.lz); } // test hook for close-up shots
   if (camKick > 0) { camera.rotateX(camKick * 0.06); camKick = Math.max(0, camKick - rdt * 6); }
   fovKick = Math.max(0, fovKick - rdt * 20);
   const wantFov = 62 + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;
-  camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix();
+  if (cine.active !== 'brief') { camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix(); }
   if (!LOW) { sun.position.set(pv.x + sunDir.x * 100, Math.max(15, sunDir.y * 100), pv.z + sunDir.z * 100); sun.target.position.set(pv.x, 0, pv.z); }
   city.update(pv.x, pv.z);
   // HUD
@@ -622,6 +648,6 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); if (composer) composer.setSize(innerWidth, innerHeight); });
-window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster };
+window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
