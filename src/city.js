@@ -52,6 +52,17 @@ function fenceTexture() {
 
 // The city is built in sections (one per block) on demand as the player moves,
 // and sections far away are hidden. Textures and materials are shared.
+// painted steel dumpster: green with rust streaks, a dark lid band and ribs (v0.10, was a flat black box)
+function dumpsterMat() {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#3d7a4a'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${20 + Math.random() * 40},${40 + Math.random() * 40},${25 + Math.random() * 30},.25)`; g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2); }
+  g.fillStyle = '#23302a'; g.fillRect(0, 0, 128, 18);
+  g.fillStyle = 'rgba(0,0,0,.25)'; for (let x = 10; x < 128; x += 24) g.fillRect(x, 18, 5, 110);
+  for (let i = 0; i < 10; i++) { const x = Math.random() * 128; const gr = g.createLinearGradient(0, 18, 0, 128); gr.addColorStop(0, 'rgba(130,70,30,.55)'); gr.addColorStop(1, 'rgba(130,70,30,0)'); g.fillStyle = gr; g.fillRect(x, 18, 3 + Math.random() * 5, 40 + Math.random() * 70); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshStandardMaterial({ map: t, roughness: 0.75, metalness: 0.15 });
+}
 export function buildCity(scene, LOW, blocks, base = './') {
   TEXBASE = base;
   rnd = mulberry(7);
@@ -156,8 +167,8 @@ export function buildCity(scene, LOW, blocks, base = './') {
     hoop: mergeGeometries([new THREE.CylinderGeometry(0.08, 0.08, 3.4, 5).translate(0, 1.7, 0), new THREE.CylinderGeometry(0.9, 0.9, 1.1, 4, 1, false).scale(1, 1, 0.06).rotateY(Math.PI / 4).translate(0, 3.5, 0.35)]),
   };
   const M = {
-    tower: new THREE.MeshStandardMaterial({ color: 0x5a3a26, roughness: 0.9 }), dumpster: new THREE.MeshStandardMaterial({ color: 0x23502e, roughness: 0.6, metalness: 0.4 }),
-    bag: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 }), hydrant: new THREE.MeshStandardMaterial({ color: 0xa82020, roughness: 0.5 }),
+    tower: new THREE.MeshStandardMaterial({ color: 0x5a3a26, roughness: 0.9 }), dumpster: dumpsterMat(),
+    bag: new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.85 }), hydrant: new THREE.MeshStandardMaterial({ color: 0xa82020, roughness: 0.5 }),
     trunk: new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 1 }), crown: new THREE.MeshStandardMaterial({ color: 0x3a4424, roughness: 0.9, flatShading: true }),
     palmTrunk: new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 1 }),
     palmCrown: new THREE.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }),

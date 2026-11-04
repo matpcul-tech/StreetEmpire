@@ -100,8 +100,8 @@ const city = buildCity(scene, LOW, S().blocks, BASE);
 
 // day and night
 // warm smoggy haze: peach by day, burnt orange at sunset, plum blue at night
-const fogDay = new THREE.Color(0xb48a66), fogDusk = new THREE.Color(0xb8683e), fogNight = new THREE.Color(0x2e2c40);
-const sunDay = new THREE.Color(0xfff0dd), sunDusk = new THREE.Color(0xffa060);
+const fogDay = new THREE.Color(0xb48a66), fogDusk = new THREE.Color(0x8a7088), fogNight = new THREE.Color(0x2e2c40);
+const sunDay = new THREE.Color(0xfff0dd), sunDusk = new THREE.Color(0xffb27a);
 let night = 0, lastNightSet = -1;
 function updateDay() {
   const h = clock(S());
@@ -116,8 +116,8 @@ function updateDay() {
   // night (v0.8): blue purple moonlight plus a strong sky fill so nothing goes black
   sun.intensity = 2.0 * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8c96e0); }
-  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0xb8846a : 0xc8a888);
-  hemi.groundColor.setHex(night > 0.5 ? 0x5a4434 : 0x4a3226);
+  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0x8c90b8 : 0xc8a888);
+  hemi.groundColor.setHex(night > 0.5 ? 0x5a4434 : dusk > 0.4 ? 0x3a4258 : 0x4a3226); // cool bounce in shadows at dusk
   scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 45 - 15 * night;

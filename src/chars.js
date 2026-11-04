@@ -228,12 +228,13 @@ function clothMat(L) {
   if (matCache.has(key)) return matCache.get(key);
   const u = { uSkin: { value: col(L.skin) }, uTop: { value: col(L.topC) }, uTrim: { value: col(L.trim) }, uLegs: { value: col(L.legs) }, uShoes: { value: col(L.shoes) }, uHairC: { value: col(L.hairC) },
     uStyle: { value: new THREE.Vector4(L.top, L.pants, L.hair, L.beard) }, uMisc: { value: new THREE.Vector2(L.grit, L.num) } };
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.82, metalness: 0 });
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45 });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u, NIGHT);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
     sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
     sh.fragmentShader = 'uniform float uRim;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint();')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\ntotalEmissiveRadiance += uRim * (vec3(0.4, 0.5, 0.9) * fr * 0.5 + diffuseColor.rgb * vec3(0.26, 0.22, 0.18));');
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\ntotalEmissiveRadiance += uRim * (vec3(0.4, 0.5, 0.9) * fr * 0.22 + diffuseColor.rgb * vec3(0.3, 0.26, 0.22));');
   };
   m.customProgramCacheKey = () => 'ualcloth';
   matCache.set(key, m); return m;
