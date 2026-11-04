@@ -1,17 +1,26 @@
+// Headless smoke test: node tools/smoke.mjs <url>
+// Env: SHOTDIR, SHOTPREFIX for screenshot output.
 import { chromium, devices } from 'playwright';
 const url = process.argv[2];
-const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader'] });
+const dir = process.env.SHOTDIR || '/tmp', pre = process.env.SHOTPREFIX || 'shot';
+const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]]) {
   const page = await (await browser.newContext(opts)).newPage();
-  const errs = []; page.on('pageerror', e => errs.push(e.message)); page.on('console', m => m.type()==='error' && errs.push(m.text()));
+  const errs = []; page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
   await page.goto(url, { waitUntil: 'load' });
+  await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 60000 });
+  if (name === 'phone') await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(1500);
-  await page.click('#start');
-  if (name==='desktop') { await page.keyboard.down('KeyW'); await page.waitForTimeout(1500); await page.keyboard.up('KeyW'); await page.keyboard.press('KeyF'); }
+  if (name === 'desktop') { await page.keyboard.down('KeyD'); await page.waitForTimeout(800); await page.keyboard.up('KeyD'); await page.keyboard.press('KeyF'); }
   else { await page.tap('#bAttack'); await page.tap('#bRecruit'); }
   await page.waitForTimeout(2500);
-  const info = await page.evaluate(() => { const mmPix = Array.from(document.getElementById('minimap').getContext('2d').getImageData(20,20,1,1).data).join('/'); const s = window.__game.state; const p = s.ents.find(e=>e.kind==='player'); return { t: s.t.toFixed(1), px: p.x.toFixed(1), pz: p.z.toFixed(1), hud: document.getElementById('stats').innerText, mmPix, touch: document.body.classList.contains('touch') }; });
-  await page.screenshot({ path: `/tmp/shot-${name}.png` });
+  await page.screenshot({ path: `${dir}/${pre}-${name}.png` });
+  // teleport next to a car, drive it a bit
+  await page.evaluate(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'), c = s.cars[0]; p.x = c.x + 2; p.z = c.z; window.__game.send({ type: 'car' }); });
+  if (name === 'desktop') { await page.keyboard.down('KeyW'); await page.waitForTimeout(2500); await page.keyboard.up('KeyW'); }
+  else await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${dir}/${pre}-${name}-car.png` });
+  const info = await page.evaluate(() => { const s = window.__game.state; const p = s.ents.find((e) => e.kind === 'player'); const c = s.cars.find((c) => c.id === p.car); return { t: s.t.toFixed(1), inCar: !!p.car, carV: c ? c.v.toFixed(1) : null, hud: document.getElementById('stats').innerText, touch: document.body.classList.contains('touch'), perf: window.__perf(), mm: (() => { const d = document.getElementById('minimap').getContext('2d').getImageData(0, 0, 160, 160).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; })() }; });
   console.log(name, JSON.stringify(info), 'errors:', errs);
 }
 await browser.close();
