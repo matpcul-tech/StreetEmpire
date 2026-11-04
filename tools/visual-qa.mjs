@@ -24,12 +24,13 @@ async function stats(file, rect) {
 }
 const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = []; let fail = [];
-for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]]) {
+for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev0, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]]) {
+  const dev = dev0 + (q ? '-' + q : ''); // every quality level: high (phone default low), low, potato
   const page = await (await browser.newContext(opts)).newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message));
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 });
+  await page.goto(url + (q ? (url.includes('?') ? '&' : '?') + 'q=' + q : ''), { waitUntil: 'domcontentloaded', timeout: 90000 });
   await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 150000 });
-  if (dev === 'phone') await page.tap('#start'); else await page.click('#start');
+  if (dev0 === 'phone') await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(1500);
   // QA measures gameplay framing: cinematic moments are skipped as they start (tools/cine-shots.mjs covers them)
   await page.evaluate(() => setInterval(() => window.__cine && window.__cine.active && window.__cine.skip(), 50));

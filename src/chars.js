@@ -220,8 +220,9 @@ vec3 paint(){
 
 const matCache = new Map();
 // night readability: a cool rim (fresnel) plus a warm fill, shared by every outfit
-const NIGHT = { uRim: { value: 0 } };
-export function charNight(n) { NIGHT.uRim.value = n; }
+const NIGHT = { uRim: { value: 0 }, uRimK: { value: 1 } };
+// k > 1 when there is no post grade (potato, or the low fps fallback) so night clothing still reads
+export function charNight(n, k = 1) { NIGHT.uRim.value = n; NIGHT.uRimK.value = k; }
 const col = (h) => new THREE.Color(h);
 function clothMat(L) {
   const key = [L.skin, L.top, L.topC, L.trim, L.pants, L.legs, L.shoes, L.hair, L.hairC, L.beard, L.grit, L.num].join(',');
@@ -233,8 +234,8 @@ function clothMat(L) {
     Object.assign(sh.uniforms, u, NIGHT);
     sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
     sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
-    sh.fragmentShader = 'uniform float uRim;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint();')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\ntotalEmissiveRadiance += uRim * (vec3(0.4, 0.5, 0.9) * fr * 0.22 + diffuseColor.rgb * vec3(0.3, 0.26, 0.22));');
+    sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint();')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\ntotalEmissiveRadiance += uRim * uRimK * (vec3(0.4, 0.5, 0.9) * fr * 0.22 + diffuseColor.rgb * vec3(0.3, 0.26, 0.22) + vec3(0.025));');
   };
   m.customProgramCacheKey = () => 'ualcloth';
   matCache.set(key, m); return m;

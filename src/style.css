@@ -103,3 +103,40 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
 #pause button{font:bold 18px Impact,sans-serif;letter-spacing:2px;padding:10px 26px;background:#e8914a;color:#1a0f08;border:0;border-radius:4px}
 #pause .qrow{display:flex;gap:6px;align-items:center;font-size:14px}#pause .qrow button{font-size:13px;padding:6px 10px;background:#444;color:#eee}
 #pause .pkeys{font-size:13px;color:#bbb;margin:0}
+
+/* v0.10.1 text layout: nothing in the middle. Left strip under the radar, toasts on top,
+   cash popups under the cash counter, prompts low and small, big moments short and small. */
+:root{--st:env(safe-area-inset-top,0px);--sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--sb:env(safe-area-inset-bottom,0px);--rad:200px}
+@media (max-width:500px){:root{--rad:136px}}
+@media (max-height:500px) and (orientation:landscape){:root{--rad:112px}#radar{width:112px!important;height:112px!important}#cash{font-size:22px}#clock{font-size:16px}#stars{font-size:16px}#weapon{font-size:12px}#sub{font-size:12px}#hp{width:110px}}
+#radar{top:calc(var(--st) + 10px);left:calc(var(--sl) + 10px)}
+#hud{top:calc(var(--st) + 8px);right:calc(var(--sr) + 12px)}
+#lcol{position:fixed;top:calc(var(--st) + var(--rad) + 20px);left:calc(var(--sl) + 10px);width:min(300px,52vw);display:flex;flex-direction:column;gap:4px;align-items:flex-start;pointer-events:none;z-index:6}
+#lcol>*{position:static!important;transform:none!important;margin:0!important;max-width:100%!important;box-sizing:border-box;text-align:left}
+#mission,.touch #mission{font:bold 13px/1.25 Arial,sans-serif;background:rgba(0,0,0,.5);border-radius:6px;padding:4px 8px;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#mission:has(#mtitle:empty){display:none}
+#onb,.touch #onb{font:bold 13px/1.25 Arial,sans-serif;color:#fff;background:rgba(10,8,6,.62);border-left:3px solid #ffcc33;padding:4px 8px}
+#onb i{font-style:normal;color:#ffcc33;margin-right:4px}
+#capture{font:bold 13px Arial,sans-serif;text-shadow:1px 1px 2px #000}#capture:empty{display:none}
+/* toasts: a top band between the radar and the HUD (desktop and landscape), end of the left strip in portrait */
+#msg,.touch #msg{position:fixed!important;top:calc(var(--st) + 10px);left:calc(var(--sl) + var(--rad) + 30px);right:calc(var(--sr) + 200px);bottom:auto;text-align:center!important;font:bold 14px/1.25 Arial,sans-serif;color:#fc6;background:rgba(0,0,0,.45);border-radius:6px;padding:4px 10px;max-height:2.6em;overflow:hidden;width:auto;max-width:none!important}
+#msg:empty{display:none}
+@media (orientation:portrait) and (max-width:700px){#msg,.touch #msg{position:static!important;font-size:12px;text-align:left!important}}
+/* cash popups right under the cash counter */
+#pops,.touch #pops{top:calc(var(--st) + 136px);bottom:auto;right:calc(var(--sr) + 12px)}
+.pop{font-size:14px}
+@media (max-width:500px),(max-height:500px){#pops,.touch #pops{top:calc(var(--st) + 104px)}.pop{font-size:12px}}
+/* prompt: small, low, desktop only (phones have the TALK / CAR button) */
+#prompt{bottom:calc(var(--sb) + 84px);font-size:14px;padding:4px 10px;border-width:1px}
+.touch #prompt{display:none!important}
+#objArrow span{font-size:13px}.touch #objArrow span{font-size:11px}
+/* big moments: brief, above the action, smaller on phone */
+#big{top:calc(var(--st) + 14%);font-size:34px}
+.touch #big{top:28%;font-size:20px}
+@media (max-height:500px){.touch #big{top:calc(var(--st) + 22%);font-size:18px}}
+#passCard{top:24%}.touch #passCard{top:28%;min-width:180px;padding:8px 14px}.touch #passCard .pc-k{font-size:18px}.touch #passCard .pc-r{font-size:17px}.touch #passCard .pc-t,.touch #passCard .pc-s{font-size:12px}
+/* touch controls clear of the notch and home bar */
+#stick{left:calc(var(--sl) + 30px);bottom:calc(var(--sb) + 30px)}#steer{left:calc(var(--sl) + 16px);bottom:calc(var(--sb) + 24px)}
+#btns{right:calc(var(--sr) + 14px);bottom:calc(var(--sb) + 18px)}
+#bWeapon{grid-column:1}#bRecruit{grid-column:2}#bSquad{grid-column:3}
+body.cine-on #lcol{visibility:hidden}

@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeGradePass } from './grade.js';
 import { LocalSession } from './net.js';
-import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS } from './state.js';
+import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
 import { buildCity } from './city.js';
 import { loadCars, makeCar, updateCar, Smoke } from './vehicles.js';
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
@@ -121,8 +121,8 @@ function updateDay() {
   scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 45 - 15 * night;
-  renderer.toneMappingExposure = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark;
-  charNight(Math.min(1.25, dark * 1.25));
+  renderer.toneMappingExposure = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark + (composer ? 0 : 0.16) * (dark + 0.5 * dusk);
+  charNight(Math.min(1.25, dark * 1.25), composer ? 1.15 : 1.8);
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
     for (const [m, base] of city.emissive) m.emissiveIntensity = base * (0.15 + 0.85 * Math.max(night, dusk * 0.6));
@@ -206,8 +206,8 @@ function doContext() {
   const c = context(); if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c) { session.send({ type: 'car' }); return; }
   // nothing in reach: say why and where to go instead of silently ignoring the key
   const s = S(), p = player(s), g = s.ents.find((e) => e.kind === 'giver');
-  if (g && s.mission) { const d = Math.hypot(g.x - p.x, g.z - p.z); showMsg(d < 4 ? `Unc: "Finish ${s.mission.title} first."` : 'Nothing to use here. Follow the yellow marker for your job.'); }
-  else if (g) { const d = Math.round(Math.hypot(g.x - p.x, g.z - p.z)); showMsg(`Nothing to use here. Unc is ${d} m away: follow the yellow UNC arrow and press E next to him.`); }
+  if (g && s.mission) { const d = Math.hypot(g.x - p.x, g.z - p.z); showMsg(d < 4 ? `Finish ${s.mission.title} first.` : 'Nothing here. Follow the marker.'); }
+  else if (g) { const d = Math.round(Math.hypot(g.x - p.x, g.z - p.z)); showMsg(`Unc is ${d} m away. Follow the UNC arrow.`); }
 }
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
@@ -215,6 +215,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') attackQueued = true;
   if (e.code === 'KeyE' || e.code === 'Enter') doContext();
   if (e.code === 'KeyR') session.send({ type: 'recruit' });
+  if (e.code === 'KeyT') session.send({ type: 'squad' });
   if (e.code === 'KeyQ') session.send({ type: 'weapon' });
   if (e.code === 'Space') { e.preventDefault(); session.send({ type: 'jump' }); }
   if (e.code === 'KeyH') sfx.honk();
@@ -275,6 +276,7 @@ btn('bSprint', () => { sprintTouch = !sprintTouch; document.getElementById('bSpr
 btn('bCtx', doContext);
 btn('bWeapon', () => session.send({ type: 'weapon' }));
 btn('bRecruit', () => session.send({ type: 'recruit' }));
+btn('bSquad', () => session.send({ type: 'squad' }));
 hold('bLeft', 'left'); hold('bRight', 'right'); hold('bGas', 'gas'); hold('bBrake', 'brake'); hold('bDrift', 'drift');
 btn('bDodge', () => doDodge());
 { const el = document.getElementById('bBlock'); el.addEventListener('pointerdown', (e) => { e.preventDefault(); session.send({ type: 'block', on: true }); el.classList.add('on'); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => { session.send({ type: 'block', on: false }); el.classList.remove('on'); }); }
@@ -308,7 +310,7 @@ let msgT = 0, bigT = 0;
 let incT = 0, starWant = 0, starShown = 0, starHold = 0;
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
-function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = 3; }
+function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = isTouch ? 1.6 : 2.2; }
 function drawRadar(now) {
   const s = S(), p = player(s), W = 280, Rm = 80, sc = (W / 2) / Rm;
   const ctx = radar; ctx.save();
@@ -333,6 +335,7 @@ function drawRadar(now) {
     ctx.globalAlpha = 0.9; ctx.strokeStyle = b.owner === 'player' ? '#7f7' : 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.2 / sc * 2; ctx.strokeRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK);
     // the capture ring in the middle of each block
     ctx.beginPath(); ctx.arc(c.x, c.z, 5, 0, 7); ctx.strokeStyle = CREWS[b.owner].css; ctx.lineWidth = 1.5; ctx.stroke();
+    if (b.owner === 'player') { const n = guardsOf(s, b).length; ctx.save(); ctx.translate(c.x, c.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 15px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(n + '', 0, 0); ctx.fillStyle = n ? '#bfb' : '#f88'; ctx.fillText(n + '', 0, 0); ctx.restore(); }
     if (b.capBy && Math.floor(now / 250) % 2) { ctx.globalAlpha = 0.9; ctx.fillStyle = CREWS[b.capBy].css; ctx.fillRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK); }
   }
   ctx.globalAlpha = 1;
@@ -433,6 +436,7 @@ function handleFx(list) {
       if (f.by === p.id) { shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + (big ? 0.25 : 0.06); }
     }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
+    else if (f.type === 'guards') { pop(`${f.n} guard${f.n > 1 ? 's' : ''} hold the block`); }
     else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) { cine.swing(blockCenter(b)); pendingBig = 'BLOCK CLAIMED'; } } }
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'pickup') sfx.chime(true);
@@ -481,19 +485,19 @@ startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; sta
 function startGame() {
   if (started) return;
   $('intro').classList.add('hidden'); $('bPause').classList.add('show'); started = true; last = performance.now(); sfx.initAudio();
-  showMsg('Welcome to the Eastside. Watch your back.');
+  showMsg('Welcome to the Eastside.');
   scuffleT = 2.5; onb.step = onb.done ? -1 : 0; renderOnb();
 }
 // ---------- v0.10 onboarding: opening scuffle, 3 steps, waypoint to the next thing to do ----------
 let scuffleT = -1, scufflerId = null;
 const onb = { step: -1, done: localStorage.getItem('se-onb') === '3' };
-const ONB = ['Knock out the Local (F or click / HIT)', 'Talk to Unc, the man in the suit (E / TALK)', 'Take a block: beat its Locals, then stand in the ring'];
+const ONB = () => isTouch ? ['Knock out the Local: HIT', 'Talk to Unc: TALK', 'Take a block: clear it, stand in the ring'] : ['Knock out the Local: F or click', 'Talk to Unc: E', 'Take a block: clear it, stand in the ring'];
 function renderOnb() {
   const el = $('onb'); if (onb.step < 0 || onb.step > 2) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
-  el.innerHTML = ONB.map((t, i) => `<div class="${i < onb.step ? 'ok' : i === onb.step ? 'now' : ''}"><b>${i < onb.step ? '&#10003;' : i + 1}</b> ${t}</div>`).join('');
+  el.innerHTML = `<i>${onb.step + 1}/3</i> ${ONB()[onb.step]}`;
 }
-function onbAdvance(to) { if (onb.step >= 0 && to > onb.step) { onb.step = to; if (to > 2) { localStorage.setItem('se-onb', '3'); showMsg('You know the streets now. Build your empire.'); } renderOnb(); sfx.chime(true); } }
+function onbAdvance(to) { if (onb.step >= 0 && to > onb.step) { onb.step = to; if (to > 2) { localStorage.setItem('se-onb', '3'); showMsg('Tutorial done. Build your empire.'); } renderOnb(); sfx.chime(true); } }
 // next place to go when no mission is running: the scuffle, then Unc, then the nearest block ring to take
 function guideTarget(s, p) {
   if (onb.step === 0 && scufflerId != null) { const e = s.ents.find((x) => x.id === scufflerId && x.hp > 0); if (e) return { x: e.x, z: e.z, label: 'LOCAL' }; }
@@ -517,7 +521,7 @@ function frame(now) {
   let rdt = Math.max(0, Math.min(0.05, rawMs / 1000)); last = now;
   frameAvg = frameAvg * 0.95 + Math.min(1000, rawMs) * 0.05;
   // sustained very low FPS after start: offer potato quality once
-  if (started && !POTATO && !paused && frameAvg > 70 && (slowFor += rdt) > 6 && !potatoOffered) { potatoOffered = true; showMsg('Running slow. Pause (Esc / II) and pick POTATO quality, or add ?q=potato to the address.'); pixelRatio = 0.5; renderer.setPixelRatio(pixelRatio); composer = null; }
+  if (started && !POTATO && !paused && frameAvg > 70 && (slowFor += rdt) > 6 && !potatoOffered) { potatoOffered = true; showMsg('Running slow: try POTATO in Pause.'); pixelRatio = 0.5; renderer.setPixelRatio(pixelRatio); composer = null; }
   else if (frameAvg < 50) slowFor = 0;
   if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.7, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
   let dt = rdt;
@@ -666,7 +670,7 @@ function frame(now) {
     v.prog.visible = !!b.capBy; if (b.capBy) { v.prog.material.color.setHex(CREWS[b.capBy].color); const k = Math.max(0.01, b.capT / CAPTURE_TIME); v.prog.scale.set(k, k, 1); }
   });
   // onboarding progress and the opening scuffle
-  if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A Local is stepping to you. Knock him out: F or click (HIT on phone).'); } }
+  if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A Local wants a fight.'); } }
   if (onb.step === 0 && scufflerId != null && !s.ents.some((e) => e.id === scufflerId && e.hp > 0)) onbAdvance(1);
   if (onb.step === 0 && scuffleT <= 0 && scufflerId == null) onbAdvance(1);
   if (onb.step === 1 && (s.mission || s.missionIdx > 0)) onbAdvance(2);
@@ -738,7 +742,7 @@ function frame(now) {
   $('mtitle').textContent = m ? m.title + ':' : '';
   $('mtext').textContent = !m ? '' : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
-  if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = here ? `${DISTRICTS[districtOf(here)]}: ${here.hustle} ($${here.rate}/s), ${CREWS[here.owner].name}` : '';
+  if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = here ? `${DISTRICTS[districtOf(here)]}: ${here.hustle} ($${here.rate}/s), ${CREWS[here.owner].name}${here.owner === 'player' ? ', ' + guardsOf(s, here).length + ' guards (T)' : ''}` : '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');
   if ((radarT -= rdt) <= 0) { radarT = LOW ? 0.1 : 0.05; drawRadar(now); }
   if (composer) { grade.uniforms.uTime.value = now / 1000; composer.render(); } else renderer.render(scene, camera);

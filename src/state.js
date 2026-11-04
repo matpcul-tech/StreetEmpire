@@ -320,7 +320,7 @@ function onPlayerDown(s, p) {
   if (!own.length) return;
   const busted = p.heat >= 10;
   const cr = s.crews[p.crew]; const lost = Math.floor(cr.cash * (busted ? 0.4 : 0.25)); cr.cash -= lost;
-  log(s, busted ? `BUSTED. Bail cost you $${lost}.` : `WASTED. You lost $${lost}. Back at your turf.`);
+  log(s, busted ? `Bail: -$${lost}` : `Lost $${lost}. Back at your turf.`);
   if (p.car) exitCar(s, p);
   s.fx.push({ type: busted ? 'busted' : 'wasted', x: p.x, z: p.z });
   // a short down beat (the client plays it in slow motion) before the respawn
