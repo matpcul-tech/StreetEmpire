@@ -112,6 +112,19 @@ export function perimeter(t, c, r) {
   return { x: c.x + pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f, z: c.z + pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f };
 }
 
+// v0.10 hook: a Local walks up and starts a scuffle a few seconds after spawn.
+// A brawler chases foes anywhere but never counts toward block captures.
+export function openingScuffle(s) {
+  const p = player(s); if (s.scuffle) return null; s.scuffle = true;
+  const home = s.blocks.find((b) => b.owner === 'neutral' && Math.hypot(blockCenter(b).x - p.x, blockCenter(b).z - p.z) < PITCH * 1.6) || s.blocks.find((b) => b.owner === 'neutral');
+  if (!home) return null;
+  // stand him in plain sight on the street ahead of the spawn point
+  let x = p.x, z = p.z - 9;
+  for (const [dx, dz] of [[0, -9], [0, 9], [-9, 0], [9, 0], [0, -6]]) if (!insideBuilding(p.x + dx, p.z + dz, 0.8)) { x = p.x + dx; z = p.z + dz; break; }
+  const e = spawnUnit(s, 'neutral', 'brawler', home.id, x, z); e.hp = 40; e.weapon = 'fists'; e.scuffler = true;
+  log(s, 'A Local is stepping to you. Show him whose block this is.');
+  return e;
+}
 export function spawnUnit(s, crew, role, blockId, x, z) {
   const c = blockCenter(s.blocks[blockId]);
   const a = R(s) * Math.PI * 2, r = 3 + R(s) * 6;
@@ -748,7 +761,7 @@ export function step(s, dt) {
     } else {
       // defenders guard their own block and at most three of them chase one foe
       const c = blockCenter(s.blocks[e.target]);
-      if (foe && e.role !== 'attacker') {
+      if (foe && e.role !== 'attacker' && e.role !== 'brawler') {
         const inBlock = Math.abs(foe.x - c.x) < BLOCK / 2 + 2 && Math.abs(foe.z - c.z) < BLOCK / 2 + 2;
         const n = chasers.get(foe.id) || 0;
         if (!inBlock || n >= 3) foe = null; else chasers.set(foe.id, n + 1);
@@ -788,7 +801,7 @@ export function step(s, dt) {
     for (const e of s.ents) if (e.hp > 0 && COMBAT.has(e.kind) && !e.car) {
       const d = dist2(e, c);
       if (e.crew === b.owner && d < (PITCH / 2) ** 2) defenders++;
-      if (e.crew !== b.owner && d < ZONE_R ** 2) inZone[e.crew] = (inZone[e.crew] || 0) + 1;
+      if (e.crew !== b.owner && e.role !== 'brawler' && d < ZONE_R ** 2) inZone[e.crew] = (inZone[e.crew] || 0) + 1;
     }
     const claimers = Object.keys(inZone);
     if (defenders === 0 && claimers.length === 1) {
