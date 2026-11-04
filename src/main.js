@@ -451,8 +451,8 @@ const radarEl = document.getElementById('radar'), arrowEl = document.getElementB
 // keep the arrow off the radar, the HUD column and the thumb controls
 function arrowClear(ax, ay, ex, W, H) {
   const rr = radarEl.getBoundingClientRect();
-  if (ax < rr.right + 24 && ay < rr.bottom + 28) { if (ex < 0) ay = rr.bottom + 34; else ax = rr.right + 30; }
   if (isTouch && ay > H - 200 && (ax < 200 || ax > W - 250)) ay = H - 210;
+  if (ax < rr.right + 24 && ay < rr.bottom + 28) { if (ex < 0 && rr.bottom + 34 < H - 210) ay = rr.bottom + 34; else ax = rr.right + 30; }
   if (ax > W - 190 && ay < 150) ay = 160;
   return [ax, ay];
 }
