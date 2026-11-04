@@ -242,6 +242,11 @@ function stickUpdate(t) {
   knob.style.transform = `translate(${dx}px,${dy}px)`;
 }
 addEventListener('touchstart', (e) => {
+  // a touch can vanish without touchend (alerts, cutscenes, OS gestures): drop stale ids
+  const live = new Set([...e.touches].map((t) => t.identifier));
+  for (const t of e.changedTouches) live.delete(t.identifier);
+  if (stickId !== null && !live.has(stickId)) endTouch({ changedTouches: [{ identifier: stickId }] });
+  if (lookId !== null && !live.has(lookId)) lookId = null;
   for (const t of e.changedTouches) {
     if (t.target.closest('button') || t.target.closest('.panel')) continue;
     if (t.clientX < innerWidth * 0.45 && stickId === null && !player(S()).car) {
