@@ -83,7 +83,7 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev
       const c = s.cars.find((c) => !c.driver && !c.wrecked && c.type !== 'police'); p.x = c.x + 2; p.z = c.z; g.send({ type: 'car' });
       // the shot holds the throttle with no steering, so the car hits walls; keep it repaired so the shot measures
       // night driving visibility, not a burnt wreck (a wreck filled 17 percent of the frame with near black and failed p10)
-      window.__drv = setInterval(() => { s.t = t; const c = s.cars.find((c) => c.id === p.car); if (c) { c.v = Math.max(c.v, 12); c.hp = Math.max(c.hp, c.max || 100); } }, 50);
+      window.__drv = setInterval(() => { s.t = t; const c = s.cars.find((c) => c.id === p.car); if (c) { c.v = Math.max(c.v, 12); c.hp = 999; } }, 50);
     });
     await shot('mission', (t) => {
       clearInterval(window.__drv); const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); if (p.car) g.send({ type: 'car' });
