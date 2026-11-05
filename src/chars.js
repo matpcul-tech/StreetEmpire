@@ -20,6 +20,7 @@ export async function loadPeople(base, onFirst, potato = false) {
   for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('pelvis.'))); clips[c.name] = c; }
   if (!clips.Punch_Enter && clips.Punch_Jab) { clips.Punch_Enter = clips.Punch_Jab.clone(); clips.Punch_Enter.name = 'Punch_Enter'; } // guard pose: the jab ends with hands up
   tmpl = g.scene;
+  try { const a = await loader.loadAsync(`${base}models/se-pack/accessories.glb`); a.scene.traverse((o) => { if (o.isMesh) packAcc[o.name] = o.geometry; }); } catch (e) { console.warn('accessories.glb', e); }
   tmpl.traverse((o) => { if (o.isSkinnedMesh) PARTMAT[o.name] = o.material; });
   bakeBind(tmpl);
   onFirst && onFirst();
@@ -261,7 +262,7 @@ const hairMats = new Map();
 function hairMat(base, c) { const k = (base?.uuid || '') + c; if (!hairMats.has(k)) { const m = base ? base.clone() : new THREE.MeshStandardMaterial(); m.color = new THREE.Color(c).multiplyScalar(1.6); m.roughness = 0.75; m.metalness = 0; hairMats.set(k, m); } return hairMats.get(k); }
 let accGeo = null;
 const accMats = new Map();
-function accMat(c, rough = 0.85) { const k = c + ':' + rough; if (!accMats.has(k)) accMats.set(k, new THREE.MeshStandardMaterial({ color: c, roughness: rough })); return accMats.get(k); }
+function accMat(c, rough = 0.85) { const k = c + ':' + rough; if (!accMats.has(k)) accMats.set(k, new THREE.MeshStandardMaterial({ color: c, roughness: rough, vertexColors: true })); return accMats.get(k); }
 function accessories() {
   if (accGeo) return accGeo;
   const r = ACC.r, f = ACC.fwd;
@@ -283,7 +284,7 @@ function accessories() {
   const hatB = new THREE.CylinderGeometry(r * 1.55, r * 1.55, 0.008, 16);
   const hat = mergeGeometries([hatC.toNonIndexed(), hatB.toNonIndexed()]);
   const pony = new THREE.SphereGeometry(0.04, 8, 6); pony.scale(0.8, 1.6, 0.8); pony.translate(0, 0.02, -f * 0.115);
-  accGeo = { cap, doRag, neck: neckB, police, hat, pony }; return accGeo;
+  accGeo = { cap, doRag, neck: neckB, police, hat, pony, ...packAcc }; return accGeo;
 }
 
 // ---- weapons in the right hand (hand bone space, +y along the fingers) ----
@@ -303,6 +304,7 @@ function weapons() {
 }
 
 const HEIGHT = { m: 1.8, f: 1.68 };
+const packAcc = {}; // original accessory meshes from se-pack/accessories.glb
 const PARTMAT = {}; // pack materials by mesh name (body skin maps, eyes, hair)
 const SKULL = { top: 1.829, z: 0, r: 0.106, neckY: 1.525, neckR: 0.068, neckZ: 0 };
 let fit = null;
@@ -330,7 +332,7 @@ export function makeCharacter(L, shadow) {
   root.updateMatrixWorld(true);
   const kk = fit.m.n, toT = (x, y, z) => new THREE.Vector3(x / kk, y / kk + fit.m.lo, z / kk), q = new THREE.Quaternion(), ws = new THREE.Vector3();
   let bodyM = null; root.traverse((o) => { if (o.isSkinnedMesh && /_body$/.test(o.name)) bodyM = o; });
-  const put = (bone, geo, c, y, z = 0, rough) => { const m = new THREE.Mesh(geo, accMat(c, rough));
+  const put = (bone, geo, c, y, z = 0, rough) => { if (!geo.attributes.color) geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3)); const m = new THREE.Mesh(geo, accMat(c, rough));
     // bone frame at bind, straight from the skin (independent of the current pose)
     const sk = bodyM.skeleton, bi = sk.bones.indexOf(bone), Bw = bodyM.bindMatrix.clone().multiply(sk.boneInverses[bi].clone().invert()), p = new THREE.Vector3();
     Bw.decompose(p, q, ws); m.position.copy(toT(0, y, z).applyMatrix4(Bw.clone().invert())); m.quaternion.copy(q.invert()); m.scale.setScalar(1 / (kk * ws.x)); m.castShadow = !!shadow; bone.add(m); return m; };
