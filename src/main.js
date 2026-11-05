@@ -372,7 +372,7 @@ function drawRadar(now) {
     const d = Math.hypot(dx, dz) * sc, r = Math.min(d, W / 2 - 14);
     ctx.fillStyle = alertT.label === 'LOST' ? '#f66' : '#f44'; ctx.beginPath(); ctx.arc(W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r, 10, 0, 7); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
   }
-  if (g && !s.mission && s.missionIdx < 4) {
+  if (g && !s.mission && s.missionIdx < MISSIONS.length) {
     const dx = g.x - p.x, dz = g.z - p.z, a = Math.atan2(dz, dx) + (yaw - Math.PI), r = Math.min(Math.hypot(dx, dz) * sc, W / 2 - 14);
     ctx.fillStyle = '#fc3'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.font = 'bold 22px Impact'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.strokeText('U', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r); ctx.fillText('U', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r);
   }
@@ -467,6 +467,7 @@ function handleFx(list) {
     else if (f.type === 'lost') { showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'pickup') sfx.chime(true);
+    else if (f.type === 'gift') pop('A recruit is with you.');
     else if (f.type === 'wasted') { showBig('WASTED', true); cine.down(false); }
     else if (f.type === 'busted') { showBig('BUSTED', true); cine.down(true); }
     else if (f.type === 'mission') { if (f.state === 'pass') { cine.passed(f.title, f.reward, f.rep); pop(`+$${f.reward} mission: ${f.title}`); sfx.chime(true); } else if (f.state === 'fail') { showBig('MISSION FAILED', true); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
@@ -527,7 +528,7 @@ function startGame() {
 // ---------- v0.10 onboarding: opening scuffle, 3 steps, waypoint to the next thing to do ----------
 let scuffleT = -1, scufflerId = null, onbMission = false;
 const onb = { step: -1, done: localStorage.getItem('se-onb') === '3' };
-const ONB = () => isTouch ? ['Knock out the Local: HIT', 'Talk to Unc: TALK', 'Take a block: clear it, stand in the ring'] : ['Knock out the Local: F or click', 'Talk to Unc: E', 'Take a block: clear it, stand in the ring'];
+const ONB = () => isTouch ? ['Stop the muggers: HIT', 'Talk to Unc: TALK', 'Take a block: clear it, stand in the ring'] : ['Stop the muggers: F or click', 'Talk to Unc: E', 'Take a block: clear it, stand in the ring'];
 function renderOnb() {
   const el = $('onb'); if (onb.step < 0 || onb.step > 2 || (S().mission && onb.step === 2)) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
@@ -536,7 +537,11 @@ function renderOnb() {
 function onbAdvance(to) { if (onb.step >= 0 && to > onb.step) { onb.step = to; if (to > 2) { localStorage.setItem('se-onb', '3'); showMsg('Tutorial done. Build your empire.'); } renderOnb(); sfx.chime(true); } }
 // next place to go when no mission is running: the scuffle, then Unc, then the nearest block ring to take
 function guideTarget(s, p) {
-  if (onb.step === 0 && scufflerId != null) { const e = s.ents.find((x) => x.id === scufflerId && x.hp > 0); if (e) return { x: e.x, z: e.z, label: 'LOCAL' }; }
+  if (onb.step === 0) {
+    let best = null, bd = 1e12;
+    for (const e of s.ents) if (e.scuffler && e.hp > 0) { const d = (e.x - p.x) ** 2 + (e.z - p.z) ** 2; if (d < bd) { bd = d; best = e; } }
+    if (best) return { x: best.x, z: best.z, label: 'LOCAL' };
+  }
   const g = s.ents.find((e) => e.kind === 'giver');
   if (onb.step <= 1 && g && s.missionIdx < MISSIONS.length && !s.mission) return { x: g.x, z: g.z, label: 'UNC' };
   if (onb.step === 2) {
@@ -710,15 +715,15 @@ function frame(now) {
     v.prog.visible = !!b.capBy; if (b.capBy) { v.prog.material.color.setHex(CREWS[b.capBy].color); const k = Math.max(0.01, b.capT / CAPTURE_TIME); v.prog.scale.set(k, k, 1); }
   });
   // onboarding progress and the opening scuffle
-  if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A Local wants a fight.'); } }
-  if (onb.step === 0 && scufflerId != null && !s.ents.some((e) => e.id === scufflerId && e.hp > 0)) onbAdvance(1);
+  if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A mugger is going for your bag.'); } }
   if (onb.step === 0 && scuffleT <= 0 && scufflerId == null) onbAdvance(1);
+  if (onb.step === 0 && s.opening && s.opening.friends && !s.ents.some((e) => e.scuffler && e.hp > 0)) onbAdvance(1);
   if (onb.step === 1 && (s.mission || s.missionIdx > 0)) onbAdvance(2);
   if (onb.step === 2 && s.blocks.filter((b) => b.owner === 'player').length >= 2) onbAdvance(3);
   if (!!s.mission !== onbMission) { onbMission = !!s.mission; renderOnb(); }
   const tgt = missionTarget(s) || (started ? alertTarget(s) : null) || (started ? guideTarget(s, p) : null);
   beacon.visible = !!tgt && tgt.label !== 'LOCAL'; if (tgt) { beacon.position.set(tgt.x, 60, tgt.z); beacon.material.opacity = 0.28 + Math.sin(now / 250) * 0.1; }
-  const isPkg = s.mission && s.mission.kind === 'fetch' && s.mission.stage === 0;
+  const isPkg = s.mission && (s.mission.kind === 'fetch' || s.mission.kind === 'hook') && s.mission.stage === 0;
   pkgMesh.visible = !!isPkg; if (isPkg) { pkgMesh.position.set(tgt.x, 0.9 + Math.sin(now / 300) * 0.15, tgt.z); pkgMesh.rotation.y = now / 600; }
   objArrow(tgt, p);
   const lk = started ? pickLock() : null; lockId = lk ? lk.id : null;
@@ -788,7 +793,7 @@ function frame(now) {
   else { capEl.textContent = ''; capEl.classList.remove('raid'); }
   const m = s.mission;
   $('mtitle').textContent = m ? m.title + ':' : '';
-  $('mtext').textContent = !m ? '' : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
+  $('mtext').textContent = !m ? '' : m.kind === 'hook' ? (m.stage ? 'Bring the bag back to Unc.' : 'Grab the bag at the yellow marker.') : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
   if (here !== lastHere) { lastHere = here; if (here) { const guardNote = here.owner === 'player' ? `, ${guardsOf(s, here).length} guards${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');

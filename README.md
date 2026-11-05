@@ -42,7 +42,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - Pedestrians walk the sidewalks, flee from fights and gunfire, and can be knocked down (they get back up).
 - Weapon pickups: a bat and a pistol (non-gory: targets just fall down).
 - GTA-style rotating radar with turf colors, crews, cops, pickups and mission markers.
-- Unc gives four short missions: Package Run, Send a Message, Chop Job and Take Over.
+- Unc gives five short missions: Bag Back, Package Run, Send a Message, Chop Job and Take Over.
 - Mobile controls: floating stick, context button (CAR, TALK, EXIT), HIT or SHOOT, JUMP, RUN, weapon switch, and GAS, BRAKE and steering buttons when driving.
 
 ## What was new in v0.2
@@ -97,11 +97,11 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 
 ### How missions work
 
-- Data: `MISSIONS` in `src/state.js` is an ordered list of `{ title, intro, kind, reward, rep, time?, need?, crew? }`. Unc hands them out in order (`s.missionIdx`).
-- Kinds: `fetch` (walk to a drop, bring it back), `beat` (knock out `need` members of `crew`), `chop` (steal a muscle car and deliver it), `take` (capture a marked block).
+- Data: `MISSIONS` in `src/state.js` is an ordered list of `{ title, intro, kind, reward, rep, time?, need?, crew?, gift? }`. Unc hands them out in order (`s.missionIdx`).
+- Kinds: `hook` (short local fetch, and `gift: 'follower'` spawns a free squad member on the win), `fetch` (walk to a drop, bring it back), `beat` (knock out `need` members of `crew`), `chop` (steal a muscle car and deliver it), `take` (capture a marked block).
 - Code: `startMission` sets up `s.mission` and its `target` marker, `missionCheck` handles car events, `missionStep` runs each tick for win and fail (timer). `passMission` and `failMission` pay out and emit `mission` fx. The client (`src/main.js` `missionTarget`) turns the target into the beacon, radar dot and edge arrow.
 - Add one: append an entry to `MISSIONS`; for a new `kind`, add its setup in `startMission` and its win check in `missionStep`, then add a section to `tools/missions-test.mjs`.
-- Test: `npm run test:missions` (optionally a seed) plays all four missions headless with a bot.
+- Test: `npm run test:missions` (optionally a seed) plays the opening beats and all five missions headless with a bot.
 
 ## v0.6 character proportions
 
