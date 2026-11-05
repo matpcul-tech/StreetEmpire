@@ -39,6 +39,7 @@ Overall grade: slightly washed out, lifted blacks, warm highlights, mild teal in
 - Props are chunky and slightly oversized so they read at phone scale. Corners stay hard and boxy.
 - Cars are 90s and boxy: sedans, a lowrider with chrome, SUVs, vans, cruisers. Paint is sun faded with dirt low on the body.
 - People: hoodies, jerseys, jeans, caps and bandanas in crew colors. Faces stay simple and readable.
+- Police: navy shirt with a lighter front panel, dark trousers, duty belt, peaked cap with a small gold badge, chest badge and shoulder patches painted in the clothing shader so night phone shots still read. Cool rim on every outfit helps dark uniforms.
 
 ## Light
 
