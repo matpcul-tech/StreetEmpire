@@ -10,6 +10,9 @@ export const GRID = 5;         // 5 x 5 blocks
 export const ZONE_R = 7;       // capture zone radius at block center
 export const CAPTURE_TIME = 6; // seconds to hold a zone
 export const RECRUIT_COST = 100;
+export const UPGRADE_COST = 80;  // bats and extra health for one block's guards
+export const UPGRADE_HP = 40;
+export const RAID_GATHER = 10;   // seconds a rival crew waits before hitting your block
 export const LANE = 3;         // lane offset from street centerline
 export const DAY_SECONDS = 480; // one full day and night
 export const SIGNAL_CYCLE = 20;
@@ -53,7 +56,7 @@ export function createState(seed = 1, cfg = {}) {
   const starts = { '0,0': 'player', '4,0': 'reds', '4,1': 'reds', '0,4': 'blues', '1,4': 'blues', '4,4': 'golds', '3,4': 'golds' };
   for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
     const id = gz * GRID + gx;
-    s.blocks.push({ id, gx, gz, owner: starts[gx + ',' + gz] || 'neutral', hustle: HUSTLES[id % HUSTLES.length], rate: 3 + ((id * 7) % 4), capBy: null, capT: 0 });
+    s.blocks.push({ id, gx, gz, owner: starts[gx + ',' + gz] || 'neutral', hustle: HUSTLES[id % HUSTLES.length], rate: 3 + ((id * 7) % 4), capBy: null, capT: 0, stash: 0 });
   }
   for (const k of ['neutral', 'player', 'reds', 'blues', 'golds']) s.crews[k] = { id: k, cash: k === 'player' ? 150 : 140, rep: 0, aiT: 10 + R(s) * 10, alive: true };
   for (const b of s.blocks) {
@@ -126,15 +129,34 @@ export function openingScuffle(s) {
   return e;
 }
 const SQUAD_MAX = 2, CREW_MAX = 24, GUARDS_PER_BLOCK = 3;
+const RIVALS = new Set(['reds', 'blues', 'golds']);
 export const squadOf = (s, p) => s.ents.filter((e) => e.crew === p.crew && e.role === 'follower' && e.leader === p.id && e.hp > 0);
 export const guardsOf = (s, b) => s.ents.filter((e) => e.kind === 'npc' && e.crew === b.owner && e.role === 'defender' && e.target === b.id && e.hp > 0);
-function makeGuard(e, b) { e.role = 'defender'; e.guard = true; e.target = b.id; e.home = b.id; e.leader = null; e.slot = undefined; e.post = undefined; }
+// Hustle cash piles up on the block. More guards on post, more of the rate.
+// 0 guards: 0.4x. 3 guards: 1.0x. 1 guard (a fresh block): 0.6x.
+export function stashRate(s, b) { return b.rate * (0.4 + 0.2 * guardsOf(s, b).length); }
+function armGuard(e, b) {
+  if (!b || b.upgraded !== 'bat' || e.upgraded) return;
+  e.weapon = 'bat'; e.max += UPGRADE_HP; e.hp += UPGRADE_HP; e.upgraded = true;
+}
+function makeGuard(e, b) { e.role = 'defender'; e.guard = true; e.target = b.id; e.home = b.id; e.leader = null; e.slot = undefined; e.post = undefined; armGuard(e, b); }
+function pocketStash(s, b, crew, announce) {
+  const raw = b.stash || 0; if (raw <= 0) return 0;
+  b.stash = 0; s.crews[crew].cash += raw;
+  const shown = Math.floor(raw);
+  if (announce && shown >= 1) {
+    s.fx.push({ type: 'stash', block: b.id, amt: shown, hustle: b.hustle, crew });
+    log(s, `Collected $${shown} from ${b.hustle}.`);
+  }
+  return raw;
+}
 function weakestHeld(s, crew) { let best = null, bn = 1e9; for (const b of s.blocks) if (b.owner === crew) { const n = guardsOf(s, b).length; if (n < bn) { bn = n; best = b; } } return best || s.blocks[0]; }
 export function spawnUnit(s, crew, role, blockId, x, z) {
   const c = blockCenter(s.blocks[blockId]);
   const a = R(s) * Math.PI * 2, r = 3 + R(s) * 6;
   const e = newEnt(s, { kind: 'npc', crew, role, home: blockId, target: blockId, x: x ?? c.x + Math.cos(a) * r, z: z ?? c.z + Math.sin(a) * r, hp: 60, weapon: role === 'attacker' && R(s) < 0.3 ? 'bat' : 'fists', look: Math.floor(R(s) * 100) });
   s.ents.push(e);
+  if (role === 'defender') armGuard(e, s.blocks[blockId]);
   return e;
 }
 
@@ -194,6 +216,25 @@ export function applyAction(s, playerId, a) {
       if (sq.length && (a.mode === 'send' || sq.length >= SQUAD_MAX || gs.length <= 1)) { for (const e of sq) makeGuard(e, b); log(s, `${sq.length} sent to guard ${b.hustle}.`); }
       else if (gs.length > 1) { const e = gs[0]; e.role = 'follower'; e.guard = false; e.leader = p.id; e.slot = undefined; log(s, `A guard from ${b.hustle} is with you.`); }
       else log(s, 'Need 2 guards here to take one.');
+    }
+  } else if (a.type === 'collect') {
+    const b = a.block != null ? s.blocks[a.block] : blockAt(s, p.x, p.z);
+    if (!b || b.owner !== p.crew) log(s, 'Nothing of yours to collect here.');
+    else if (pocketStash(s, b, p.crew, true) < 1) log(s, `${b.hustle} stash is empty.`);
+  } else if (a.type === 'upgrade') {
+    const b = blockAt(s, p.x, p.z), cr = s.crews[p.crew];
+    if (!b || b.owner !== p.crew) log(s, 'Stand in one of your blocks to upgrade guards.');
+    else if (b.upgraded) log(s, `${b.hustle} guards are already upgraded.`);
+    else if (cr.cash < UPGRADE_COST) log(s, `Need $${UPGRADE_COST} to arm the guards.`);
+    else {
+      const gs = guardsOf(s, b);
+      if (!gs.length) log(s, 'No guards here to upgrade.');
+      else {
+        cr.cash -= UPGRADE_COST; b.upgraded = 'bat';
+        for (const e of gs) armGuard(e, b);
+        log(s, `Guards at ${b.hustle} got bats and more health. -$${UPGRADE_COST}`);
+        s.fx.push({ type: 'upgrade', block: b.id, n: gs.length, weapon: 'bat' });
+      }
     }
   } else if (a.type === 'car') {
     if (p.car) exitCar(s, p);
@@ -728,7 +769,12 @@ export function step(s, dt) {
   if (s.over) return;
   s.t += dt;
   const p = player(s);
-  for (const b of s.blocks) if (s.crews[b.owner] && b.owner !== 'neutral') s.crews[b.owner].cash += b.rate * dt;
+  for (const b of s.blocks) if (s.crews[b.owner] && b.owner !== 'neutral') b.stash = (b.stash || 0) + stashRate(s, b) * dt;
+  // walking onto your block pockets whatever the hustle has piled up
+  const hereB = blockAt(s, p.x, p.z);
+  const enteredB = !!hereB && hereB.id !== p.wasBlock;
+  p.wasBlock = hereB ? hereB.id : -1;
+  if (hereB && hereB.owner === p.crew && p.hp > 0 && !(p.downT > 0)) pocketStash(s, hereB, p.crew, enteredB);
   for (const k of s.pickups) if (k.respawnT > 0) k.respawnT -= dt;
   // heat decays when nobody is chasing you
   p.calmT = (p.calmT || 0) + dt;
@@ -756,6 +802,8 @@ export function step(s, dt) {
     if (e.kind !== 'npc' || e.hp <= 0) continue;
     e.moving = 0;
     if (e.stun > 0) continue;
+    // raid party holds on its own block until the gather timer runs out
+    if (e.gather > 0) { e.gather = Math.max(0, e.gather - dt); continue; }
     let foe = null, fd = (e.guard ? 30 : 12) ** 2;
     for (const o of s.ents) if (o.hp > 0 && hostile(e, o) && !o.car) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
     let goal, followSpeed = 0;
@@ -848,8 +896,25 @@ export function step(s, dt) {
       if (b.capBy !== k) { b.capBy = k; b.capT = 0; }
       b.capT += dt;
       if (b.capT >= CAPTURE_TIME) {
-        const prev = b.owner; b.owner = k; b.capBy = null; b.capT = 0;
+        const prev = b.owner; b.owner = k; b.capBy = null; b.capT = 0; b.raid = null; b.upgraded = null;
         s.crews[k].rep += 25;
+        const loot = b.stash || 0;
+        if (loot > 0 && s.crews[k]) {
+          b.stash = 0; s.crews[k].cash += loot;
+          const shown = Math.floor(loot);
+          if (shown >= 1) {
+            log(s, `${CREWS[k].name} took $${shown} stashed at ${b.hustle}.`);
+            s.fx.push({ type: 'stash', block: b.id, amt: shown, hustle: b.hustle, crew: k, stolen: true });
+          }
+        }
+        if (prev === 'player' && RIVALS.has(k)) {
+          const bc = blockCenter(b);
+          if (Math.hypot(p.x - bc.x, p.z - bc.z) > PITCH) {
+            s.waypoint = { x: bc.x, z: bc.z, label: 'LOST', block: b.id };
+            s.fx.push({ type: 'lost', block: b.id, x: bc.x, z: bc.z, crew: k, hustle: b.hustle });
+            log(s, `${b.hustle} fell while you were away. Follow the marker back.`);
+          }
+        }
         const fresh = spawnUnit(s, k, 'defender', b.id);
         if (k === 'player') {
           // the squad stays behind to hold it (up to 3 guards), the rest keep following
@@ -865,6 +930,22 @@ export function step(s, dt) {
     } else if (b.capT > 0) { b.capT = Math.max(0, b.capT - dt * 2); if (b.capT === 0) b.capBy = null; }
   }
   for (const k of ['reds', 'blues', 'golds']) aiThink(s, k, dt);
+  for (const b of s.blocks) if (b.raid) {
+    if (b.owner !== 'player') { b.raid = null; continue; }
+    let eta = 0, alive = false;
+    for (const e of s.ents) if (e.hp > 0 && e.crew === b.raid.crew && e.role === 'attacker' && e.target === b.id) {
+      alive = true; if (e.gather > eta) eta = e.gather;
+    }
+    if (!alive || eta <= 0) {
+      const crew = b.raid.crew; b.raid = null;
+      if (alive) { s.fx.push({ type: 'raid', block: b.id, eta: 0, crew, state: 'go' }); log(s, `${CREWS[crew].name} are hitting ${b.hustle} now.`); }
+    } else b.raid.eta = eta;
+  }
+  if (s.waypoint) {
+    const wb = s.blocks[s.waypoint.block];
+    const near = Math.hypot(p.x - s.waypoint.x, p.z - s.waypoint.z) < 18;
+    if (!wb || wb.owner === 'player' || near) s.waypoint = null;
+  }
   for (const b of s.blocks) if (b.owner === 'neutral' && R(s) < dt / 50 && s.ents.filter((e) => e.crew === 'neutral' && e.home === b.id && e.hp > 0).length < 2) spawnUnit(s, 'neutral', 'defender', b.id);
   missionStep(s, p, dt);
   const pt = s.blocks.filter((b) => b.owner === 'player').length;
@@ -881,6 +962,8 @@ function aiThink(s, k, dt) {
   cr.aiT -= dt;
   if (cr.aiT > 0) return;
   cr.aiT = 9 + R(s) * 6;
+  // rivals live on their blocks, so they bank the hustle stash into crew cash
+  for (const b of own) if (b.stash > 0) { cr.cash += b.stash; b.stash = 0; }
   const cap = Math.min(14, 4 + own.length * 2);
   let units = s.ents.filter((e) => e.crew === k && e.hp > 0).length;
   if (units >= cap) return;
@@ -898,8 +981,18 @@ function aiThink(s, k, dt) {
     const n = Math.min(4, cap - units, Math.floor(cr.cash / 50));
     if (n < 2) return;
     cr.cash -= n * 50;
-    for (let i = 0; i < n; i++) { const u = spawnUnit(s, k, 'attacker', o.from.id); u.target = o.to.id; }
-    log(s, `${CREWS[k].name} are moving on ${o.to.hustle}${o.to.owner === 'player' ? ' (yours!)' : ''}.`);
+    const hittingPlayer = o.to.owner === 'player';
+    let gather = 0;
+    if (hittingPlayer) {
+      if (!o.to.raid) {
+        o.to.raid = { crew: k, eta: RAID_GATHER, from: o.from.id };
+        s.fx.push({ type: 'raid', block: o.to.id, eta: RAID_GATHER, crew: k });
+        log(s, `${CREWS[k].name} are gathering to hit ${o.to.hustle}. ${RAID_GATHER}s out.`);
+      }
+      gather = o.to.raid ? o.to.raid.eta : 0;
+    }
+    for (let i = 0; i < n; i++) { const u = spawnUnit(s, k, 'attacker', o.from.id); u.target = o.to.id; u.gather = gather; }
+    if (!hittingPlayer) log(s, `${CREWS[k].name} are moving on ${o.to.hustle}.`);
   }
 }
 
