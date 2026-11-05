@@ -115,18 +115,115 @@ export function perimeter(t, c, r) {
   return { x: c.x + pts[k][0] + (pts[k + 1][0] - pts[k][0]) * f, z: c.z + pts[k][1] + (pts[k + 1][1] - pts[k][1]) * f };
 }
 
-// v0.10 hook: a Local walks up and starts a scuffle a few seconds after spawn.
+// Opening: a mugger goes for the bag, his friends pile in (one with a bat),
+// then a Red Kings scout commandeers a traffic car for a short drive-by.
 // A brawler chases foes anywhere but never counts toward block captures.
+// The client calls this once a few seconds after spawn. step() plays the rest.
 export function openingScuffle(s) {
-  const p = player(s); if (s.scuffle) return null; s.scuffle = true;
+  const p = player(s); if (!p || s.scuffle) return null; s.scuffle = true;
   const home = s.blocks.find((b) => b.owner === 'neutral' && Math.hypot(blockCenter(b).x - p.x, blockCenter(b).z - p.z) < PITCH * 1.6) || s.blocks.find((b) => b.owner === 'neutral');
   if (!home) return null;
   // stand him in plain sight on the street ahead of the spawn point
   let x = p.x, z = p.z - 9;
   for (const [dx, dz] of [[0, -9], [0, 9], [-9, 0], [9, 0], [0, -6]]) if (!insideBuilding(p.x + dx, p.z + dz, 0.8)) { x = p.x + dx; z = p.z + dz; break; }
-  const e = spawnUnit(s, 'neutral', 'brawler', home.id, x, z); e.hp = 40; e.weapon = 'fists'; e.scuffler = true;
-  log(s, 'A Local is stepping to you. Show him whose block this is.');
+  const e = spawnUnit(s, 'neutral', 'brawler', home.id, x, z);
+  e.hp = e.max = 48; e.weapon = 'fists'; e.scuffler = true; e.mugger = true; e.opening = true;
+  const pool = s.cars.filter((c) => c.ai && !c.wrecked && !c.driver && !c.cops).map((c) => c.id);
+  s.opening = { beat: 'mug', t: 0, grabbed: false, friends: false, ids: [e.id], scoutId: null, scoutCar: null, scoutExisting: false, pool, near: 999, passed: false, done: false };
+  log(s, 'A mugger is going for your bag.');
   return e;
+}
+function placeNear(x, z, spots) {
+  for (const [dx, dz] of spots) if (!insideBuilding(x + dx, z + dz, 0.7)) return { x: x + dx, z: z + dz };
+  return { x, z };
+}
+// Point an existing traffic car down the lane that will pass the player.
+function aimScoutCar(c, p) {
+  const vx = nearestLine(p.x), vz = nearestLine(p.z);
+  const alongX = Math.abs(p.x - vx) <= Math.abs(p.z - vz);
+  // ride an existing lane when it already passes close, otherwise slide to a gap that misses the player
+  if (alongX) {
+    c.ry = Math.PI; c.x = vx; c.z = p.z + 26; laneSnap(c);
+    const gap = Math.abs(c.x - p.x);
+    if (gap < 7 || gap > 12) c.x = p.x + (c.x >= p.x ? 8 : -8);
+  } else {
+    c.ry = -Math.PI / 2; c.x = p.x + 26; c.z = vz; laneSnap(c);
+    const gap = Math.abs(c.z - p.z);
+    if (gap < 7 || gap > 12) c.z = p.z + (c.z >= p.z ? 8 : -8);
+  }
+  c.v = 14; c.cruise = 18; c.ai = true; c.scout = true; c.scoutT = 0; c.scoutNear = 999; c.scoutDone = false; c.driver = null;
+}
+function startScout(s, o) {
+  if (o.scoutCar || o.beat === 'scout' || o.beat === 'chase' || o.done) return;
+  const p = player(s);
+  let car = null;
+  for (const id of o.pool) {
+    const c = s.cars.find((c) => c.id === id && c.ai && !c.wrecked && !c.driver && !c.cops);
+    if (c) { car = c; break; }
+  }
+  if (!car) car = s.cars.find((c) => c.ai && !c.wrecked && !c.driver && !c.cops);
+  o.scoutExisting = !!(car && o.pool.includes(car.id));
+  if (!car) { car = spawnTraffic(s, true); o.scoutExisting = false; }
+  if (!car) { o.done = true; o.beat = 'done'; log(s, 'The street goes quiet. Unc wants a word.'); return; }
+  aimScoutCar(car, p);
+  const home = s.blocks.find((b) => b.owner === 'reds') || s.blocks[0];
+  const scout = spawnUnit(s, 'reds', 'brawler', home.id, car.x, car.z);
+  scout.hp = scout.max = 44; scout.weapon = 'fists'; scout.scout = true; scout.car = car.id; scout.opening = true;
+  o.scoutId = scout.id; o.scoutCar = car.id; o.beat = 'scout';
+  log(s, 'A Red Kings scout cuts through traffic.');
+}
+function openingStep(s, dt) {
+  const o = s.opening; if (!o || o.done) return;
+  const p = player(s); if (!p) return;
+  o.t += dt;
+  const mug = s.ents.find((e) => e.id === o.ids[0]);
+  const living = () => o.ids.filter((id) => s.ents.some((e) => e.id === id && e.hp > 0));
+  if (o.beat === 'mug' || o.beat === 'friends') {
+    if (!o.grabbed && mug && mug.hp > 0 && dist2(mug, p) < 2.3 * 2.3) {
+      o.grabbed = true;
+      const d = Math.sqrt(dist2(mug, p)) || 1;
+      p.kx = (p.x - mug.x) / d * 3.2; p.kz = (p.z - mug.z) / d * 3.2;
+      log(s, 'He grabs at your bag. Shove him off.');
+    }
+    if (!o.grabbed && mug && mug.hp <= 0) o.grabbed = true;
+    const hurt = mug && mug.hp < mug.max;
+    if (!o.friends && (hurt || o.grabbed || o.t > 3.2)) {
+      o.friends = true; o.beat = 'friends';
+      const homeId = mug ? mug.home : (s.blocks.find((b) => b.owner === 'neutral') || s.blocks[0]).id;
+      const ax = mug && mug.hp > 0 ? mug.x : p.x, az = mug && mug.hp > 0 ? mug.z : p.z;
+      const spots = [[3.2, 1.5], [-3.4, 1.2], [2.4, -2.6], [-2.2, -2.4], [4.2, 0], [-4.2, 0.4]];
+      const a = placeNear(ax, az, spots), b = placeNear(ax, az, spots.slice(1));
+      const f1 = spawnUnit(s, 'neutral', 'brawler', homeId, a.x, a.z);
+      f1.hp = f1.max = 50; f1.weapon = 'fists'; f1.scuffler = true; f1.opening = true;
+      const f2 = spawnUnit(s, 'neutral', 'brawler', homeId, b.x, b.z);
+      f2.hp = f2.max = 56; f2.weapon = 'bat'; f2.scuffler = true; f2.opening = true;
+      o.ids.push(f1.id, f2.id); o.bat = true;
+      log(s, 'His friends jump in. One of them has a bat.');
+    }
+    if (o.friends && (living().length === 0 || o.t > 22)) startScout(s, o);
+  } else if (o.beat === 'scout') {
+    const car = s.cars.find((c) => c.id === o.scoutCar);
+    const scout = s.ents.find((e) => e.id === o.scoutId);
+    if (car) o.near = Math.min(o.near, car.scoutNear ?? 999);
+    const passed = !!(car && car.scoutDone);
+    if (passed || !car || (car && car.scoutT > 8)) {
+      if (scout && scout.hp > 0 && scout.car) {
+        const cr = car || scout;
+        scout.car = null; scout.bail = true; scout.chaseUntil = s.t + 5;
+        scout.x = cr.x + Math.cos(cr.ry || 0) * 2.6; scout.z = cr.z - Math.sin(cr.ry || 0) * 2.6;
+        if (car) { car.scout = false; laneSnap(car); }
+        log(s, 'The scout bails out and comes at you.');
+      }
+      o.passed = true; o.beat = 'chase';
+    }
+  } else if (o.beat === 'chase') {
+    const scout = s.ents.find((e) => e.id === o.scoutId);
+    if (!scout || scout.hp <= 0 || s.t >= (scout.chaseUntil || 0)) {
+      if (scout && scout.hp > 0) scout.remove = true;
+      o.done = true; o.beat = 'done';
+      log(s, 'The street goes quiet. Unc wants a word.');
+    }
+  }
 }
 const SQUAD_MAX = 2, CREW_MAX = 24, GUARDS_PER_BLOCK = 3;
 const RIVALS = new Set(['reds', 'blues', 'golds']);
@@ -564,6 +661,19 @@ function laneSnap(c) {
 }
 const nearestLine = (v) => lineCoord(Math.max(0, Math.min(GRID, Math.round(v / PITCH + GRID / 2))));
 function trafficStep(s, c, dt) {
+  if (c.scout) {
+    const p = player(s);
+    c.scoutT = (c.scoutT || 0) + dt;
+    const target = 18;
+    c.v += Math.sign(target - c.v) * Math.min(Math.abs(target - c.v), 14 * dt);
+    c.x += Math.sin(c.ry) * c.v * dt; c.z += Math.cos(c.ry) * c.v * dt;
+    const d = Math.hypot(c.x - p.x, c.z - p.z);
+    c.scoutNear = Math.min(c.scoutNear || 999, d);
+    if (d < 16 && (c.honk || 0) < 4) c.honk = 4;
+    const ahead = (p.x - c.x) * Math.sin(c.ry) + (p.z - c.z) * Math.cos(c.ry);
+    if ((c.scoutNear < 14 && ahead < -4) || c.scoutT > 8) c.scoutDone = true;
+    return;
+  }
   const dx = Math.round(Math.sin(c.ry)), dz = Math.round(Math.cos(c.ry)), sg = dx || dz;
   const along = dx !== 0 ? c.x : c.z;
   let blocked = false;
@@ -711,6 +821,7 @@ function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t +=
 // missionStep (per tick win and fail checks). s.mission.target is the marker
 // the client shows (beacon, radar icon and edge arrow).
 export const MISSIONS = [
+  { title: 'Bag Back', intro: 'Unc: "He dropped your bag up the street. Grab it and bring it back. Then we talk real work."', kind: 'hook', time: 90, reward: 120, rep: 12, gift: 'follower' },
   { title: 'Package Run', intro: 'Unc: "Grab my package from the Harbor drop and bring it back. You got 120 seconds."', kind: 'fetch', time: 120, reward: 250, rep: 20 },
   { title: 'Send a Message', intro: 'Unc: "The Red Kings been testing us. Knock out 3 of them."', kind: 'beat', crew: 'reds', need: 3, reward: 300, rep: 30 },
   { title: 'Chop Job', intro: 'Unc: "Find a muscle car and drop it at the chop shop on the marker."', kind: 'chop', reward: 400, rep: 30 },
@@ -720,7 +831,8 @@ function startMission(s, p) {
   if (s.mission) { log(s, `Unc: "Finish ${s.mission.title} first."`); return; }
   if (s.missionIdx >= MISSIONS.length) { log(s, 'Unc: "No more work today. Keep the blocks tight."'); return; }
   const M = MISSIONS[s.missionIdx];
-  const m = { idx: s.missionIdx, title: M.title, kind: M.kind, stage: 0, timer: M.time || 0, count: 0, need: M.need || 0, crew: M.crew, reward: M.reward, rep: M.rep, target: null };
+  const m = { idx: s.missionIdx, title: M.title, kind: M.kind, stage: 0, timer: M.time || 0, count: 0, need: M.need || 0, crew: M.crew, reward: M.reward, rep: M.rep, gift: M.gift || null, target: null };
+  if (M.kind === 'hook') m.target = hookDrop(s);
   if (M.kind === 'fetch') {
     // the drop sits in the Harbor parking lane, outside any crew's guard area,
     // preferring a block that is not held by a rival crew
@@ -737,6 +849,31 @@ function startMission(s, p) {
   }
   s.mission = m; log(s, M.intro); s.fx.push({ type: 'mission', state: 'start', title: M.title, idx: m.idx });
 }
+function hookDrop(s) {
+  const g = s.ents.find((e) => e.kind === 'giver') || player(s);
+  const spots = [[18, -6], [-16, 14], [22, 10], [8, -22], [20, 16], [-18, -10], [28, -2], [-8, 22]];
+  for (const [dx, dz] of spots) {
+    const x = g.x + dx, z = g.z + dz;
+    if (Math.hypot(dx, dz) < 12 || insideBuilding(x, z, 0.8)) continue;
+    return { x, z };
+  }
+  return { x: g.x + 18, z: g.z - 6 };
+}
+function grantFollower(s) {
+  const p = player(s); if (!p) return null;
+  if (squadOf(s, p).length >= SQUAD_MAX) {
+    const b = weakestHeld(s, p.crew);
+    const u = spawnUnit(s, p.crew, 'defender', b.id); u.guard = true;
+    log(s, `Unc's guy went to guard ${b.hustle}.`);
+    return u;
+  }
+  let x = p.x + 1.8, z = p.z + 1.2;
+  if (insideBuilding(x, z, 0.5)) { x = p.x - 1.8; z = p.z - 1.2; }
+  const u = spawnUnit(s, p.crew, 'follower', 0, x, z); u.leader = p.id;
+  log(s, 'Unc: "This one rolls with you. No charge."');
+  s.fx.push({ type: 'gift', id: u.id });
+  return u;
+}
 function missionCheck(s, p) {
   const m = s.mission; if (!m) return;
   if (m.kind === 'chop' && m.stage === 0 && p.car) {
@@ -748,8 +885,8 @@ function missionStep(s, p, dt) {
   const m = s.mission; if (!m) return;
   if (m.timer > 0) { m.timer -= dt; if (m.timer <= 0) { failMission(s, 'Out of time. Mission failed.'); return; } }
   const near = (r) => m.target && (p.x - m.target.x) ** 2 + (p.z - m.target.z) ** 2 < r * r;
-  if (m.kind === 'fetch') {
-    if (m.stage === 0 && near(4)) { m.stage = 1; const g = s.ents.find((e) => e.kind === 'giver'); m.target = { x: g.x, z: g.z }; log(s, 'Got the package. Bring it back to Unc.'); }
+  if (m.kind === 'hook' || m.kind === 'fetch') {
+    if (m.stage === 0 && near(4)) { m.stage = 1; const g = s.ents.find((e) => e.kind === 'giver'); m.target = { x: g.x, z: g.z }; log(s, m.kind === 'hook' ? 'Got the bag. Bring it back to Unc.' : 'Got the package. Bring it back to Unc.'); }
     else if (m.stage === 1 && near(4)) passMission(s);
   } else if (m.kind === 'beat') { if (m.count >= m.need) passMission(s); }
   else if (m.kind === 'chop') {
@@ -761,6 +898,7 @@ function passMission(s) {
   const m = s.mission; s.crews.player.cash += m.reward; s.crews.player.rep += m.rep;
   log(s, `MISSION PASSED: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep });
   s.mission = null; s.missionIdx++;
+  if (m.gift === 'follower') grantFollower(s);
 }
 function failMission(s, why) { log(s, why); s.fx.push({ type: 'mission', state: 'fail', title: s.mission.title }); s.mission = null; }
 
@@ -800,11 +938,16 @@ export function step(s, dt) {
     if (e.kx || e.kz) { e.x += e.kx * dt; e.z += e.kz * dt; e.kx *= 1 - 6 * dt; e.kz *= 1 - 6 * dt; if (Math.abs(e.kx) + Math.abs(e.kz) < 0.1) e.kx = e.kz = 0; collideBuildings(e, 0.5); clampWorld(e); }
     if (e.kind === 'ped') { pedStep(s, e, dt, p); if (dist2(e, p) > 130 * 130 && e.hp > 0) { e.remove = true; } continue; }
     if (e.kind !== 'npc' || e.hp <= 0) continue;
+    // a scout rides the commandeered traffic car until the drive-by passes
+    if (e.scout && e.car && !e.bail) {
+      const car = s.cars.find((c) => c.id === e.car);
+      if (car) { e.x = car.x; e.z = car.z; e.ry = car.ry; continue; }
+    }
     e.moving = 0;
     if (e.stun > 0) continue;
     // raid party holds on its own block until the gather timer runs out
     if (e.gather > 0) { e.gather = Math.max(0, e.gather - dt); continue; }
-    let foe = null, fd = (e.guard ? 30 : 12) ** 2;
+    let foe = null, fd = (e.guard ? 30 : e.scout ? 18 : 12) ** 2;
     for (const o of s.ents) if (o.hp > 0 && hostile(e, o) && !o.car) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
     let goal, followSpeed = 0;
     if (e.role === 'follower') {
@@ -875,6 +1018,7 @@ export function step(s, dt) {
       }
     }
   }
+  openingStep(s, dt);
   for (const e of s.ents) if ((e.kind === 'npc' || e.kind === 'cop') && e.hp <= 0) e.downT = (e.downT || 0) + dt;
   s.ents = s.ents.filter((e) => !(e.downT > 6 && e.kind !== 'ped') && !e.remove);
   s.cars = s.cars.filter((c) => !c.remove || c.driver);

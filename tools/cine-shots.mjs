@@ -51,7 +51,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
     return { ok: d < 1.5, skipped_after_s: +d.toFixed(2) }; // an unskipped entry takes about 12 s of wall time in headless software rendering
   });
   // 2. Unc briefing cutscenes, one per mission
-  for (let i = 0; i < 4; i++) await rec('brief-' + (i + 1), async () => {
+  for (let i = 0; i < 5; i++) await rec('brief-' + (i + 1), async () => {
     await ev((i) => { const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); if (p.car) g.send({ type: 'car' }); const u = s.ents.find((e) => e.kind === 'giver'); p.x = u.x + 1.6; p.z = u.z + 1.6; s.mission = null; s.missionIdx = i; }, i);
     await waitIdle(); await page.waitForTimeout(600);
     const t0 = Date.now(); const gt0 = await ev(() => window.__game.state.t); let anim = 0;

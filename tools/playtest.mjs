@@ -20,6 +20,10 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
   await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 150000 });
   if (phone) await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(2000);
+  await step('0-opening', async () => {
+    await page.waitForFunction(() => { const o = window.__game.state.opening; return o && o.friends && window.__game.state.ents.some((e) => e.scuffler && e.weapon === 'bat' && e.hp > 0); }, null, { timeout: 120000, polling: 200 });
+    return ev(() => { const s = window.__game.state, o = s.opening; const foot = s.ents.filter((e) => e.scuffler && e.hp > 0); return { ok: !!(o.friends && o.bat && foot.some((e) => e.weapon === 'bat')), beat: o.beat, grabbed: o.grabbed, foot: foot.length, bat: foot.some((e) => e.weapon === 'bat'), t: +s.t.toFixed(1) }; });
+  });
   await step('1-movement', async () => {
     const a = await P();
     if (phone) { // real touch: drag the floating stick on the left half of the screen
@@ -68,7 +72,7 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
     await page.screenshot({ path: `${dir}/${dev}-6a-briefing.png` });
     if (phone) await page.touchscreen.tap(200, 300); else await page.mouse.click(640, 300);
     await page.waitForFunction(() => !window.__cine.active, null, { timeout: 30000 }); await page.waitForTimeout(1500);
-    return ev(() => ({ ok: getComputedStyle(document.getElementById('objArrow')).display !== 'none', briefing: 'shown and skipped by tap', mission: window.__game.state.mission?.title, arrow: document.getElementById('objDist').innerText }));
+    return ev(() => { const m = window.__game.state.mission; return { ok: getComputedStyle(document.getElementById('objArrow')).display !== 'none' && m && m.kind === 'hook', briefing: 'shown and skipped by tap', mission: m && m.title, arrow: document.getElementById('objDist').innerText }; });
   });
   await step('7-rivals', async () => {
     await ev(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'); const b = s.blocks.find((b) => b.owner === 'reds'); const c = window.__dbg.blockCenter(b); p.x = c.x; p.z = c.z; });

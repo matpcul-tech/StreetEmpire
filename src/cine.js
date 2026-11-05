@@ -10,6 +10,7 @@ const seg = (t, a, b) => ease((t - a) / (b - a));
 
 // Unc briefings: original lines, two short beats before the mission intro line
 export const BRIEFS = [
+  ['Unc: "You still got your feet under you. Sit down."', 'Unc: "A mugger went for your bag, then his boys, then a Red Kings car."', 'You: "I saw the car."'],
   ['Unc: "There you are. Sit down a second, I got something easy."', 'Unc: "Package came in on the Harbor side. Nobody touches it but you."'],
   ['Unc: "You hear what the Red Kings been saying about us?"', 'You: "I heard."', 'Unc: "Then go make them stop saying it."'],
   ['Unc: "My guy at the chop shop is short one muscle car."', 'You: "Any color?"', 'Unc: "Fast is the only color that matters."'],
