@@ -151,3 +151,13 @@ body.cine-on #lcol{visibility:hidden}
 @media (max-height:500px) and (orientation:landscape){.touch #big{top:calc(var(--st) + 98px)}}
 @media (max-height:500px) and (orientation:landscape){.touch #bPause.show{top:auto;bottom:calc(var(--sb) + 10px)}#pops,.touch #pops{top:calc(var(--st) + 124px)}}
 @media (max-height:500px) and (orientation:landscape){#pops,.touch #pops{top:calc(var(--st) + 52px);right:calc(var(--sr) + 178px)}}
+
+/* v0.10.1c real phone: district tag at the top edge, fades fast; objective one line, never over the radar; Rep/Turf clear of buttons; stars contrast */
+#dtag{position:fixed;top:calc(var(--st) + 2px);left:50%;transform:translateX(-50%);font:bold 11px Arial,sans-serif;color:#fc6;background:rgba(0,0,0,.45);border-radius:4px;padding:2px 8px;pointer-events:none;opacity:0;transition:opacity .4s;white-space:nowrap;z-index:5}
+#dtag.show{opacity:1}
+@media (max-height:500px) and (orientation:landscape){
+  #mission,.touch #mission{-webkit-line-clamp:1;white-space:nowrap;text-overflow:ellipsis;display:block;font-size:12px}
+  #lcol{left:calc(var(--sl) + var(--rad) + 22px)!important;max-width:260px}
+  #sub{font-size:11px;margin-top:1px;white-space:nowrap}
+}
+#stars i{color:rgba(0,0,0,.55);-webkit-text-stroke:1px rgba(255,255,255,.7)}#stars i.on{color:#fff;-webkit-text-stroke:1px #000;text-shadow:0 0 3px #000}#stars.none{opacity:.55}

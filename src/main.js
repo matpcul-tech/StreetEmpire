@@ -306,7 +306,7 @@ function pickLock() {
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
 const radar = $('radar').getContext('2d');
-let msgT = 0, bigT = 0;
+let msgT = 0, bigT = 0, dtagT = 0, lastHere = null;
 let incT = 0, starWant = 0, starShown = 0, starHold = 0;
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
@@ -752,7 +752,9 @@ function frame(now) {
   $('mtitle').textContent = m ? m.title + ':' : '';
   $('mtext').textContent = !m ? '' : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
-  if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = here ? `${DISTRICTS[districtOf(here)]}: ${here.hustle} ($${here.rate}/s), ${CREWS[here.owner].name}${here.owner === 'player' ? ', ' + guardsOf(s, here).length + ' guards (T)' : ''}` : '';
+  if (here !== lastHere) { lastHere = here; if (here) { $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${here.owner === 'player' ? ', ' + guardsOf(s, here).length + ' guards' : ''}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
+  if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
+  if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');
   if ((radarT -= rdt) <= 0) { radarT = LOW ? 0.1 : 0.05; drawRadar(now); }
   if (composer) { grade.uniforms.uTime.value = now / 1000; composer.render(); } else renderer.render(scene, camera);

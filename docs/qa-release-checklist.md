@@ -134,3 +134,9 @@ Followers: `role === 'follower'`. Guards: `role === 'defender'`, `crew === 'play
 Portrait and landscape on at least one iPhone and one Android: confirm section 2
 by eye, thumb reach of HIT and stick, no browser gesture conflicts (pull to
 refresh, back swipe), audio starts after first tap, 10 minutes without a crash.
+
+## Real phone regressions from v0.10 (landscape screenshot)
+- [ ] District banner never sits at mid height or within 80 px above the player.
+- [ ] Objective list never overlaps the minimap.
+- [ ] Rep/Turf line does not touch FISTS or +CREW buttons.
+- [ ] Wanted stars readable at dusk.
