@@ -17,10 +17,10 @@ async function stats(file, rect) {
   const img = sharp(file); const { width, height } = await img.metadata();
   const region = rect ? { left: Math.max(0, Math.round(rect.x)), top: Math.max(0, Math.round(rect.y)), width: Math.max(2, Math.min(width - Math.round(rect.x), Math.round(rect.w))), height: Math.max(2, Math.min(height - Math.round(rect.y), Math.round(rect.h))) } : null;
   const { data, info } = await (region ? img.extract(region) : img).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  const L = []; for (let i = 0; i < data.length; i += 3 * 4) L.push(lum(data, i));
+  const L = []; let sat = 0; for (let i = 0; i < data.length; i += 3 * 4) { L.push(lum(data, i)); const mx = Math.max(data[i], data[i + 1], data[i + 2]), mn = Math.min(data[i], data[i + 1], data[i + 2]); sat += mx ? (mx - mn) / mx : 0; }
   L.sort((a, b) => a - b); const mean = L.reduce((a, b) => a + b, 0) / L.length;
   const sd = Math.sqrt(L.reduce((a, b) => a + (b - mean) ** 2, 0) / L.length);
-  return { mean: +mean.toFixed(1), p10: +L[Math.floor(L.length * 0.1)].toFixed(1), min: +L[0].toFixed(1), sd: +sd.toFixed(1), w: info.width, h: info.height };
+  return { mean: +mean.toFixed(1), p10: +L[Math.floor(L.length * 0.1)].toFixed(1), min: +L[0].toFixed(1), sd: +sd.toFixed(1), sat: +(sat / L.length).toFixed(3), rect: region, w: info.width, h: info.height };
 }
 // A q= already on the base URL must not win over the quality this pass asked for.
 function withQuality(raw, q) {
@@ -31,7 +31,7 @@ function withQuality(raw, q) {
 }
 const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = []; let fail = [];
-for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev0, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]]) {
+for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev0, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]].filter(([d]) => (process.env.DEVS ?? 'desktop,phone').split(',').includes(d))) {
   const dev = dev0 + (q ? '-' + q : ''); // every quality level: high (phone default low), low, potato
   const page = await (await browser.newContext(opts)).newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message));
