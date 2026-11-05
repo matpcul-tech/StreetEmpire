@@ -32,11 +32,18 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
   const onb = await ev(() => document.getElementById('onb').innerText.replace(/\n/g, ' | '));
   const arrow = await ev(() => document.getElementById('objDist').innerText);
   rec(dev, 'scuffle-hook', { ok: sc.d < 16 && sc.t < 8, local_dist_m: sc.d, game_t: sc.t, onboarding: onb, arrow });
-  // knock him out with real input
-  for (let i = 0; i < 30; i++) {
-    const alive = await ev(() => { const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player'), e = s.ents.find((x) => x.scuffler && x.hp > 0); if (!e) return false; if (Math.hypot(e.x - p.x, e.z - p.z) > 2) { e.x = p.x + Math.sin(p.ry) * 1.3; e.z = p.z + Math.cos(p.ry) * 1.3; } p.hp = p.max; return true; });
+  // the opening is a group: the first mugger, then two friends. step 1 waits until every scuffler is down.
+  for (let i = 0; i < 50; i++) {
+    const alive = await ev(() => {
+      const s = window.__game.state, p = s.ents.find((e) => e.kind === 'player');
+      const living = s.ents.filter((x) => x.scuffler && x.hp > 0);
+      if (!living.length && s.opening && s.opening.friends) return false;
+      for (const e of living) { e.x = p.x + Math.sin(p.ry) * 1.3; e.z = p.z + Math.cos(p.ry) * 1.3; }
+      p.hp = p.max; return true;
+    });
     if (!alive) break; if (dev === 'phone') await page.tap('#bAttack'); else await page.keyboard.press('KeyF'); await page.waitForTimeout(450);
   }
+  await page.waitForFunction(() => { const s = window.__game.state; return s.opening && s.opening.friends && !s.ents.some((e) => e.scuffler && e.hp > 0); }, null, { timeout: 30000, polling: 100 }).catch(() => {});
   await page.waitForTimeout(800);
   const onb2 = await ev(() => document.getElementById('onb').innerText.replace(/\n/g, ' | ')), arrow2 = await ev(() => document.getElementById('objDist').innerText);
   await shot(page, `${dev}-onboarding-step2`);
@@ -51,9 +58,13 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
   const brief = await page.waitForFunction(() => window.__cine.active === 'brief', null, { timeout: 60000 }).then(() => true, () => false);
   rec(dev, 'unc-prompt-and-talk', { ok: brief, prompt });
   await ev(() => window.__cine.skip()); await page.waitForFunction(() => !window.__cine.active, null, { timeout: 60000 });
-  // cash popup with source
-  const popT = await page.waitForFunction(() => document.querySelector('#pops .pop')?.innerText, null, { timeout: 120000, polling: 100 }).then((h) => h.jsonValue(), () => '');
-  await shot(page, `${dev}-cash-popup`); rec(dev, 'cash-popup', { ok: !!popT, text: popT });
+  // cash popup is the stash collect (walk onto a block that has piled up), not the old every-5s income line
+  await ev(() => {
+    const s = window.__game.state, b = s.blocks.find((b) => b.owner === 'player'), p = s.ents.find((e) => e.kind === 'player');
+    b.stash = 7; p.wasBlock = -1; const c = window.__dbg.blockCenter(b); p.x = c.x; p.z = c.z;
+  });
+  const popT = await page.waitForFunction(() => { const t = document.querySelector('#pops .pop')?.innerText || ''; return /^\+\$\d+ /.test(t) ? t : null; }, null, { timeout: 20000, polling: 100 }).then((h) => h.jsonValue(), () => '');
+  await shot(page, `${dev}-cash-popup`); rec(dev, 'cash-popup', { ok: /^\+\$\d+ /.test(popT), text: popT });
   // stars stay steady with no fighting
   const seen = new Set(); for (let i = 0; i < 20; i++) { seen.add(await ev(() => document.querySelectorAll('#stars i.on').length)); await page.waitForTimeout(150); }
   rec(dev, 'stars-steady', { ok: seen.size === 1, values: [...seen] });
@@ -87,8 +98,13 @@ for (const [dev, opts] of [['desktop', { viewport: { width: 1280, height: 720 } 
   rec(dev, 'page-errors', { ok: errs.length === 0, errors: errs.slice(0, 3) });
   await ctx.close();
 }
-// potato flag
-{ const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } }); const page = await ctx.newPage(); await page.goto(url + '?q=potato'); await page.waitForTimeout(1500);
+// potato flag. set q even when the url already has a query, so we never build "?q=a?q=potato".
+function withQuality(raw, q) {
+  const u = new URL(raw, 'http://localhost');
+  if (q) u.searchParams.set('q', q); else u.searchParams.delete('q');
+  return u.href;
+}
+{ const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } }); const page = await ctx.newPage(); await page.goto(withQuality(url, 'potato')); await page.waitForTimeout(1500);
   rec('desktop', 'potato-flag', { ok: /potato/.test(await page.evaluate(() => document.getElementById('ver').textContent)), ver: await page.evaluate(() => document.getElementById('ver').textContent) });
   await page.click('#start'); await page.waitForFunction(() => document.getElementById('intro').classList.contains('hidden'), null, { timeout: 180000 }); await page.waitForTimeout(3000); await shot(page, 'desktop-potato'); await ctx.close(); }
 await browser.close();

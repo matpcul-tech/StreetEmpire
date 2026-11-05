@@ -94,7 +94,7 @@ html,body,canvas{-webkit-touch-callout:none;-webkit-user-select:none;user-select
 #prompt{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);padding:6px 14px;background:rgba(0,0,0,.6);border:2px solid #ffcc33;border-radius:6px;font:bold 18px Arial,sans-serif;color:#fff;pointer-events:none;z-index:6}
 #pops{position:fixed;top:calc(max(8px,env(safe-area-inset-top)) + 150px);right:14px;pointer-events:none;text-align:right;z-index:6}
 .pop{font:bold 15px Arial,sans-serif;color:#5d5;text-shadow:1px 1px 0 #000,-1px -1px 0 #000;animation:popup 2.6s ease-out forwards}
-@keyframes popup{0%{opacity:0;transform:translateY(8px)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0;transform:translateY(-14px)}}
+@keyframes popup{0%{opacity:0;transform:translateY(6px)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0;transform:none}}
 .touch #pops{top:auto;bottom:260px;right:12px}
 #bPause{display:none;position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:7;width:42px;height:34px;border-radius:8px;border:2px solid rgba(255,255,255,.4);background:rgba(0,0,0,.5);color:#fff;font:bold 15px Arial,sans-serif;touch-action:none}
 .touch #bPause.show{display:block}.touch #onb{bottom:250px}
@@ -124,7 +124,7 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
 #msg:empty{display:none}
 @media (orientation:portrait) and (max-width:700px){#msg,.touch #msg{position:static!important;font-size:12px;text-align:left!important}}
 /* cash popups right under the cash counter */
-#pops,.touch #pops{top:calc(var(--hudb, 156px) + 6px);bottom:auto;right:calc(var(--sr) + 12px)}
+#pops,.touch #pops{top:calc(var(--hudb, 156px) + 10px);bottom:auto;right:calc(var(--sr) + 12px)}
 .pop{font-size:14px}
 @media (max-width:500px),(max-height:500px){.pop{font-size:12px}}
 /* prompt: small, low, desktop only (phones have the TALK / CAR button) */
@@ -170,3 +170,28 @@ body.cine-on #lcol{visibility:hidden}
   #sub{font-size:11px;margin-top:1px;white-space:nowrap}
 }
 #stars i{color:rgba(0,0,0,.55);-webkit-text-stroke:1px rgba(255,255,255,.7)}#stars i.on{color:#fff;-webkit-text-stroke:1px #000;text-shadow:0 0 3px #000}#stars.none{opacity:.55}
+
+/* Portrait phone: two bands. Left column is mission, capture, tutorial, toast.
+   Right stack under Rep/Turf holds cash pops, the momentary title, and the pass card.
+   Outside portrait the stack is transparent so those three keep their fixed slots
+   (centered title, pass card, pops beside the HUD in short landscape). */
+#rstack{display:contents}
+#msg.hud-yield,#onb.hud-yield{display:none!important}
+@media (orientation:portrait) and (max-width:700px){
+  /* district tag sits under the radar and under the cash column, full width, so it misses pause and the minimap */
+  #dtag{top:max(calc(var(--st) + 10px + var(--rad) + 8px), calc(var(--hudb, 140px) + 4px));left:calc(var(--sl) + 10px);right:calc(var(--sr) + 10px);transform:none;text-align:left;width:auto;max-width:none;overflow:hidden;text-overflow:ellipsis}
+  #lcol{top:max(calc(var(--st) + 10px + var(--rad) + 28px), calc(var(--hudb, 140px) + 24px));gap:3px}
+  #lcol #mission,#lcol #onb,#lcol #capture,#lcol #msg{font-size:12px;line-height:1.2;padding:2px 6px}
+  /* right of the road band (the center 36 to 64 percent), directly under the cash column */
+  #rstack{display:flex;flex-direction:column;align-items:stretch;gap:4px;position:fixed;z-index:8;pointer-events:none;top:max(calc(var(--st) + 10px + var(--rad) + 28px), calc(var(--hudb, 140px) + 24px));left:64vw;right:calc(var(--sr) + 8px);width:auto;max-width:none}
+  #rstack>#pops,#rstack>#big,#rstack>#passCard{position:static!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;transform:none!important;margin:0;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box}
+  #rstack>#pops{text-align:right}
+  #rstack>#big{font-size:16px;letter-spacing:1px;white-space:normal;text-align:right;line-height:1.15}
+  #rstack>#big:not(.show),#rstack>#passCard:not(.show){display:none!important}
+  #rstack>#big.show{opacity:1}
+  #rstack>#passCard{padding:8px 10px}
+  #rstack>#passCard.show{opacity:1;transform:none!important}
+  #rstack>#passCard .pc-k{font-size:14px;letter-spacing:.5px;line-height:1.15}
+  #rstack>#passCard .pc-t,#rstack>#passCard .pc-s{font-size:12px}
+  #rstack>#passCard .pc-r{font-size:16px}
+}

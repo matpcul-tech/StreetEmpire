@@ -318,6 +318,17 @@ let incT = 0, starWant = 0, starShown = 0, starHold = 0;
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
 function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = isTouch ? 1.6 : 2.2; }
+// Portrait left column: mission and capture stay. Toast yields first, then the tutorial line, if the stack would enter the road band.
+function layoutNotices() {
+  const msg = $('msg'), onbEl = $('onb');
+  msg.classList.remove('hud-yield'); onbEl.classList.remove('hud-yield');
+  if (!(innerWidth <= 700 && innerHeight > innerWidth)) return;
+  const col = $('lcol'), limit = innerHeight * 0.37;
+  const shown = (el) => !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.textContent.trim();
+  const overflow = () => col.getBoundingClientRect().bottom > limit;
+  if (overflow() && shown(msg)) msg.classList.add('hud-yield');
+  if (overflow() && shown(onbEl)) onbEl.classList.add('hud-yield');
+}
 function drawRadar(now) {
   const s = S(), p = player(s), W = 280, Rm = 80, sc = (W / 2) / Rm;
   const ctx = radar; ctx.save();
@@ -553,7 +564,8 @@ let scuffleT = -1, scufflerId = null, onbMission = false;
 const onb = { step: -1, done: localStorage.getItem('se-onb') === '3' };
 const ONB = () => isTouch ? ['Stop the muggers: HIT', 'Talk to Unc: TALK', 'Take a block: clear it, stand in the ring'] : ['Stop the muggers: F or click', 'Talk to Unc: E', 'Take a block: clear it, stand in the ring'];
 function renderOnb() {
-  const el = $('onb'); if (onb.step < 0 || onb.step > 2 || (S().mission && onb.step === 2)) { el.classList.add('hidden'); return; }
+  const el = $('onb');
+  if (onb.step < 0 || onb.step > 2 || (S().mission && onb.step === 2)) { el.classList.add('hidden'); el.textContent = ''; return; }
   el.classList.remove('hidden');
   el.innerHTML = `<i>${onb.step + 1}/3</i> ${ONB()[onb.step]}`;
 }
@@ -739,9 +751,11 @@ function frame(now) {
   });
   // onboarding progress and the opening scuffle
   if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A mugger is going for your bag.'); } }
-  if (onb.step === 0 && scuffleT <= 0 && scufflerId == null) onbAdvance(1);
-  if (onb.step === 0 && s.opening && s.opening.friends && !s.ents.some((e) => e.scuffler && e.hp > 0)) onbAdvance(1);
-  if (onb.step === 1 && (s.mission || s.missionIdx > 0)) onbAdvance(2);
+  // Unc stands a short walk from spawn, so Bag Back can start while the mugger group is still up.
+  // Advance past the fight and the talk step together, or "1/3 Stop the muggers" stays on screen.
+  if ((onb.step === 0 || onb.step === 1) && (s.mission || s.missionIdx > 0)) onbAdvance(2);
+  else if (onb.step === 0 && scuffleT <= 0 && scufflerId == null) onbAdvance(1);
+  else if (onb.step === 0 && s.opening && s.opening.friends && !s.ents.some((e) => e.scuffler && e.hp > 0)) onbAdvance(1);
   if (onb.step === 2 && s.blocks.filter((b) => b.owner === 'player').length >= 2) onbAdvance(3);
   if (!!s.mission !== onbMission) { onbMission = !!s.mission; renderOnb(); }
   const tgt = missionTarget(s) || (started ? alertTarget(s) : null) || (started ? guideTarget(s, p) : null);
@@ -823,6 +837,7 @@ function frame(now) {
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
   if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');
+  layoutNotices();
   if ((radarT -= rdt) <= 0) { radarT = LOW ? 0.1 : 0.05; drawRadar(now); }
   if (composer) { grade.uniforms.uTime.value = now / 1000; composer.render(); } else renderer.render(scene, camera);
 }

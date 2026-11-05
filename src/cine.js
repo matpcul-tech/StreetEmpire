@@ -24,7 +24,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   document.body.appendChild(ui);
   const card = document.createElement('div'); card.id = 'passCard';
   card.innerHTML = '<div class="pc-k">MISSION PASSED</div><div class="pc-t" id="pcTitle"></div><div class="pc-r" id="pcReward"></div><div class="pc-s" id="pcRep"></div>';
-  document.body.appendChild(card);
+  (document.getElementById('rstack') || document.body).appendChild(card);
   const tint = document.createElement('div'); tint.id = 'downTint'; document.body.appendChild(tint);
 
   let cur = null; // { kind, t, dur, ... }
