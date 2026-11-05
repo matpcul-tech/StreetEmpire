@@ -22,13 +22,18 @@ async function stats(file, rect) {
   const sd = Math.sqrt(L.reduce((a, b) => a + (b - mean) ** 2, 0) / L.length);
   return { mean: +mean.toFixed(1), p10: +L[Math.floor(L.length * 0.1)].toFixed(1), min: +L[0].toFixed(1), sd: +sd.toFixed(1), sat: +(sat / L.length).toFixed(3), rect: region, w: info.width, h: info.height };
 }
-// A q= already on the base URL must not win over the quality this pass asked for.
+// The pass picks the quality. An existing q= is replaced, and a second ? (from
+// appending "?q=" onto a url that already has a query) cannot leave a poisoned value.
 function withQuality(raw, q) {
-  const u = new URL(raw, 'http://localhost');
+  const u = new URL(String(raw), 'http://localhost');
   if (q) u.searchParams.set('q', q);
   else u.searchParams.delete('q');
   return u.href;
 }
+const qCheck = new URL(withQuality('http://127.0.0.1:9/?q=potato?q=low', 'potato'));
+if (qCheck.searchParams.getAll('q').join(',') !== 'potato') throw new Error('visual-qa failed to replace q');
+const qClear = new URL(withQuality('http://127.0.0.1:9/?q=potato', ''));
+if (qClear.searchParams.has('q')) throw new Error('visual-qa failed to clear q for the default pass');
 const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = []; let fail = [];
 for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev0, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]].filter(([d]) => (process.env.DEVS ?? 'desktop,phone').split(',').includes(d))) {
