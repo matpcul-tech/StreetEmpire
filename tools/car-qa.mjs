@@ -32,9 +32,10 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [nam
       // line the cars up along a real street: anchor on a traffic car, spread along its heading, camera off to the side
       const A = window.__anchor ||= (() => { const a = s.cars.find((c) => c.type === 'taxi' && !c.wrecked) || s.cars[0]; return { x: a.x, z: a.z, ry: a.ry }; })();
       const fx = Math.sin(A.ry), fz = Math.cos(A.ry), rx = Math.cos(A.ry), rz = -Math.sin(A.ry), n = cars.length, sp = 6.5;
-      window.__hold = setInterval(() => { s.t = t; cars.forEach((c, i) => { const k = (i - (n - 1) / 2) * sp; c.x = A.x + fx * k; c.z = A.z + fz * k; c.ry = A.ry + 0.7; c.v = 0; c.ai = false; c.driver = null; }); pl.x = A.x - rx * 9; pl.z = A.z - rz * 9; }, 16);
+      const others = pick.filter((c) => !cars.includes(c));
+      window.__hold = setInterval(() => { s.t = t; others.forEach((c, i) => { c.x = A.x + fx * (40 + i * 7); c.z = A.z + fz * (40 + i * 7); c.v = 0; c.ai = false; c.driver = null; }); cars.forEach((c, i) => { const k = (i - (n - 1) / 2) * sp; c.x = A.x + fx * k; c.z = A.z + fz * k; c.ry = A.ry + 0.7; c.v = 0; c.ai = false; c.driver = null; }); pl.x = A.x - rx * 9; pl.z = A.z - rz * 9; }, 16);
       const d = shot === 'lowrider' ? 0 : phone ? 15 : 17;
-      window.__camOv = shot === 'lowrider' ? { x: A.x + fx * 3.0 + rx * 3.0, y: 1.4, z: A.z + fz * 3.0 + rz * 3.0, lx: A.x, ly: 0.55, lz: A.z } : { x: A.x + rx * d, y: phone ? 4 : 5, z: A.z + rz * d, lx: A.x, ly: 0.6, lz: A.z };
+      window.__camOv = shot === 'lowrider' ? (() => { const h = A.ry + 0.7, cf = [Math.sin(h), Math.cos(h)], cr = [Math.cos(h), -Math.sin(h)]; return { x: A.x + cf[0] * 2.2 + cr[0] * 3.8, y: 1.2, z: A.z + cf[1] * 2.2 + cr[1] * 3.8, lx: A.x + cf[0] * 0.3, ly: 0.45, lz: A.z + cf[1] * 0.3 }; })() : { x: A.x + rx * d, y: phone ? 4 : 5, z: A.z + rz * d, lx: A.x, ly: 0.6, lz: A.z };
     }, { t, phone: name === 'phone', shot });
     await page.waitForTimeout(2500);
     await page.screenshot({ path: `${dir}/${dev}-${tod}-${shot}.png` });

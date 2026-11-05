@@ -6,8 +6,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-// lowrider reuses the sedan body, lowered, with candy paint and chrome trim
-const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police' };
+// lowrider: Street Empire pack kitbash (tools/build-se-cars.mjs)
+const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police', lowrider: '../se-pack/cars/lowrider' };
 const templates = {};
 // quality: low and potato skip reflective glass and use cheaper decals; no extra lights or shadows anywhere
 const Q = { low: false, potato: false };
@@ -91,7 +91,7 @@ function bodyMaterial(wear = 0, kind = 0, stripe = 0xffffff) {
           float r = length(vP.yz), a = atan(vP.z, vP.y);
           if (vMetal < 0.5) { c = mix(c, vec3(0.2), step(0.66, r) * step(r, 0.78) * step(0.5, abs(vON.x))); // tire sidewall band
             c *= 0.85 + 0.3 * step(0.97, fract(a * 9.549)); } // tread blocks
-          else if (uKind > 4.5) { float sp = smoothstep(0.75, 1.0, abs(sin(a * 18.0 + r * 9.0))) + smoothstep(0.75, 1.0, abs(sin(a * 18.0 - r * 9.0))); c = mix(c * 0.25, c, max(step(r, 0.16), min(1.0, sp + step(0.5, r)))); } // wire spokes
+          else if (uKind > 4.5) { c *= 0.9 + 0.1 * step(0.5, r); } // real wire spokes come from the lowrider GLB
           else { c *= mix(0.35, 1.0, max(step(r, 0.2), step(0.0, sin(a * 5.0)) * step(r, 0.55) + step(0.5, r))); } // five spoke rim
         }
         // lowrider: two tone body, candy lower, cream upper, gold pinstripe
@@ -142,7 +142,7 @@ const geoCache = new Map();
 function carGeometry(type, paint) {
   const key = type + ':' + paint;
   if (geoCache.has(key)) return geoCache.get(key);
-  const T = templates[type === 'lowrider' ? 'sedan' : type] || templates.sedan;
+  const T = templates[type] || templates.sedan;
   T.scene.updateMatrixWorld(true);
   const body = [], wheels = [], col = new THREE.Color();
   const pushGeo = (mesh, mat, matrix, group, start, count) => {
@@ -157,10 +157,11 @@ function carGeometry(type, paint) {
     if (/lightFront/i.test(n)) lamp = 1; else if (/lightBack/i.test(n)) lamp = 2;
     if (/paint/i.test(n) && type !== 'police' && type !== 'taxi') col.setHex(type === 'lowrider' ? PAINT_LOW[paint % PAINT_LOW.length] : PAINT[paint % PAINT.length]);
     else if (/window/i.test(n)) { col.setHex(0x0c1218); metal = 2; }
+    else if (/chrome/i.test(n)) { col.setHex(0xe4e4e4); metal = 1; }
     else if (/plastic/i.test(n) && type === 'lowrider') { col.setHex(0xd8d8d8); metal = 1; }
     else if (/carTire/i.test(n)) col.setHex(0x161616);
     else if (/wheelInside/i.test(n)) { col.setHex(paint % 3 === 0 ? 0xd8d8d8 : paint % 3 === 1 ? 0x2a2a2a : 0xa89058); metal = paint % 3 === 1 ? 0 : 1; }
-    else if (/_default/i.test(n) && type === 'lowrider') { col.setHex(0xe0e0e0); metal = 1; }
+    else if (/_default/i.test(n) && type === 'lowrider') col.setHex(PAINT_LOW[paint % PAINT_LOW.length]); // fenders in candy, chrome comes from the pack parts
     else col.copy(mat.color);
     const cnt = g.attributes.position.count, c = new Float32Array(cnt * 3), m = new Float32Array(cnt), d = new Float32Array(cnt);
     const lm = new Float32Array(cnt).fill(lamp);
@@ -193,7 +194,7 @@ function carGeometry(type, paint) {
       b.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).map((_, i) => [col.r, col.g, col.b][i % 3]), 3)); b.setAttribute('aMetal', new THREE.BufferAttribute(new Float32Array(n).fill(metal), 1));
       b.setAttribute('aDirt', new THREE.BufferAttribute(new Float32Array(n), 1)); b.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(n), 1)); solid.push(b); };
     const by = bx.min.y + sz.y * 0.2, bw = sz.x * 0.94, bh = sz.y * 0.07, bd = sz.z * 0.035;
-    add(bw, bh, bd, 0, by, bx.min.z + bd * 0.3, bcol, chrome ? 1 : 0); add(bw, bh, bd, 0, by, bx.max.z - bd * 0.3, bcol, chrome ? 1 : 0);
+    if (!chrome) { add(bw, bh, bd, 0, by, bx.min.z + bd * 0.3, bcol, 0); add(bw, bh, bd, 0, by, bx.max.z - bd * 0.3, bcol, 0); } // the lowrider GLB has its own chrome bumpers
     const mc = chrome ? bcol : new THREE.Color(0x1c1c1c);
     for (const sx of [-1, 1]) add(sz.x * 0.06, sz.y * 0.045, sz.z * 0.025, sx * sz.x * 0.5, bx.min.y + sz.y * 0.52, bx.min.z + sz.z * (type === 'van' ? 0.2 : 0.36), mc, chrome ? 1 : 0); }
   const merged = mergeGeometries(solid);
@@ -217,7 +218,7 @@ function carGeometry(type, paint) {
 }
 
 export function makeCar(c) {
-  const P = parts(), T = templates[c.type === 'lowrider' ? 'sedan' : c.type] || templates.sedan;
+  const P = parts(), T = templates[c.type] || templates.sedan;
   const g = new THREE.Group();
   const model = new THREE.Group();
   model.scale.setScalar(T.scale); model.position.y = -T.minY * T.scale; model.rotation.y = Math.PI; // kit faces -z
@@ -344,7 +345,7 @@ function decalAtlas() {
 }
 const UVR = { plate: (i) => [(i % 2) * 128, Math.floor(i / 2) * 32, 128, 32], sticker: (i) => [[0, 128], [128, 128], [0, 192]][i].concat([128, 64]), ad: () => [128, 192, 128, 64] };
 function decalGeometry(type, paint, body) {
-  const T = templates[type === 'lowrider' ? 'sedan' : type] || templates.sedan, k = 1 / T.scale;
+  const T = templates[type] || templates.sedan, k = 1 / T.scale;
   body.computeBoundingBox(); const bb = body.boundingBox, sz = bb.getSize(new THREE.Vector3());
   const mesh = new THREE.Mesh(body, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })), rc = new THREE.Raycaster();
   const pos = [], nrm = [], uv = [], up = new THREE.Vector3(0, 1, 0);
