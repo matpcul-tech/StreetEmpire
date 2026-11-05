@@ -36,25 +36,25 @@ function bakeBind(scene) {
   const sexOf = (o) => o.name.startsWith('f_') ? 'f' : 'm';
   const range = { m: [1e9, -1e9], f: [1e9, -1e9] };
   for (const o of meshes) {
-    const isBody = /_body$/.test(o.name); if (!isBody) continue; const R = range[sexOf(o)];
+    if (!/_body/.test(o.name)) continue; const R = range[sexOf(o)], PB = o.geometry.attributes._bake; // only body vertices (part 0) set the height
     o.skeleton.pose(); o.updateMatrixWorld(true); o.skeleton.update();
     const G = o.geometry, P = G.attributes.position, N = G.attributes.normal, J = G.attributes.skinIndex, W = G.attributes.skinWeight;
     const bp = new Float32Array(P.count * 3), bn = new Float32Array(P.count * 3);
     for (let i = 0; i < P.count; i++) {
-      o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); bp.set([v.x, v.y, v.z], i * 3); R[0] = Math.min(R[0], v.y); R[1] = Math.max(R[1], v.y);
+      o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); bp.set([v.x, v.y, v.z], i * 3); if (!PB || PB.getW(i) < 0.5) { R[0] = Math.min(R[0], v.y); R[1] = Math.max(R[1], v.y); }
       m.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
       for (let k = 0; k < 4; k++) { const w = W.getComponent(i, k); if (!w) continue; const b = J.getComponent(i, k); t.multiplyMatrices(o.skeleton.bones[b].matrixWorld, o.skeleton.boneInverses[b]); for (let q = 0; q < 16; q++) m.elements[q] += t.elements[q] * w; }
       n3.setFromMatrix4(t.multiplyMatrices(m, o.bindMatrix)).invert().transpose();
       nv.fromBufferAttribute(N, i).applyMatrix3(n3).normalize(); bn.set([nv.x, nv.y, nv.z], i * 3);
     }
-    out.push([G, bp, bn, sexOf(o)]);
+    out.push([G, bp, bn, sexOf(o), PB]);
   }
   fit = {};
   for (const sx of ['m', 'f']) { const [lo, hi] = range[sx]; fit[sx] = { k: 1 / (hi - lo), lo, n: 1.829 / (hi - lo) }; }
   for (const [G, bp, bn, sx] of out) { const { n: k, lo } = fit[sx]; for (let i = 0; i < bp.length; i += 3) { bp[i] *= k; bp[i + 1] = (bp[i + 1] - lo) * k; bp[i + 2] *= k; } G.setAttribute('bpos', new THREE.BufferAttribute(bp, 3)); G.setAttribute('bnrm', new THREE.BufferAttribute(bn, 3)); }
   // measure the male skull and neck (normalized meters) so caps, bandanas and chains fit the real head
-  const mb = out.find((o) => o[3] === 'm'); if (mb) { const bp = mb[1]; let top = 0, zs = 0, zn = 0, hw = 0, nw = 0, nz = 0, nn = 0;
-    for (let i = 0; i < bp.length; i += 3) { const x = bp[i], y = bp[i + 1], z = bp[i + 2]; top = Math.max(top, y); if (y > 1.72) { zs += z; zn++; } if (y > 1.7 && y < 1.76) hw = Math.max(hw, Math.abs(x)); if (y > 1.5 && y < 1.55 && Math.abs(x) < 0.09) { nw = Math.max(nw, Math.abs(x)); nz += z; nn++; } }
+  const mb = out.find((o) => o[3] === 'm'); if (mb) { const bp = mb[1], PB = mb[4]; let top = 0, zs = 0, zn = 0, hw = 0, nw = 0, nz = 0, nn = 0;
+    for (let i = 0; i < bp.length; i += 3) { if (PB && PB.getW(i / 3) > 0.5) continue; const x = bp[i], y = bp[i + 1], z = bp[i + 2]; top = Math.max(top, y); if (y > 1.72) { zs += z; zn++; } if (y > 1.7 && y < 1.76) hw = Math.max(hw, Math.abs(x)); if (y > 1.5 && y < 1.55 && Math.abs(x) < 0.09) { nw = Math.max(nw, Math.abs(x)); nz += z; nn++; } }
     Object.assign(SKULL, { top, z: zs / Math.max(1, zn), r: hw * 1.04, neckY: 1.525, neckR: nw * 1.08, neckZ: nz / Math.max(1, nn) }); ACC.r = SKULL.r; ACC.neckR = SKULL.neckR; }
 }
 export const ready = () => !!tmpl;
@@ -115,7 +115,11 @@ float seg7(int d, vec2 p){
   return o;
 }
 uniform float uTexSkin;
+varying vec4 vBake;
 vec3 paint(vec3 texC){
+  // joined parts: eyes keep their baked texel, hair, brows and beard take the character hair color
+  if (vBake.a > 1.5) return uHairC * (0.55 + 1.3 * dot(vBake.rgb, vec3(0.333)) ) * (0.9 + 0.2 * vn(vB * 300.0));
+  if (vBake.a > 0.5) return vBake.rgb * vBake.rgb; // srgb texel to linear
   vec3 p = vB; float ax = abs(p.x), y = p.y;
   vec3 sk = uSkin * clamp(dot(texC, vec3(0.299, 0.587, 0.114)) / uTexSkin, 0.55, 1.4); // skin keeps the model's face and body detail, tinted to this character
   int top = int(uStyle.x+0.5), pants = int(uStyle.y+0.5), hair = int(uStyle.z+0.5);
@@ -242,12 +246,12 @@ function clothMat(L) {
   if (matCache.has(key)) return matCache.get(key);
   const u = { uSkin: { value: col(L.skin) }, uTop: { value: col(L.topC) }, uTrim: { value: col(L.trim) }, uLegs: { value: col(L.legs) }, uShoes: { value: col(L.shoes) }, uHairC: { value: col(L.hairC) },
     uStyle: { value: new THREE.Vector4(L.top, L.pants, L.hair, L.beard) }, uMisc: { value: new THREE.Vector2(L.grit, L.num) } };
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45, map: PARTMAT[L.female ? 'f_body' : 'm_body']?.map || null });
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45, map: PARTMAT[L.female ? 'f_body_none' : 'm_body_none']?.map || null });
   u.uTexSkin = { value: 0.25 };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u, NIGHT);
     sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
-    sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
+    sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; attribute vec4 _bake; varying vec3 vB; varying vec3 vBN; varying vec4 vBake;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm; vBake = _bake;');
     sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint(diffuseColor.rgb);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.22 + alb * vec3(0.42, 0.38, 0.34)); // lift multiplies albedo only, no grey add')
       .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
@@ -258,8 +262,6 @@ function clothMat(L) {
 
 // ---- head and neck accessories, in head bone space (meters, +y up the bone) ----
 export const ACC = { y: 0.165, z: 0.01, r: 0.106, neckY: 0.045, neckR: 0.068, fwd: 1 };
-const hairMats = new Map();
-function hairMat(base, c) { const k = (base?.uuid || '') + c; if (!hairMats.has(k)) { const m = base ? base.clone() : new THREE.MeshStandardMaterial(); m.color = new THREE.Color(c).multiplyScalar(2.0); m.roughness = 0.75; m.metalness = 0; hairMats.set(k, m); } return hairMats.get(k); }
 let accGeo = null;
 const accMats = new Map();
 function accMat(c, rough = 0.85) { const k = c + ':' + rough; if (!accMats.has(k)) accMats.set(k, new THREE.MeshStandardMaterial({ color: c, roughness: rough, vertexColors: true })); return accMats.get(k); }
@@ -317,11 +319,11 @@ export function makeCharacter(L, shadow) {
   const sx = L.female ? 'f_' : 'm_', A0 = L.acc || {}, covered = A0.cap || A0.rag || A0.police || A0.hat;
   // hair: real meshes; short under caps and hats so nothing pokes through
   const hairPart = L.hair === 2 ? null : L.female ? (covered ? 'hair_buzz' : (L.hairStyle ?? 0) % 2 ? 'hair_buns' : 'hair_long') : covered ? 'hair_buzz' : 'hair_short';
-  const want = new Set([sx + 'body', sx + 'eyes', sx + 'brows', hairPart, L.beard > 0 && !L.female ? 'beard' : null]);
+  const want = new Set([sx + 'body_' + (hairPart ? hairPart.slice(5) : 'none') + (L.beard > 0 && !L.female ? '_beard' : '')]); // one joined mesh per look
   const drop = [];
   root.traverse((o) => {
     if (o.isSkinnedMesh && !want.has(o.name)) { drop.push(o); return; }
-    if (o.isMesh) { o.material = /_body$/.test(o.name) ? mat : /eyes$/.test(o.name) ? PARTMAT[o.name] : hairMat(PARTMAT[o.name], L.hairC); o.castShadow = !!shadow; o.frustumCulled = false; }
+    if (o.isMesh) { o.material = mat; o.castShadow = !!shadow; o.frustumCulled = false; }
     if (o.isBone) {
       if (o.name === 'hand_r') hand = o; else if (o.name === 'Head') head = o; else if (o.name === 'neck_01') neckB = o; else if (o.name === 'pelvis') hips = o;
     }
@@ -331,7 +333,7 @@ export function makeCharacter(L, shadow) {
   // accessories are placed in bind pose world space (normalized meters), then parented to the bone
   root.updateMatrixWorld(true);
   const kk = fit.m.n, toT = (x, y, z) => new THREE.Vector3(x / kk, y / kk + fit.m.lo, z / kk), q = new THREE.Quaternion(), ws = new THREE.Vector3();
-  let bodyM = null; root.traverse((o) => { if (o.isSkinnedMesh && /_body$/.test(o.name)) bodyM = o; });
+  let bodyM = null; root.traverse((o) => { if (o.isSkinnedMesh && /_body/.test(o.name)) bodyM = o; });
   const put = (bone, geo, c, y, z = 0, rough) => { if (!geo.attributes.color) geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geo.attributes.position.count * 3).fill(1), 3)); const m = new THREE.Mesh(geo, accMat(c, rough));
     // bone frame at bind, straight from the skin (independent of the current pose)
     const sk = bodyM.skeleton, bi = sk.bones.indexOf(bone), Bw = bodyM.bindMatrix.clone().multiply(sk.boneInverses[bi].clone().invert()), p = new THREE.Vector3();
@@ -344,7 +346,7 @@ export function makeCharacter(L, shadow) {
   const A = L.acc || {}, AG = accessories();
   if (head) {
     const HY = SKULL.top - 0.065, HZ = SKULL.z;
-    if (A.cap) { const m = put(head, AG.cap, A.cap, HY, HZ); if (A.back) m.rotateY(Math.PI); }
+    if (A.cap) { const m = put(head, AG.cap, A.cap, HY + 0.008, HZ); m.scale.multiplyScalar(1.05); if (A.back) m.rotateY(Math.PI); } // a touch larger than the skull so hair never pokes through
     else if (A.rag) put(head, AG.doRag, A.rag, HY - 0.008, HZ);
     else if (A.police) { put(head, AG.police, A.police, HY + 0.01, HZ); put(head, new THREE.BoxGeometry(0.025, 0.025, 0.004), 0xd0b040, HY + 0.045, HZ + ACC.fwd * 0.118, 0.3); }
     else if (A.hat) put(head, AG.hat, A.hat, HY + 0.03, HZ);

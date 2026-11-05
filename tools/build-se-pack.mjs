@@ -8,7 +8,7 @@
 //   public/models/se-pack/people_lod.glb  (low and potato, body about 2k tris)
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
-import { mergeDocuments, weld, prune, dedup, resample, textureCompress, meshopt, unpartition, simplifyPrimitive } from '@gltf-transform/functions';
+import { mergeDocuments, weld, prune, dedup, resample, textureCompress, meshopt, unpartition, simplifyPrimitive, joinPrimitives } from '@gltf-transform/functions';
 import { MeshoptSimplifier, MeshoptEncoder } from 'meshoptimizer';
 import sharp from 'sharp';
 import path from 'node:path';
@@ -69,11 +69,41 @@ async function build(out, bodyRatio, hairRatio, texSize) {
   // per part simplify: gltf-transform simplify is document wide, so run it per mesh by temporarily detaching
   for (const [n, nm] of partOf) { if (nm === 'mannequin') continue; const m = n.getMesh(); const r = /_body$/.test(nm) ? bodyRatio : /eyes|brows/.test(nm) ? hairRatio * 0.6 : /long|buns/.test(nm) ? hairRatio * 0.7 : hairRatio;
     for (const p of m.listPrimitives()) simplifyPrimitive(p, { simplifier: MeshoptSimplifier, ratio: r, error: 0.02, lockBorder: false }); }
-  console.log([...partOf].map(([n, nm]) => nm + ':' + (n.getSkin() ? n.getSkin().listJoints().length : 'noskin') + ':' + (n.getSkin() === main)).join(' '));
+  // bake one skinned mesh per look (sex x hair x beard): body plus eyes, brows, hair and beard joined into a
+  // single primitive, so a character is one draw call. Part textures are baked into a per vertex _BAKE
+  // attribute (rgb = texel color, a = part: 0 body, 1 eyes, 2 hair, brows and beard).
+  await bakeAndJoin(doc, partOf, main);
   await doc.transform(unpartition(), prune(), dedup(), resample(), textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: 80 }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   await io.write(out, doc);
   let tris = {}; for (const m of doc.getRoot().listMeshes()) for (const p of m.listPrimitives()) tris[m.getName()] = (tris[m.getName()] || 0) + p.getIndices().getCount() / 3;
   console.log(out, JSON.stringify(tris), 'anims', doc.getRoot().listAnimations().length);
+}
+const LOOKS = { m: [['short', 0], ['short', 1], ['buzz', 0], ['buzz', 1], ['none', 0], ['none', 1]], f: [['long', 0], ['buns', 0], ['buzz', 0], ['none', 0]] };
+async function texels(tex) { const { data, info } = await sharp(Buffer.from(tex.getImage())).removeAlpha().raw().toBuffer({ resolveWithObject: true }); return { data, w: info.width, h: info.height }; }
+async function normalizePrim(p, part, doc) {
+  const buf = doc.getRoot().listBuffers()[0], n = p.getAttribute('POSITION').getCount(), v = [];
+  const conv = (sem, Arr, size) => { const a = p.getAttribute(sem); const out = new Arr(n * size); for (let i = 0; i < n; i++) { a.getElement(i, v); for (let k = 0; k < size; k++) out[i * size + k] = v[k] ?? 0; } p.setAttribute(sem, doc.createAccessor().setType(size === 2 ? 'VEC2' : size === 3 ? 'VEC3' : 'VEC4').setArray(out).setBuffer(buf)); };
+  conv('POSITION', Float32Array, 3); conv('NORMAL', Float32Array, 3); conv('TEXCOORD_0', Float32Array, 2); conv('JOINTS_0', Uint16Array, 4); conv('WEIGHTS_0', Float32Array, 4);
+  for (const sem of p.listSemantics()) if (!['POSITION', 'NORMAL', 'TEXCOORD_0', 'JOINTS_0', 'WEIGHTS_0'].includes(sem)) p.setAttribute(sem, null);
+  const bake = new Float32Array(n * 4), uv = p.getAttribute('TEXCOORD_0'), tex = part ? p.getMaterial()?.getBaseColorTexture() : null, T = tex ? await texels(tex) : null;
+  for (let i = 0; i < n; i++) { bake[i * 4 + 3] = part; if (!T) continue; uv.getElement(i, v); const x = Math.min(T.w - 1, Math.floor((((v[0] % 1) + 1) % 1) * T.w)), y = Math.min(T.h - 1, Math.floor((((v[1] % 1) + 1) % 1) * T.h)), o = (y * T.w + x) * 3;
+    for (let k = 0; k < 3; k++) bake[i * 4 + k] = T.data[o + k] / 255; }
+  p.setAttribute('_BAKE', doc.createAccessor().setType('VEC4').setArray(bake).setBuffer(buf));
+  if (!p.getIndices()) { const idx = new Uint32Array(n).map((_, i) => i); p.setIndices(doc.createAccessor().setType('SCALAR').setArray(idx).setBuffer(buf)); }
+  else { const I = p.getIndices(); p.setIndices(doc.createAccessor().setType('SCALAR').setArray(new Uint32Array(I.getArray())).setBuffer(buf)); }
+}
+async function bakeAndJoin(doc, partOf, main) {
+  const byPart = {}; for (const [n, nm] of partOf) if (nm !== 'mannequin') byPart[nm] = n;
+  for (const [k, node] of Object.entries(byPart)) for (const p of node.getMesh().listPrimitives()) await normalizePrim(p, /_body$/.test(k) ? 0 : /eyes$/.test(k) ? 1 : 2, doc);
+  const scene = doc.getRoot().listScenes()[0];
+  for (const sx of ['m', 'f']) for (const [hair, beard] of LOOKS[sx]) {
+    const parts = [sx + '_body', sx + '_eyes', sx + '_brows', hair === 'none' ? null : 'hair_' + hair, beard ? 'beard' : null].filter(Boolean);
+    const prims = parts.flatMap((k) => byPart[k].getMesh().listPrimitives());
+    const j = joinPrimitives(prims, { skipValidation: true }); j.setMaterial(sx === 'm' ? byPart.m_body.getMesh().listPrimitives()[0].getMaterial() : byPart.f_body.getMesh().listPrimitives()[0].getMaterial());
+    const name = `${sx}_body_${hair}${beard ? '_beard' : ''}`;
+    scene.addChild(doc.createNode(name).setMesh(doc.createMesh(name).addPrimitive(j)).setSkin(main));
+  }
+  for (const n of Object.values(byPart)) { n.getMesh().dispose(); n.dispose(); }
 }
 function inv(m) { // 4x4 column major inverse (affine)
   const [a, b, c, , d, e, f, , g, h, i, , x, y, z] = m; const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g, det = a * A + b * B + c * C;
