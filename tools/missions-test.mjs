@@ -194,6 +194,7 @@ check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChaser
   const stolen = s4.fx.find((f) => f.type === 'stash' && f.stolen && f.block === b.id);
   check(`raid capture flips the block and steals the stash (owner ${b.owner})`, b.owner === 'reds' && stolen && stolen.amt >= 80 && stolen.crew === 'reds' && (b.stash || 0) < 1 && s4.crews.reds.cash >= reds0 + 80);
   check('away loss sets a return waypoint', s4.waypoint && s4.waypoint.block === b.id && s4.waypoint.label === 'LOST' && s4.fx.some((f) => f.type === 'lost' && f.block === b.id));
+  check('loss log says from you', s4.events.some((e) => e.text.includes('from you.')) && !s4.events.some((e) => e.text.includes('from You')));
 }
 
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL MISSIONS PASSED', `game time ${t.toFixed(0)}s`);

@@ -475,12 +475,35 @@ function handleFx(list) {
 
 // objective arrow pinned to the screen edge, with distance, when the marker is off screen
 const radarEl = document.getElementById('radar'), arrowEl = document.getElementById('objArrow'), arrowTxt = document.getElementById('objDist'), projV = new THREE.Vector3();
-// keep the arrow off the radar, the HUD column and the thumb controls
+// keep the arrow chip (triangle plus the distance label) off the radar, the HUD and the thumb controls
 function arrowClear(ax, ay, ex, W, H) {
+  const box = (id) => {
+    const el = document.getElementById(id); if (!el) return null;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return null;
+    const r = el.getBoundingClientRect();
+    return r.width > 2 && r.height > 2 ? r : null;
+  };
   const rr = radarEl.getBoundingClientRect();
-  if (isTouch && ay > H - 200 && (ax < 200 || ax > W - 250)) ay = H - 210;
-  if (ax < rr.right + 24 && ay < rr.bottom + 28) { if (ex < 0 && rr.bottom + 34 < H - 210) ay = rr.bottom + 34; else ax = rr.right + 30; }
-  if (ax > W - 190 && ay < 150) ay = 160;
+  const halfW = Math.max(40, arrowEl.offsetWidth / 2 + 6);
+  const halfH = Math.max(28, arrowEl.offsetHeight / 2 + 6);
+  const hud = box('hud'), btns = box('btns'), stick = box('stick'), steer = box('steer');
+  const hits = (r) => r && ax + halfW > r.left && ax - halfW < r.right && ay + halfH > r.top && ay - halfH < r.bottom;
+  if (hits(btns)) {
+    const above = btns.top - halfH - 8;
+    if (!hud || above - halfH > hud.bottom + 4) ay = above;
+    else if (ex >= 0) ax = Math.min(ax, btns.left - halfW - 8);
+    else ax = Math.max(ax, btns.right + halfW + 8);
+  }
+  if (hits(hud)) ax = Math.min(ax, hud.left - halfW - 8);
+  if (hits(stick)) ax = Math.max(ax, stick.right + halfW + 8);
+  if (hits(steer)) ax = Math.max(ax, steer.right + halfW + 8);
+  if (ax - halfW < rr.right + 6 && ay - halfH < rr.bottom + 6) {
+    if (rr.bottom + halfH + 10 < H - 90) ay = rr.bottom + halfH + 10;
+    else ax = rr.right + halfW + 8;
+  }
+  ax = Math.max(halfW + 2, Math.min(W - halfW - 2, ax));
+  ay = Math.max(halfH + 2, Math.min(H - halfH - 2, ay));
   return [ax, ay];
 }
 function objArrow(tgt, p) {
@@ -751,6 +774,7 @@ function frame(now) {
   // HUD
   const cr = s.crews.player;
   $('cash').textContent = '$' + String(Math.floor(cr.cash)).padStart(8, '0');
+  document.documentElement.style.setProperty('--hudb', Math.ceil($('hud').getBoundingClientRect().bottom) + 'px');
   // uncollected hustle cash, so the popup matches what is actually sitting on the blocks
   if (started && !paused) {
     incT += dt; if (incT >= 8) {
@@ -790,7 +814,7 @@ function frame(now) {
   $('mtitle').textContent = m ? m.title + ':' : '';
   $('mtext').textContent = !m ? '' : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
-  if (here !== lastHere) { lastHere = here; if (here) { const guardNote = here.owner === 'player' ? `, ${guardsOf(s, here).length} guards${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
+  if (here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
   if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');

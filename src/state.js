@@ -924,7 +924,8 @@ export function step(s, dt) {
           log(s, `${n} guard${n > 1 ? 's' : ''} now hold ${b.hustle}.`);
         }
         for (const e of s.ents) if (e.crew === k && e.role === 'attacker' && e.target === b.id) e.role = 'defender';
-        log(s, `${CREWS[k].name} took ${b.hustle} block from ${CREWS[prev].name}.`);
+        const fromWhom = prev === 'player' ? 'you' : CREWS[prev].name;
+        log(s, `${CREWS[k].name} took ${b.hustle} block from ${fromWhom}.`);
         s.fx.push({ type: 'capture', block: b.id, crew: k });
       }
     } else if (b.capT > 0) { b.capT = Math.max(0, b.capT - dt * 2); if (b.capT === 0) b.capBy = null; }

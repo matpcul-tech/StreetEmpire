@@ -124,9 +124,9 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
 #msg:empty{display:none}
 @media (orientation:portrait) and (max-width:700px){#msg,.touch #msg{position:static!important;font-size:12px;text-align:left!important}}
 /* cash popups right under the cash counter */
-#pops,.touch #pops{top:calc(var(--st) + 136px);bottom:auto;right:calc(var(--sr) + 12px)}
+#pops,.touch #pops{top:calc(var(--hudb, 156px) + 6px);bottom:auto;right:calc(var(--sr) + 12px)}
 .pop{font-size:14px}
-@media (max-width:500px),(max-height:500px){#pops,.touch #pops{top:calc(var(--st) + 104px)}.pop{font-size:12px}}
+@media (max-width:500px),(max-height:500px){.pop{font-size:12px}}
 /* prompt: small, low, desktop only (phones have the TALK / CAR button) */
 #prompt{bottom:calc(var(--sb) + 84px);font-size:14px;padding:4px 10px;border-width:1px}
 .touch #prompt{display:none!important}
@@ -152,6 +152,14 @@ body.cine-on #lcol{visibility:hidden}
 @media (max-height:500px) and (orientation:landscape){.touch #big{top:calc(var(--st) + 98px)}}
 @media (max-height:500px) and (orientation:landscape){.touch #bPause.show{top:auto;bottom:calc(var(--sb) + 10px)}#pops,.touch #pops{top:calc(var(--st) + 124px)}}
 @media (max-height:500px) and (orientation:landscape){#pops,.touch #pops{top:calc(var(--st) + 52px);right:calc(var(--sr) + 178px)}}
+/* short landscape: the right HUD already fills the top, so the thumb buttons have to start below Rep/Turf */
+@media (max-height:500px) and (orientation:landscape){
+  #btns{gap:6px;bottom:calc(var(--sb) + 6px)}
+  #touch button{width:56px;height:52px}
+  #touch button.big{width:72px;height:64px;font-size:14px}
+  #touch button.small{height:26px;padding:0 7px;font-size:10px}
+  #steer button{width:64px;height:64px}
+}
 
 /* v0.10.1c real phone: district tag at the top edge, fades fast; objective one line, never over the radar; Rep/Turf clear of buttons; stars contrast */
 #dtag{position:fixed;top:calc(var(--st) + 2px);left:50%;transform:translateX(-50%);font:bold 11px Arial,sans-serif;color:#fc6;background:rgba(0,0,0,.45);border-radius:4px;padding:2px 8px;pointer-events:none;opacity:0;transition:opacity .4s;white-space:nowrap;z-index:5}
