@@ -6,7 +6,7 @@ import { prune, dedup, resample, quantize, meshopt, weld } from '@gltf-transform
 import { MeshoptEncoder } from 'meshoptimizer';
 await MeshoptEncoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
-// people now come from tools/trim-ual.mjs (Universal Animation Library)
+// people now come from tools/build-se-pack.mjs (Street Empire pack)
 for (const n of ['sedan', 'sedanSports', 'suv', 'van', 'police', 'taxi']) {
   const doc = await io.read(`/tmp/cars/${n}.glb`);
   await doc.transform(prune(), dedup(), weld(), quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
