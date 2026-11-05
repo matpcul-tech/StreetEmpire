@@ -101,7 +101,30 @@ function bodyMaterial(wear = 0, kind = 0, stripe = 0xffffff) {
           c *= 0.9 + 0.25 * cn(vP * 140.0); } // metal flake
         // livery and markings: taxi checker band, police doors, muscle stripes, crew stickers
         if (uKind > 0.5 && uKind < 1.5 && abs(vP.y - 0.5) < 0.035 && paintable > 0.0) c = mod(floor(vP.z*40.0)+floor(vP.y*60.0), 2.0) < 1.0 ? vec3(0.05) : vec3(0.95);
-        if (uKind > 1.5 && uKind < 2.5 && abs(vON.x) > 0.6 && vP.y < 0.55 && vP.y > 0.25 && abs(vP.z - 0.5) < 0.18 && paintable > 0.0) c = vec3(0.92);
+        if (uKind > 1.5 && uKind < 2.5 && abs(vON.x) > 0.6 && paintable > 0.0) {
+          // door panel: white field, navy stripe, simple POLICE word (box letters, made-up metro look)
+          if (vP.y < 0.55 && vP.y > 0.28 && abs(vP.z - 0.5) < 0.2) {
+            c = vec3(0.93, 0.93, 0.95);
+            if (abs(vP.y - 0.42) < 0.018) c = vec3(0.12, 0.22, 0.45); // navy stripe
+            // letter band: six cells across the door for P O L I C E
+            float lz = (vP.z - 0.34) / 0.32; // 0..1 across the panel
+            float ly = (vP.y - 0.33) / 0.07; // 0..1 letter height
+            if (lz > 0.0 && lz < 1.0 && ly > 0.0 && ly < 1.0 && abs(vP.y - 0.42) >= 0.018) {
+              float cell = floor(lz * 6.0), u = fract(lz * 6.0), v = ly;
+              float ink = 0.0;
+              // crude block letters
+              if (cell < 0.5) { ink = step(0.15,u)*step(u,0.35)*step(0.1,v)*step(v,0.9) + step(0.15,u)*step(u,0.75)*step(0.1,v)*step(v,0.28) + step(0.15,u)*step(u,0.75)*step(0.45,v)*step(v,0.62) + step(0.55,u)*step(u,0.75)*step(0.1,v)*step(v,0.62); } // P
+              else if (cell < 1.5) { ink = step(0.2,u)*step(u,0.8)*step(0.1,v)*step(v,0.28) + step(0.2,u)*step(u,0.8)*step(0.72,v)*step(v,0.9) + step(0.15,u)*step(u,0.35)*step(0.1,v)*step(v,0.9) + step(0.65,u)*step(u,0.85)*step(0.1,v)*step(v,0.9); } // O
+              else if (cell < 2.5) { ink = step(0.15,u)*step(u,0.35)*step(0.1,v)*step(v,0.9) + step(0.15,u)*step(u,0.8)*step(0.1,v)*step(v,0.28); } // L
+              else if (cell < 3.5) { ink = step(0.35,u)*step(u,0.65)*step(0.1,v)*step(v,0.9); } // I
+              else if (cell < 4.5) { ink = step(0.15,u)*step(u,0.35)*step(0.1,v)*step(v,0.9) + step(0.15,u)*step(u,0.75)*step(0.1,v)*step(v,0.28) + step(0.15,u)*step(u,0.55)*step(0.45,v)*step(v,0.62) + step(0.55,u)*step(u,0.75)*step(0.1,v)*step(v,0.55) + step(0.35,u)*step(u,0.8)*step(0.72,v)*step(v,0.9); } // C
+              else { ink = step(0.15,u)*step(u,0.35)*step(0.1,v)*step(v,0.9) + step(0.15,u)*step(u,0.8)*step(0.1,v)*step(v,0.28) + step(0.15,u)*step(u,0.8)*step(0.45,v)*step(v,0.62) + step(0.15,u)*step(u,0.8)*step(0.72,v)*step(v,0.9); } // E
+              if (ink > 0.5) c = vec3(0.08, 0.14, 0.32);
+            }
+          }
+          // thin white rocker stripe
+          if (vP.y > 0.18 && vP.y < 0.22 && abs(vP.z) < 0.85) c = vec3(0.9);
+        }
         if (uKind > 2.5 && uKind < 3.5 && abs(vP.x - 0.5) < 0.09 && abs(vP.x - 0.5) > 0.03 && vON.y > 0.3 && paintable > 0.0) c = uStripe;
         if (uKind > 3.5 && abs(vON.x) > 0.6 && vP.y > 0.25 && vP.y < 0.42 && paintable > 0.0) c = uStripe * 0.9;
         float st = cn(vec3(vP.z*9.0 + uSeed, vP.y*9.0, uSeed));
