@@ -115,5 +115,86 @@ check('Take Over passed', s.missionIdx === 4);
   check(`guards held the block against a rival attack (owner ${b.owner})`, b.owner === 'player' && r.some((e) => e.hp < 60)); }
 check('recruits never hit you', followerHits === 0);
 check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChasers <= 4);
+
+// Territory pass: stash, guard upgrade, raid warning, raid loss. Fresh states so the mission bot is left alone.
+{
+  const s2 = G.createState(5, { traffic: 0, peds: 0 });
+  const p2 = G.player(s2), home = s2.blocks[0], DT2 = 1 / 30;
+  const g0 = G.guardsOf(s2, home).length;
+  check('stash rate uses guards (1 guard is 0.6x)', Math.abs(G.stashRate(s2, home) - home.rate * (0.4 + 0.2 * g0)) < 1e-6 && g0 === 1);
+  while (G.guardsOf(s2, home).length < 3) G.spawnUnit(s2, 'player', 'defender', home.id);
+  check('stash rate rises with 3 guards (1.0x)', Math.abs(G.stashRate(s2, home) - home.rate * (0.4 + 0.2 * 3)) < 1e-6);
+  // put the extras down so the accrue check stays on the starting garrison
+  for (const e of G.guardsOf(s2, home).slice(1)) e.hp = 0;
+  const far = G.blockCenter(s2.blocks[24]);
+  p2.x = far.x; p2.z = far.z; p2.hp = p2.max = 100000;
+  const cash0 = s2.crews.player.cash;
+  let expect = 0;
+  for (let i = 0; i < 90; i++) { expect += G.stashRate(s2, home) * DT2; G.step(s2, DT2); p2.hp = p2.max; }
+  check(`stash accrues while away (~$${expect.toFixed(1)}, saw $${home.stash.toFixed(1)})`, Math.abs(home.stash - expect) < 0.05 && home.stash >= 1);
+  check('away stash does not pay the player', s2.crews.player.cash === cash0);
+  const piled = home.stash;
+  p2.x = G.blockCenter(home).x; p2.z = G.blockCenter(home).z;
+  G.applyAction(s2, p2.id, { type: 'collect' });
+  check('collect action pockets the stash', s2.crews.player.cash >= cash0 + Math.floor(piled) && home.stash < 1 && s2.fx.some((f) => f.type === 'stash' && f.block === home.id && !f.stolen));
+  home.stash = 25; p2.wasBlock = -1;
+  const cash1 = s2.crews.player.cash;
+  const rate = G.stashRate(s2, home);
+  G.step(s2, 0.5); p2.hp = p2.max;
+  check('walking onto the block pockets the stash', Math.abs((s2.crews.player.cash - cash1) - (25 + rate * 0.5)) < 0.05 && home.stash < 0.01);
+  s2.crews.player.cash = 10;
+  G.applyAction(s2, p2.id, { type: 'upgrade' });
+  check('upgrade refused when short on cash', s2.crews.player.cash === 10 && !home.upgraded);
+  s2.crews.player.cash = 100;
+  const guard = G.guardsOf(s2, home)[0];
+  const hp0 = guard.hp, max0 = guard.max;
+  G.applyAction(s2, p2.id, { type: 'upgrade' });
+  check('upgrade buys bats and health for $80', home.upgraded === 'bat' && s2.crews.player.cash === 20 && guard.weapon === 'bat' && guard.hp === hp0 + G.UPGRADE_HP && guard.max === max0 + G.UPGRADE_HP);
+  const neu = G.spawnUnit(s2, 'player', 'defender', home.id);
+  check('new guards on an armed block spawn with the upgrade', neu.weapon === 'bat' && neu.hp >= 60 + G.UPGRADE_HP);
+  G.applyAction(s2, p2.id, { type: 'upgrade' });
+  check('upgrade is once per block', s2.crews.player.cash === 20);
+}
+{
+  const s3 = G.createState(9, { traffic: 0, peds: 0 });
+  const target = s3.blocks[3];
+  target.owner = 'player';
+  for (const e of s3.ents) if (e.kind === 'npc' && e.home === target.id) e.hp = 0;
+  for (const k of ['blues', 'golds']) s3.crews[k].aiT = 999;
+  s3.crews.reds.cash = 800;
+  let raid = null;
+  for (let i = 0; i < 30 && !raid; i++) { s3.crews.reds.aiT = 0; s3.crews.reds.cash = Math.max(s3.crews.reds.cash, 800); G.step(s3, 0.05); raid = s3.fx.find((f) => f.type === 'raid' && f.eta > 0); }
+  check('raid warning fx names the block and eta', !!raid && raid.block === target.id && raid.crew === 'reds' && raid.eta >= 9 && s3.events.some((e) => /gathering to hit/.test(e.text)));
+  const atk = () => s3.ents.filter((e) => e.crew === 'reds' && e.role === 'attacker' && e.target === target.id && e.hp > 0);
+  const party = atk();
+  const spots = party.map((e) => ({ x: e.x, z: e.z, g: e.gather }));
+  check('raid party gathers before the fight', party.length >= 2 && party.every((e) => e.gather > 8) && target.raid && target.raid.eta > 8);
+  for (const k of ['reds', 'blues', 'golds']) s3.crews[k].aiT = 999;
+  for (let i = 0; i < 60; i++) G.step(s3, 1 / 30);
+  const held = atk();
+  check('raid party holds still during the gather', held.length === party.length && held.every((e, i) => Math.hypot(e.x - spots[i].x, e.z - spots[i].z) < 0.5) && target.owner === 'player' && target.raid && target.raid.eta < 9 && target.raid.eta > 6);
+  for (let i = 0; i < 400 && atk().some((e) => e.gather > 0); i++) G.step(s3, 1 / 30);
+  check('gather ends with a go warning', s3.fx.some((f) => f.type === 'raid' && f.block === target.id && f.state === 'go') && atk().every((e) => e.gather <= 0));
+  const before = atk().map((e) => ({ x: e.x, z: e.z }));
+  for (let i = 0; i < 90; i++) G.step(s3, 1 / 30);
+  const moved = atk().filter((e, i) => before[i] && Math.hypot(e.x - before[i].x, e.z - before[i].z) > 1);
+  check('raid party moves in after the gather', moved.length >= 1 && target.owner === 'player');
+}
+{
+  const s4 = G.createState(4, { traffic: 0, peds: 0 });
+  const p4 = G.player(s4), b = s4.blocks[0], c = G.blockCenter(b), DT4 = 1 / 30;
+  const away = G.blockCenter(s4.blocks[24]);
+  p4.x = away.x; p4.z = away.z; p4.hp = p4.max = 100000;
+  for (const e of G.guardsOf(s4, b)) e.hp = 0;
+  b.stash = 80;
+  for (let i = 0; i < 2; i++) G.spawnUnit(s4, 'reds', 'attacker', b.id, c.x, c.z);
+  for (const k of ['reds', 'blues', 'golds']) s4.crews[k].aiT = 999;
+  const reds0 = s4.crews.reds.cash;
+  for (let i = 0; i < Math.ceil((G.CAPTURE_TIME + 0.5) / DT4); i++) { G.step(s4, DT4); p4.hp = p4.max; }
+  const stolen = s4.fx.find((f) => f.type === 'stash' && f.stolen && f.block === b.id);
+  check(`raid capture flips the block and steals the stash (owner ${b.owner})`, b.owner === 'reds' && stolen && stolen.amt >= 80 && stolen.crew === 'reds' && (b.stash || 0) < 1 && s4.crews.reds.cash >= reds0 + 80);
+  check('away loss sets a return waypoint', s4.waypoint && s4.waypoint.block === b.id && s4.waypoint.label === 'LOST' && s4.fx.some((f) => f.type === 'lost' && f.block === b.id));
+}
+
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL MISSIONS PASSED', `game time ${t.toFixed(0)}s`);
 process.exit(fails.length ? 1 : 0);
