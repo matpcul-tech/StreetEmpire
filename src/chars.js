@@ -1,7 +1,8 @@
-// Rigged people built on Quaternius' Universal Animation Library mannequin
-// (CC0). One slim, near real figure and one rig for everyone. Outfits, faces
-// and grit are painted in the shader from bind pose coordinates (meters,
-// T pose, +z forward), so all characters share one geometry and one skeleton.
+// Rigged people from the Street Empire pack (public/models/se-pack, built by
+// tools/build-se-pack.mjs from Quaternius CC0 Universal Base Characters bodies,
+// hair and Universal Animation Library clips, slimmed and decimated). Real face,
+// eyes, brows and hair meshes; outfits and grit are still painted in the shader
+// from bind pose coordinates (meters, T pose, +z forward) over the body.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -11,13 +12,15 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 let tmpl = null;
 const clips = {};
 
-export async function loadPeople(base, onFirst) {
+export async function loadPeople(base, onFirst, potato = false) {
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  const g = await loader.loadAsync(`${base}models/ual.glb`);
+  const g = await loader.loadAsync(`${base}models/se-pack/${potato ? 'people_lod' : 'people'}.glb`);
   // bone scales set in code (female build) must survive the clips, so drop
   // scale tracks and every translation track except the hips
-  for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('DEF-hips.'))); clips[c.name] = c; }
+  for (const c of g.animations) { c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('pelvis.'))); clips[c.name] = c; }
+  if (!clips.Punch_Enter && clips.Punch_Jab) { clips.Punch_Enter = clips.Punch_Jab.clone(); clips.Punch_Enter.name = 'Punch_Enter'; } // guard pose: the jab ends with hands up
   tmpl = g.scene;
+  tmpl.traverse((o) => { if (o.isSkinnedMesh) PARTMAT[o.name] = o.material; });
   bakeBind(tmpl);
   onFirst && onFirst();
 }
@@ -28,23 +31,30 @@ function bakeBind(scene) {
   scene.updateMatrixWorld(true);
   const meshes = []; scene.traverse((o) => o.isSkinnedMesh && meshes.push(o));
   const v = new THREE.Vector3(), nv = new THREE.Vector3(), m = new THREE.Matrix4(), t = new THREE.Matrix4(), n3 = new THREE.Matrix3();
-  let lo = 1e9, hi = -1e9; const out = [];
+  const out = [];
+  const sexOf = (o) => o.name.startsWith('f_') ? 'f' : 'm';
+  const range = { m: [1e9, -1e9], f: [1e9, -1e9] };
   for (const o of meshes) {
+    const isBody = /_body$/.test(o.name); if (!isBody) continue; const R = range[sexOf(o)];
     o.skeleton.pose(); o.updateMatrixWorld(true); o.skeleton.update();
     const G = o.geometry, P = G.attributes.position, N = G.attributes.normal, J = G.attributes.skinIndex, W = G.attributes.skinWeight;
     const bp = new Float32Array(P.count * 3), bn = new Float32Array(P.count * 3);
     for (let i = 0; i < P.count; i++) {
-      o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); bp.set([v.x, v.y, v.z], i * 3); lo = Math.min(lo, v.y); hi = Math.max(hi, v.y);
+      o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld); bp.set([v.x, v.y, v.z], i * 3); R[0] = Math.min(R[0], v.y); R[1] = Math.max(R[1], v.y);
       m.set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
       for (let k = 0; k < 4; k++) { const w = W.getComponent(i, k); if (!w) continue; const b = J.getComponent(i, k); t.multiplyMatrices(o.skeleton.bones[b].matrixWorld, o.skeleton.boneInverses[b]); for (let q = 0; q < 16; q++) m.elements[q] += t.elements[q] * w; }
       n3.setFromMatrix4(t.multiplyMatrices(m, o.bindMatrix)).invert().transpose();
       nv.fromBufferAttribute(N, i).applyMatrix3(n3).normalize(); bn.set([nv.x, nv.y, nv.z], i * 3);
     }
-    out.push([G, bp, bn]);
+    out.push([G, bp, bn, sexOf(o)]);
   }
-  const k = 1.829 / (hi - lo);
-  fit = { k: 1 / (hi - lo), lo };
-  for (const [G, bp, bn] of out) { for (let i = 0; i < bp.length; i += 3) { bp[i] *= k; bp[i + 1] = (bp[i + 1] - lo) * k; bp[i + 2] *= k; } G.setAttribute('bpos', new THREE.BufferAttribute(bp, 3)); G.setAttribute('bnrm', new THREE.BufferAttribute(bn, 3)); }
+  fit = {};
+  for (const sx of ['m', 'f']) { const [lo, hi] = range[sx]; fit[sx] = { k: 1 / (hi - lo), lo, n: 1.829 / (hi - lo) }; }
+  for (const [G, bp, bn, sx] of out) { const { n: k, lo } = fit[sx]; for (let i = 0; i < bp.length; i += 3) { bp[i] *= k; bp[i + 1] = (bp[i + 1] - lo) * k; bp[i + 2] *= k; } G.setAttribute('bpos', new THREE.BufferAttribute(bp, 3)); G.setAttribute('bnrm', new THREE.BufferAttribute(bn, 3)); }
+  // measure the male skull and neck (normalized meters) so caps, bandanas and chains fit the real head
+  const mb = out.find((o) => o[3] === 'm'); if (mb) { const bp = mb[1]; let top = 0, zs = 0, zn = 0, hw = 0, nw = 0, nz = 0, nn = 0;
+    for (let i = 0; i < bp.length; i += 3) { const x = bp[i], y = bp[i + 1], z = bp[i + 2]; top = Math.max(top, y); if (y > 1.72) { zs += z; zn++; } if (y > 1.7 && y < 1.76) hw = Math.max(hw, Math.abs(x)); if (y > 1.5 && y < 1.55 && Math.abs(x) < 0.09) { nw = Math.max(nw, Math.abs(x)); nz += z; nn++; } }
+    Object.assign(SKULL, { top, z: zs / Math.max(1, zn), r: hw * 1.04, neckY: 1.525, neckR: nw * 1.08, neckZ: nz / Math.max(1, nn) }); ACC.r = SKULL.r; ACC.neckR = SKULL.neckR; }
 }
 export const ready = () => !!tmpl;
 
@@ -103,12 +113,14 @@ float seg7(int d, vec2 p){
   if((m&64)>0) o=max(o,box(p,vec2(0.0,0.0),vec2(1.0,0.22)));
   return o;
 }
-vec3 paint(){
+uniform float uTexSkin;
+vec3 paint(vec3 texC){
   vec3 p = vB; float ax = abs(p.x), y = p.y;
+  vec3 sk = uSkin * clamp(dot(texC, vec3(0.299, 0.587, 0.114)) / uTexSkin, 0.55, 1.4); // skin keeps the model's face and body detail, tinted to this character
   int top = int(uStyle.x+0.5), pants = int(uStyle.y+0.5), hair = int(uStyle.z+0.5);
   bool front = vBN.z > 0.25, back = vBN.z < -0.35;
   float n1 = vn(p*60.0), n2 = vn(p*9.0);
-  vec3 c = uSkin; float cloth = 0.0;
+  vec3 c = sk; float cloth = 0.0;
   float sleeve = top==5 ? 0.17 : (top==0||top==2) ? 0.34 : 0.735;
   if (y > 1.3 && ax > 0.185) {
     // arms: sleeves then skin, hands past 0.735
@@ -121,11 +133,11 @@ vec3 paint(){
   } else if (y > 1.565) {
     // head: skin, hair, painted face
     float hz = p.z - 0.006;
-    bool hairOn = hair==0 ? (y > 1.775 - 0.02*smoothstep(0.0,0.1,-hz) || (hz < -0.045 && y > 1.63) || (ax > 0.078 && y > 1.71 && hz < 0.03))
+    bool hairOn = false && hair==0 ? (y > 1.775 - 0.02*smoothstep(0.0,0.1,-hz) || (hz < -0.045 && y > 1.63) || (ax > 0.078 && y > 1.71 && hz < 0.03))
                 : hair==1 ? (y > 1.765 || (hz < -0.02 && y > 1.56) || (ax > 0.07 && y > 1.6 && hz < 0.045))
                 : false;
     if (hairOn) { c = uHairC * (0.8 + 0.4*n1); cloth = 0.5; }
-    if (front && !hairOn) {
+    if (false) { // the real model has eyes, brows and lips: no painted face
       vec2 e = vec2(ax - 0.034, (y - 1.708) * 1.5);
       float ed = length(e);
       if (ed < 0.0135) c = vec3(0.93,0.91,0.88);
@@ -151,8 +163,8 @@ vec3 paint(){
   } else if (y > 0.985) {
     // torso
     c = uTop; cloth = 1.0;
-    if (top==5 && y > 1.38 && (abs(ax - 0.06) > 0.022 && (y > 1.43 || ax > 0.08))) { c = uSkin; cloth = 0.0; }
-    if (top==0 && front && y > 1.47 && ax < 0.06 - (1.49-y)*0.0) c = uSkin;
+    if (top==5 && y > 1.38 && (abs(ax - 0.06) > 0.022 && (y > 1.43 || ax > 0.08))) { c = sk; cloth = 0.0; }
+    if (top==0 && front && y > 1.47 && ax < 0.06 - (1.49-y)*0.0) c = sk;
     if (top==1) {
       if (front && y > 1.04 && y < 1.15 && ax < 0.09) c = uTop*0.82;
       if (front && y > 1.38 && y < 1.48 && abs(ax-0.032) < 0.004) c = vec3(0.9);
@@ -225,16 +237,17 @@ const NIGHT = { uRim: { value: 0 }, uRimK: { value: 1 }, uExpC: { value: 1 }, uS
 export function charNight(n, k = 1, expC = 1, sat = 0) { NIGHT.uRim.value = n; NIGHT.uRimK.value = k; NIGHT.uExpC.value = expC; NIGHT.uSat.value = sat; }
 const col = (h) => new THREE.Color(h);
 function clothMat(L) {
-  const key = [L.skin, L.top, L.topC, L.trim, L.pants, L.legs, L.shoes, L.hair, L.hairC, L.beard, L.grit, L.num].join(',');
+  const key = [L.female, L.skin, L.top, L.topC, L.trim, L.pants, L.legs, L.shoes, L.hair, L.hairC, L.beard, L.grit, L.num].join(',');
   if (matCache.has(key)) return matCache.get(key);
   const u = { uSkin: { value: col(L.skin) }, uTop: { value: col(L.topC) }, uTrim: { value: col(L.trim) }, uLegs: { value: col(L.legs) }, uShoes: { value: col(L.shoes) }, uHairC: { value: col(L.hairC) },
     uStyle: { value: new THREE.Vector4(L.top, L.pants, L.hair, L.beard) }, uMisc: { value: new THREE.Vector2(L.grit, L.num) } };
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45 });
+  const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45, map: PARTMAT[L.female ? 'f_body' : 'm_body']?.map || null });
+  u.uTexSkin = { value: 0.3 };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u, NIGHT);
     sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
     sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
-    sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint();')
+    sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint(diffuseColor.rgb);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.22 + alb * vec3(0.42, 0.38, 0.34)); // lift multiplies albedo only, no grey add')
       .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
   };
@@ -243,7 +256,9 @@ function clothMat(L) {
 }
 
 // ---- head and neck accessories, in head bone space (meters, +y up the bone) ----
-export const ACC = { y: 0.165, z: 0.01, r: 0.106, neckY: 0.045, neckR: 0.068, fwd: -1 };
+export const ACC = { y: 0.165, z: 0.01, r: 0.106, neckY: 0.045, neckR: 0.068, fwd: 1 };
+const hairMats = new Map();
+function hairMat(base, c) { const k = (base?.uuid || '') + c; if (!hairMats.has(k)) { const m = base ? base.clone() : new THREE.MeshStandardMaterial(); m.color = new THREE.Color(c).multiplyScalar(1.6); m.roughness = 0.75; m.metalness = 0; hairMats.set(k, m); } return hairMats.get(k); }
 let accGeo = null;
 const accMats = new Map();
 function accMat(c, rough = 0.85) { const k = c + ':' + rough; if (!accMats.has(k)) accMats.set(k, new THREE.MeshStandardMaterial({ color: c, roughness: rough })); return accMats.get(k); }
@@ -288,7 +303,8 @@ function weapons() {
 }
 
 const HEIGHT = { m: 1.8, f: 1.68 };
-const F_BONES = { 'DEF-shoulderL': [0.9, 0.9, 0.9], 'DEF-shoulderR': [0.9, 0.9, 0.9], 'DEF-spine003': [0.9, 1, 0.94], 'DEF-head': [1.04, 1.04, 1.04] };
+const PARTMAT = {}; // pack materials by mesh name (body skin maps, eyes, hair)
+const SKULL = { top: 1.829, z: 0, r: 0.106, neckY: 1.525, neckR: 0.068, neckZ: 0 };
 let fit = null;
 const once = new Set(['Punch_Jab', 'Punch_Cross', 'Punch_Enter', 'Sword_Attack', 'Pistol_Shoot', 'Death01', 'Hit_Chest', 'Hit_Head', 'Roll', 'Jump_Start']);
 
@@ -296,29 +312,42 @@ export function makeCharacter(L, shadow) {
   const root = skeletonClone(tmpl);
   const mat = clothMat(L);
   let hand = null, head = null, neckB = null, hips = null;
+  const sx = L.female ? 'f_' : 'm_', A0 = L.acc || {}, covered = A0.cap || A0.rag || A0.police || A0.hat;
+  // hair: real meshes; short under caps and hats so nothing pokes through
+  const hairPart = L.hair === 2 ? null : L.female ? (covered ? 'hair_buzz' : (L.hairStyle ?? 0) % 2 ? 'hair_buns' : 'hair_long') : covered ? 'hair_buzz' : 'hair_short';
+  const want = new Set([sx + 'body', sx + 'eyes', sx + 'brows', hairPart, L.beard > 0 && !L.female ? 'beard' : null]);
+  const drop = [];
   root.traverse((o) => {
-    if (o.isMesh) { o.material = mat; o.castShadow = !!shadow; o.frustumCulled = false; }
+    if (o.isSkinnedMesh && !want.has(o.name)) { drop.push(o); return; }
+    if (o.isMesh) { o.material = /_body$/.test(o.name) ? mat : /eyes$/.test(o.name) ? PARTMAT[o.name] : hairMat(PARTMAT[o.name], L.hairC); o.castShadow = !!shadow; o.frustumCulled = false; }
     if (o.isBone) {
-      if (L.female && F_BONES[o.name]) o.scale.set(...F_BONES[o.name]);
-      if (o.name === 'DEF-handR') hand = o; else if (o.name === 'DEF-head') head = o; else if (o.name === 'DEF-neck') neckB = o; else if (o.name === 'DEF-hips') hips = o;
+      if (o.name === 'hand_r') hand = o; else if (o.name === 'Head') head = o; else if (o.name === 'neck_01') neckB = o; else if (o.name === 'pelvis') hips = o;
     }
   });
-  const sc = fit.k * (L.female ? HEIGHT.f : HEIGHT.m);
-  root.scale.setScalar(sc); root.position.y = -fit.lo * sc;
+  for (const o of drop) o.removeFromParent();
+  const F = fit[L.female ? 'f' : 'm'], sc = F.k * (L.female ? HEIGHT.f : HEIGHT.m);
+  // accessories are placed in bind pose world space (normalized meters), then parented to the bone
+  root.updateMatrixWorld(true);
+  const kk = fit.m.n, toT = (x, y, z) => new THREE.Vector3(x / kk, y / kk + fit.m.lo, z / kk), q = new THREE.Quaternion(), ws = new THREE.Vector3();
+  let bodyM = null; root.traverse((o) => { if (o.isSkinnedMesh && /_body$/.test(o.name)) bodyM = o; });
+  const put = (bone, geo, c, y, z = 0, rough) => { const m = new THREE.Mesh(geo, accMat(c, rough));
+    // bone frame at bind, straight from the skin (independent of the current pose)
+    const sk = bodyM.skeleton, bi = sk.bones.indexOf(bone), Bw = bodyM.bindMatrix.clone().multiply(sk.boneInverses[bi].clone().invert()), p = new THREE.Vector3();
+    Bw.decompose(p, q, ws); m.position.copy(toT(0, y, z).applyMatrix4(Bw.clone().invert())); m.quaternion.copy(q.invert()); m.scale.setScalar(1 / (kk * ws.x)); m.castShadow = !!shadow; bone.add(m); return m; };
+  root.scale.setScalar(sc); root.position.y = -F.lo * sc;
   const W = weapons();
   const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat), shotgun = new THREE.Mesh(W.shotgun, W.gunMat), knux = new THREE.Mesh(W.knux, W.goldMat);
   for (const w of [bat, gun, shotgun, knux]) { w.visible = false; w.position.set(GRIP.x, GRIP.y, GRIP.z); hand && hand.add(w); }
   knux.position.set(0, 0.075, 0.03);
   const A = L.acc || {}, AG = accessories();
-  const put = (bone, geo, c, y, z = 0, rough) => { const m = new THREE.Mesh(geo, accMat(c, rough)); m.position.set(0, y, z); m.castShadow = !!shadow; bone.add(m); return m; };
   if (head) {
-    if (A.cap) { const m = put(head, AG.cap, A.cap, ACC.y, ACC.z); if (A.back) m.rotation.y = Math.PI; }
-    else if (A.rag) put(head, AG.doRag, A.rag, ACC.y - 0.008, ACC.z);
-    else if (A.police) { put(head, AG.police, A.police, ACC.y + 0.01, ACC.z); put(head, new THREE.BoxGeometry(0.025, 0.025, 0.004), 0xd0b040, ACC.y + 0.045, ACC.z + ACC.fwd * 0.118, 0.3); }
-    else if (A.hat) put(head, AG.hat, A.hat, ACC.y + 0.03, ACC.z);
-    if (L.female && L.hair === 1) put(head, AG.pony, L.hairC, ACC.y - 0.01, ACC.z);
+    const HY = SKULL.top - 0.065, HZ = SKULL.z;
+    if (A.cap) { const m = put(head, AG.cap, A.cap, HY, HZ); if (A.back) m.rotateY(Math.PI); }
+    else if (A.rag) put(head, AG.doRag, A.rag, HY - 0.008, HZ);
+    else if (A.police) { put(head, AG.police, A.police, HY + 0.01, HZ); put(head, new THREE.BoxGeometry(0.025, 0.025, 0.004), 0xd0b040, HY + 0.045, HZ + ACC.fwd * 0.118, 0.3); }
+    else if (A.hat) put(head, AG.hat, A.hat, HY + 0.03, HZ);
   }
-  if (neckB && A.neck) put(neckB, AG.neck, A.neck, ACC.neckY);
+  if (neckB && A.neck) put(neckB, AG.neck, A.neck, SKULL.neckY, SKULL.neckZ);
   const g = new THREE.Group(); g.add(root);
   const mixer = new THREE.AnimationMixer(root);
   const act = {};

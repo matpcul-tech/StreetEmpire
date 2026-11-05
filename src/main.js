@@ -491,7 +491,7 @@ startBtn.textContent = 'LOADING... TAP TO START WHEN READY';
 THREE.DefaultLoadingManager.onProgress = (url, done, total) => { $('loadbar').style.width = Math.round((done / total) * 100) + '%'; };
 const grainBox = $('grain'); grainBox.checked = localStorage.getItem('se-grain') !== '0'; grainBox.onchange = () => setGrain(grainBox.checked);
 Promise.all([
-  loadPeople(BASE, () => { peopleReady = true; }).catch((e) => console.error(e)),
+  loadPeople(BASE, () => { peopleReady = true; }, POTATO).catch((e) => console.error(e)),
   loadCars(BASE).then(() => { carsReady = true; }).catch((e) => console.error(e)),
 ]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
 startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
