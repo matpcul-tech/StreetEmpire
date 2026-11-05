@@ -107,7 +107,7 @@ function bodyMaterial(wear = 0, kind = 0, stripe = 0xffffff) {
             c = vec3(0.93, 0.93, 0.95);
             if (abs(vP.y - 0.42) < 0.018) c = vec3(0.12, 0.22, 0.45); // navy stripe
             // letter band: six cells across the door for P O L I C E
-            float lz = vON.x > 0.0 ? (0.66 - vP.z) / 0.32 : (vP.z - 0.34) / 0.32; // flip per door so letters read forward
+            float lz = vON.x > 0.0 ? (vP.z - 0.34) / 0.32 : (0.66 - vP.z) / 0.32; // flip per door so letters read forward from outside
             float ly = (vP.y - 0.33) / 0.07; // 0..1 letter height
             if (lz > 0.0 && lz < 1.0 && ly > 0.0 && ly < 1.0 && abs(vP.y - 0.42) >= 0.018) {
               float cell = floor(lz * 6.0), u = fract(lz * 6.0), v = ly;
