@@ -243,7 +243,7 @@ function clothMat(L) {
   const u = { uSkin: { value: col(L.skin) }, uTop: { value: col(L.topC) }, uTrim: { value: col(L.trim) }, uLegs: { value: col(L.legs) }, uShoes: { value: col(L.shoes) }, uHairC: { value: col(L.hairC) },
     uStyle: { value: new THREE.Vector4(L.top, L.pants, L.hair, L.beard) }, uMisc: { value: new THREE.Vector2(L.grit, L.num) } };
   const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45, map: PARTMAT[L.female ? 'f_body' : 'm_body']?.map || null });
-  u.uTexSkin = { value: 0.3 };
+  u.uTexSkin = { value: 0.25 };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u, NIGHT);
     sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
@@ -259,7 +259,7 @@ function clothMat(L) {
 // ---- head and neck accessories, in head bone space (meters, +y up the bone) ----
 export const ACC = { y: 0.165, z: 0.01, r: 0.106, neckY: 0.045, neckR: 0.068, fwd: 1 };
 const hairMats = new Map();
-function hairMat(base, c) { const k = (base?.uuid || '') + c; if (!hairMats.has(k)) { const m = base ? base.clone() : new THREE.MeshStandardMaterial(); m.color = new THREE.Color(c).multiplyScalar(1.6); m.roughness = 0.75; m.metalness = 0; hairMats.set(k, m); } return hairMats.get(k); }
+function hairMat(base, c) { const k = (base?.uuid || '') + c; if (!hairMats.has(k)) { const m = base ? base.clone() : new THREE.MeshStandardMaterial(); m.color = new THREE.Color(c).multiplyScalar(2.0); m.roughness = 0.75; m.metalness = 0; hairMats.set(k, m); } return hairMats.get(k); }
 let accGeo = null;
 const accMats = new Map();
 function accMat(c, rough = 0.85) { const k = c + ':' + rough; if (!accMats.has(k)) accMats.set(k, new THREE.MeshStandardMaterial({ color: c, roughness: rough, vertexColors: true })); return accMats.get(k); }
