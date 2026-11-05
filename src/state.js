@@ -473,7 +473,9 @@ function respawnPlayer(s, p) {
   const c = blockCenter(own[0]);
   p.x = c.x + BLOCK / 2 + 3; p.z = c.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0;
   if (busted) { p.ammo = 0; p.shells = 0; p.weapon = meleeFallback(p); }
+  // the chase is over: officers leave, and no cruiser keeps a siren
   for (const e of s.ents) if (e.kind === 'cop') e.leave = true;
+  for (const car of s.cars) if (car.siren) car.siren = false;
   if (s.mission) failMission(s, 'You went down. Mission failed.');
 }
 
@@ -524,7 +526,7 @@ function carHurt(s, c, n) {
   if (c.wrecked || n < 3) return;
   c.hp -= n;
   if (c.hp <= 0) {
-    c.hp = 0; c.wrecked = true; c.v = 0; c.ai = false; s.fx.push({ type: 'wreck', x: c.x, z: c.z });
+    c.hp = 0; c.wrecked = true; c.v = 0; c.ai = false; c.siren = false; s.fx.push({ type: 'wreck', x: c.x, z: c.z });
     const d = s.ents.find((e) => e.car === c.id);
     if (d && d.kind === 'player') { exitCar(s, d); log(s, 'That ride is done. Get out and find another.'); }
     for (const e of s.ents) if (e.car === c.id) { e.car = null; e.x = c.x + 2; e.z = c.z; }
@@ -739,36 +741,75 @@ function policeStep(s, dt) {
       for (let i = 0; i < 2; i++) s.ents.push(newEnt(s, { kind: 'cop', crew: 'police', hp: 80, car: car.id, x: car.x, z: car.z, weapon: st >= 3 ? 'pistol' : 'fists', look: i }));
     }
   }
+  // A siren belongs to an active chase. Empty stars, a bust, or a wreck ends it.
+  if (st === 0) for (const c of s.cars) if (c.siren) c.siren = false;
   // cruisers chase
   for (const c of s.cars) if (c.cops && !c.wrecked) {
     const crew = s.ents.filter((e) => e.kind === 'cop' && e.car === c.id);
-    if (!crew.length) { c.siren = st > 0 && dist2(c, p) < 80 * 80; c.v *= 1 - 2 * dt; continue; }
-    const leave = crew.some((e) => e.leave) || st === 0;
-    const goal = leave ? { x: c.x + Math.sin(c.ry) * 50, z: c.z + Math.cos(c.ry) * 50 } : p;
-    const wp = leave ? goal : steerPoint(c, goal);
+    if (!crew.length) {
+      c.siren = st > 0 && dist2(c, p) < 80 * 80;
+      c.v *= 1 - 2 * dt;
+      if (st === 0) {
+        c.leaveT = (c.leaveT || 0) + dt;
+        const waiting = s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && !e.car && !e.remove && dist2(e, c) < 45 * 45);
+        if ((!waiting && c.leaveT > 2) || c.leaveT > 14 || dist2(c, p) > 80 * 80) c.remove = true;
+      } else c.leaveT = 0;
+      continue;
+    }
+    const leave = st === 0 || crew.some((e) => e.leave);
+    c.siren = st > 0 && !leave;
+    let goal = p;
+    if (leave) {
+      const ax = c.x - p.x, az = c.z - p.z, ad = Math.hypot(ax, az) || 1;
+      goal = { x: c.x + (ax / ad) * 60, z: c.z + (az / ad) * 60 };
+    }
+    const wp = steerPoint(c, goal);
     const dx = wp.x - c.x, dz = wp.z - c.z, want = Math.atan2(dx, dz);
     let diff = want - c.ry; diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     const d = Math.sqrt(dist2(c, p));
     c.stuckT = Math.abs(c.v) < 1 ? (c.stuckT || 0) + dt : 0;
     let thr = Math.abs(diff) < 1.3 ? 1 : 0.35;
-    if (c.stuckT > 1.5) { thr = -1; diff = -diff; if (c.stuckT > 3) c.stuckT = 0; }
+    if (!leave && c.stuckT > 1.5) { thr = -1; diff = -diff; if (c.stuckT > 3) c.stuckT = 0; }
     if (!leave && d < 16 && !p.car) thr = c.v > 2 ? -1 : 0;
     if (!leave && p.car && d < 8) thr = 0.6;
     driveCar(s, c, thr, Math.max(-1, Math.min(1, -diff * 2)), dt, { id: -1, kind: 'cop', crew: 'police', heat: 0 });
     for (const e of crew) { e.x = c.x; e.z = c.z; }
     if (!leave && d < 16 && Math.abs(c.v) < 3 && !p.car) for (const e of crew) { e.car = null; e.x = c.x + (e.look ? 2 : -2) * Math.cos(c.ry); e.z = c.z - (e.look ? 2 : -2) * Math.sin(c.ry); }
-    if (leave && dist2(c, p) > 90 * 90) { c.remove = true; for (const e of crew) e.remove = true; }
+    if (leave) {
+      c.leaveT = (c.leaveT || 0) + dt;
+      c.leaveStill = Math.abs(c.v) < 1 ? (c.leaveStill || 0) + dt : 0;
+      // far enough, or jammed, or the exit ran long: clear the unit instead of circling
+      if (dist2(c, p) > 90 * 90 || c.leaveT > 8 || c.leaveStill > 2.5) {
+        c.remove = true;
+        for (const e of crew) e.remove = true;
+      }
+    } else { c.leaveT = 0; c.leaveStill = 0; }
   }
+  for (const e of s.ents) if (e.kind === 'cop' && e.car && !s.cars.some((c) => c.id === e.car && !c.remove)) e.car = null;
   // officers on foot
-  for (const e of s.ents) if (e.kind === 'cop' && !e.car && e.hp > 0) {
-    if (e.stun > 0) continue;
+  for (const e of s.ents) if (e.kind === 'cop' && !e.car && e.hp > 0 && !e.remove) {
     if (st === 0 || e.leave) {
-      // walk back to the nearest cruiser and leave, or vanish when far
-      e.moving = 0; if (dist2(e, p) > 70 * 70) e.remove = true;
-      const c = s.cars.find((c) => c.cops && !c.wrecked && dist2(c, e) < 400);
-      if (c && dist2(c, e) < 9) e.car = c.id; else if (c) moveToward(e, c, 4, dt);
+      // back to a live cruiser, or clear out. Never stand planted after the chase.
+      if (dist2(e, p) > 70 * 70) { e.remove = true; continue; }
+      const c = s.cars.find((c) => c.cops && !c.wrecked && !c.remove && dist2(c, e) < 45 * 45);
+      if (c && dist2(c, e) < 9) { e.car = c.id; e.leaveT = 0; e.leaveStill = 0; e.leaveX = null; continue; }
+      e.leaveT = (e.leaveT || 0) + dt;
+      if (e.leaveX == null) { e.leaveX = e.x; e.leaveZ = e.z; }
+      else {
+        const moved = Math.hypot(e.x - e.leaveX, e.z - e.leaveZ);
+        if (moved >= 0.6) { e.leaveX = e.x; e.leaveZ = e.z; e.leaveStill = 0; }
+        else e.leaveStill = (e.leaveStill || 0) + dt;
+      }
+      if ((e.leaveStill || 0) > 1.6 || e.leaveT > (c ? 12 : 3)) { e.remove = true; continue; }
+      if (c) moveToward(e, c, 4, dt);
+      else {
+        const ax = e.x - p.x, az = e.z - p.z, ad = Math.hypot(ax, az) || 1;
+        moveToward(e, { x: e.x + (ax / ad) * 18, z: e.z + (az / ad) * 18 }, 4, dt);
+      }
       continue;
     }
+    if (e.stun > 0) continue;
+    e.leaveT = 0; e.leaveStill = 0; e.leaveX = null;
     const target = p.car ? s.cars.find((c) => c.id === p.car) : p;
     const d = Math.sqrt(dist2(e, target));
     if (p.car && d < 3 && Math.abs(target.v) < 2) { exitCar(s, p); log(s, 'The cops dragged you out of the car.'); continue; }
