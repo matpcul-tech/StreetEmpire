@@ -237,22 +237,26 @@ const NIGHT = { uRim: { value: 0 }, uRimK: { value: 1 }, uExpC: { value: 1 }, uS
 // k > 1 when there is no post grade (potato, or the low fps fallback) so night clothing still reads
 export function charNight(n, k = 1, expC = 1, sat = 0) { NIGHT.uRim.value = n; NIGHT.uRimK.value = k; NIGHT.uExpC.value = expC; NIGHT.uSat.value = sat; }
 const col = (h) => new THREE.Color(h);
-function clothMat(L) {
-  const key = [L.female, L.skin, L.top, L.topC, L.trim, L.pants, L.legs, L.shoes, L.hair, L.hairC, L.beard, L.grit, L.num].join(',');
+function clothMat(L, merged = false) {
+  const key = [merged, L.female, L.skin, L.top, L.topC, L.trim, L.pants, L.legs, L.shoes, L.hair, L.hairC, L.beard, L.grit, L.num].join(',');
   if (matCache.has(key)) return matCache.get(key);
   const u = { uSkin: { value: col(L.skin) }, uTop: { value: col(L.topC) }, uTrim: { value: col(L.trim) }, uLegs: { value: col(L.legs) }, uShoes: { value: col(L.shoes) }, uHairC: { value: col(L.hairC) },
     uStyle: { value: new THREE.Vector4(L.top, L.pants, L.hair, L.beard) }, uMisc: { value: new THREE.Vector2(L.grit, L.num) } };
   const m = new THREE.MeshStandardMaterial({ roughness: 0.86, metalness: 0, envMapIntensity: 0.45, map: PARTMAT[L.female ? 'f_body' : 'm_body']?.map || null });
   u.uTexSkin = { value: 0.25 };
+  if (merged) { m.side = THREE.DoubleSide; Object.assign(u, { uEyeMap: { value: PARTMAT[L.female ? 'f_eyes' : 'm_eyes']?.map }, uHair1: { value: PARTMAT.hair_short?.map }, uHair2: { value: PARTMAT.hair_long?.map }, uHairTint: { value: col(L.hairC).multiplyScalar(2.0) } }); }
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u, NIGHT);
     sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
-    sh.vertexShader = 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;');
-    sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = paint(diffuseColor.rgb);')
+    sh.vertexShader = (merged ? 'attribute float aPart; varying float vPart;\n' : '') + 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;' + (merged ? ' vPart = aPart;' : ''));
+    // merged parts: eyes and hair sample their own maps (hair tinted like the old hair material) and skip the outfit paint
+    const partColor = merged ? 'if (vPart > 0.5) { if (vPart < 1.5) diffuseColor.rgb = texture2D(uEyeMap, vMapUv).rgb; else diffuseColor.rgb = (vPart < 2.5 ? texture2D(uHair1, vMapUv).rgb : texture2D(uHair2, vMapUv).rgb) * uHairTint; } else diffuseColor.rgb = paint(diffuseColor.rgb);' : 'diffuseColor.rgb = paint(diffuseColor.rgb);';
+    if (merged) sh.fragmentShader = 'varying float vPart;\nuniform sampler2D uEyeMap, uHair1, uHair2;\nuniform vec3 uHairTint;\n' + sh.fragmentShader;
+    sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + partColor)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.22 + alb * vec3(0.42, 0.38, 0.34)); // lift multiplies albedo only, no grey add')
       .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
   };
-  m.customProgramCacheKey = () => 'ualcloth';
+  m.customProgramCacheKey = () => merged ? 'ualcloth-merged' : 'ualcloth';
   matCache.set(key, m); return m;
 }
 
@@ -303,6 +307,46 @@ function weapons() {
   return weaponGeo;
 }
 
+// Merge part meshes into the body geometry. Each part vertex is moved into the body's
+// bind space (X = (Bbody_b)^-1 * Bpart_b, checked equal for every bone) and joint
+// indices are remapped by bone name. aPart: 0 body, 1 eyes, 2 hair map 1, 3 hair map 2.
+const mergedCache = new Map();
+const partId = (o) => /eyes$/.test(o.name) ? 1 : PARTMAT[o.name]?.map === PARTMAT.hair_long?.map ? 3 : 2;
+function mergedGeo(body, others) {
+  const key = [body.name, ...others.map((o) => o.name)].join('+');
+  if (mergedCache.has(key)) return mergedCache.get(key);
+  const bsk = body.skeleton, bIdx = new Map(bsk.bones.map((b, i) => [b.name, i]));
+  const rest = (m, i) => m.skeleton.boneInverses[i].clone().multiply(m.bindMatrix);
+  const geos = [];
+  const plain = (g, part, X, remap) => {
+    const n = g.attributes.position.count, P = new Float32Array(n * 3), N = new Float32Array(n * 3), U = new Float32Array(n * 2), J = new Uint16Array(n * 4), W = new Float32Array(n * 4);
+    const v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(X);
+    for (let i = 0; i < n; i++) {
+      v.fromBufferAttribute(g.attributes.position, i).applyMatrix4(X); P.set([v.x, v.y, v.z], i * 3);
+      v.fromBufferAttribute(g.attributes.normal, i).applyMatrix3(nm).normalize(); N.set([v.x, v.y, v.z], i * 3);
+      U[i * 2] = g.attributes.uv.getX(i); U[i * 2 + 1] = g.attributes.uv.getY(i);
+      for (let k = 0; k < 4; k++) { J[i * 4 + k] = remap[g.attributes.skinIndex.getComponent(i, k)]; W[i * 4 + k] = g.attributes.skinWeight.getComponent(i, k); }
+    }
+    const o = new THREE.BufferGeometry();
+    o.setAttribute('position', new THREE.BufferAttribute(P, 3)); o.setAttribute('normal', new THREE.BufferAttribute(N, 3)); o.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+    o.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(J, 4)); o.setAttribute('skinWeight', new THREE.BufferAttribute(W, 4));
+    o.setAttribute('bpos', part ? new THREE.BufferAttribute(new Float32Array(n * 3), 3) : g.attributes.bpos.clone()); o.setAttribute('bnrm', part ? new THREE.BufferAttribute(new Float32Array(n * 3), 3) : g.attributes.bnrm.clone());
+    o.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(n).fill(part), 1));
+    o.setIndex(g.index ? Array.from(g.index.array) : [...Array(n).keys()]);
+    return o;
+  };
+  geos.push(plain(body.geometry, 0, new THREE.Matrix4(), bsk.bones.map((_, i) => i)));
+  for (const o of others) {
+    const remap = o.skeleton.bones.map((b) => bIdx.get(b.name));
+    const used = new Set(); const SI = o.geometry.attributes.skinIndex, SW = o.geometry.attributes.skinWeight;
+    for (let i = 0; i < SI.count; i++) for (let k = 0; k < 4; k++) if (SW.getComponent(i, k) > 0) used.add(SI.getComponent(i, k));
+    const b0 = [...used][0], X = rest(body, remap[b0]).invert().multiply(rest(o, b0));
+    for (const b of used) { const Y = rest(body, remap[b]).invert().multiply(rest(o, b)); if (!Y.elements.every((e, i) => Math.abs(e - X.elements[i]) < 1e-3)) console.warn('merge: bind mismatch', o.name, b); }
+    geos.push(plain(o.geometry, partId(o), X, remap));
+  }
+  const m = mergeGeometries(geos); m.computeBoundingSphere(); mergedCache.set(key, m); return m;
+}
+
 const HEIGHT = { m: 1.8, f: 1.68 };
 const packAcc = {}; // original accessory meshes from se-pack/accessories.glb
 const PARTMAT = {}; // pack materials by mesh name (body skin maps, eyes, hair)
@@ -327,6 +371,10 @@ export function makeCharacter(L, shadow) {
     }
   });
   for (const o of drop) o.removeFromParent();
+  // one draw call per character: eyes, brows, hair and beard are merged into the body SkinnedMesh (shared skeleton)
+  { const parts = []; root.traverse((o) => o.isSkinnedMesh && parts.push(o)); const body = parts.find((o) => /_body$/.test(o.name));
+    const others = parts.filter((o) => o !== body);
+    if (body && others.length) { body.geometry = mergedGeo(body, others); body.material = clothMat(L, true); for (const o of others) o.removeFromParent(); } }
   const F = fit[L.female ? 'f' : 'm'], sc = F.k * (L.female ? HEIGHT.f : HEIGHT.m);
   // accessories are placed in bind pose world space (normalized meters), then parented to the bone
   root.updateMatrixWorld(true);

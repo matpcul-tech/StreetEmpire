@@ -126,7 +126,8 @@ function updateDay() {
   renderer.toneMappingExposure = baseExp + bump;
   // characters: without a post pass keep most of the scene bump off them (it greyed skin and crew colors), smaller rim gain, mild saturation restore at dusk and night only
   carNight(Math.min(1, dark));
-  charNight(Math.min(1.25, dark * 1.25), composer ? 1.15 : 1.45, composer ? 1 : (baseExp + bump * 0.75) / (baseExp + bump), composer ? 0 : 0.22 * Math.min(1, dark + 0.5 * dusk));
+  charNight(Math.min(1.35, dark * 1.3 + 0.15 * dusk), // v0.10.x: small dusk and night lift, albedo scaled so crew colors keep saturation
+     composer ? 1.15 : 1.45, composer ? 1 : (baseExp + bump * 0.75) / (baseExp + bump), composer ? 0 : 0.22 * Math.min(1, dark + 0.5 * dusk));
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
     for (const [m, base] of city.emissive) m.emissiveIntensity = base * (0.15 + 0.85 * Math.max(night, dusk * 0.6));

@@ -55,11 +55,14 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev
         const D = window.__dbg, cam = D.camera, out = []; const s = window.__game.state;
         const pl = s.ents.find((e) => e.kind === 'player');
         for (const [id, g] of D.charViz) {
-          const e = s.ents.find((x) => x.id === id); if (!e || Math.hypot(e.x - pl.x, e.z - pl.z) > 8) continue;
+          // seated people sit behind tinted glass (car-qa covers drivers), so only characters on foot are measured
+          const e = s.ents.find((x) => x.id === id); if (!e || e.car || !g.visible || Math.hypot(e.x - pl.x, e.z - pl.z) > 8) continue;
           const pts = [[0, 0.1, 0], [0, 1.7, 0]].map(([x, y, z]) => { const v = g.position.clone(); v.y += y; v.project(cam); return v; });
           if (pts.some((v) => v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1)) continue;
           const W = innerWidth, H = innerHeight, y0 = (1 - pts[1].y) / 2 * H, y1 = (1 - pts[0].y) / 2 * H, h = y1 - y0, cx = (pts[0].x + 1) / 2 * W;
           if (h < 40) continue;
+          // the measured box must lie fully on screen: a box clamped at the edge samples the scene, not the character
+          if (cx - h * 0.16 < 0 || cx + h * 0.16 > W || y0 < 0 || y1 > H) continue;
           // skip characters hidden behind a wall: a ray from the camera to the chest must reach this character first
           const chest = g.position.clone(); chest.y += 1.1; const dir = chest.clone().sub(cam.position); const len = dir.length();
           const rc = new D.Raycaster(cam.position, dir.normalize(), 0.1, len);
@@ -70,6 +73,10 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev
         }
         return out.slice(0, 4);
       });
+      // a cinematic letterbox (12vh black bars, 0.35 s transition) left over a shot zeroes the darkest 10%: wait for gameplay framing
+      const bars = await page.waitForFunction(() => !(window.__cine && window.__cine.active) && [...document.querySelectorAll('#cine .bar')].every((b) => b.getBoundingClientRect().height < 1), null, { timeout: 8000 }).then(() => 0, () => 1);
+      if (bars) fail.push(`${dev} ${tod} ${kind}: letterbox still on screen, shot not measured as gameplay`);
+      if (kind === 'driving' && !(await page.evaluate(() => window.__game.state.ents.find((e) => e.kind === 'player').car))) fail.push(`${dev} ${tod} driving: player is not in a car, shot is not a driving shot`);
       await page.screenshot({ path: file });
       const scale = await page.evaluate(() => devicePixelRatio);
       const whole = await stats(file);
@@ -93,7 +100,7 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [dev
     await shot('driving', (t) => {
       clearInterval(window.__hold); window.__camOv = null; const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player');
       const c = s.cars.find((c) => !c.driver && !c.wrecked && c.type !== 'police'); p.x = c.x + 2; p.z = c.z; g.send({ type: 'car' });
-      window.__drv = setInterval(() => { s.t = t; const c = s.cars.find((c) => c.id === p.car); if (c) c.v = Math.max(c.v, 12); }, 50);
+      window.__drv = setInterval(() => { s.t = t; const c = s.cars.find((c) => c.id === p.car); if (c) { c.v = Math.max(c.v, 12); c.hp = Math.max(c.hp, 50); } }, 50); // the forced throttle drives blind; without the hp hold it could wreck the car, eject the player and shoot a black wreck point blank (the old phone potato night p10 0.1 fail)
     });
     await shot('mission', (t) => {
       clearInterval(window.__drv); const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player'); if (p.car) g.send({ type: 'car' });
