@@ -185,8 +185,9 @@ vec3 paint(vec3 texC){
       if (y > 1.47 && front && ax < 0.06) c = uTrim;
     }
     if (top==3) {
-      // lighter shirt front panel so navy reads at night, darker sleeves already from uTop
+      // lighter shirt panel so navy reads at night (front and a softer upper back yoke)
       if (front && y > 1.05 && y < 1.48 && ax < 0.14) c = mix(c, c * vec3(1.25, 1.2, 1.15) + vec3(0.04, 0.05, 0.08), 0.55);
+      if (!front && y > 1.28 && y < 1.48 && ax < 0.14) c = mix(c, c * vec3(1.15, 1.12, 1.1) + vec3(0.03, 0.04, 0.06), 0.4);
       // collar: slightly lighter band under the neck
       if (y > 1.46 && y < 1.505 && ax < 0.1) c = mix(c, vec3(0.22, 0.32, 0.48), 0.65);
       // chest badge shield (left chest)
