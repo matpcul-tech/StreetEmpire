@@ -57,8 +57,8 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## Credits
 
-- People: Universal Animation Library (standard, free version) by Quaternius, CC0 1.0, via the glTF mirror at github.com/J-Ponzo/gltf-universal-animation-library (`public/models/LICENSE-Quaternius-CC0.txt`). Trimmed with `tools/trim-ual.mjs`.
-- Cars: Car Kit by Kenney, CC0 1.0 (`public/models/cars/LICENSE-Kenney-CC0.txt`).
+- People: Street Empire pack (`public/models/se-pack/`) built from Quaternius Universal Base Characters and Universal Animation Library, CC0 1.0. Full list in CREDITS.md.
+- Cars: Car Kit by Kenney, CC0 1.0 (`public/models/cars/LICENSE-Kenney-CC0.txt`), plus the pack lowrider kitbash.
 - Both are trimmed and compressed with meshopt by `tools/pack-assets.mjs`.
 - Everything else (city, cars, textures and sound) is generated in code.
 
