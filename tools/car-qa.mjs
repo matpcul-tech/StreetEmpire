@@ -29,10 +29,12 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [nam
       const types = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'], pick = [];
       for (const ty of types) { const c = s.cars.find((c) => c.type === ty && !c.wrecked && !pick.includes(c)); if (c) pick.push(c); }
       const cars = shot === 'lowrider' ? pick.filter((c) => c.type === 'lowrider').slice(0, 1) : phone ? pick.slice(4, 7) : pick;
-      const n = cars.length, sp = 3.0, x0 = pl.x - ((n - 1) * sp) / 2, z0 = pl.z - 6;
-      window.__hold = setInterval(() => { s.t = t; cars.forEach((c, i) => { c.x = x0 + i * sp; c.z = z0; c.ry = 0.5; c.v = 0; c.ai = true; c.driver = null; c.hp = c.max || c.hp; }); pl.x = x0 - 6; pl.z = z0 + 4; }, 16);
-      const cx = x0 + ((n - 1) * sp) / 2;
-      window.__camOv = shot === 'lowrider' ? { x: x0 + 3.2, y: 1.6, z: z0 + 3.6, lx: x0, ly: 0.55, lz: z0 } : phone ? { x: cx, y: 3.2, z: z0 + 9, lx: cx, ly: 0.7, lz: z0 } : { x: cx, y: 4.5, z: z0 + 11, lx: cx, ly: 0.6, lz: z0 };
+      // line the cars up along a real street: anchor on a traffic car, spread along its heading, camera off to the side
+      const A = window.__anchor ||= (() => { const a = s.cars.find((c) => c.type === 'taxi' && !c.wrecked) || s.cars[0]; return { x: a.x, z: a.z, ry: a.ry }; })();
+      const fx = Math.sin(A.ry), fz = Math.cos(A.ry), rx = Math.cos(A.ry), rz = -Math.sin(A.ry), n = cars.length, sp = 6.5;
+      window.__hold = setInterval(() => { s.t = t; cars.forEach((c, i) => { const k = (i - (n - 1) / 2) * sp; c.x = A.x + fx * k; c.z = A.z + fz * k; c.ry = A.ry + 0.7; c.v = 0; c.ai = false; c.driver = null; }); pl.x = A.x - rx * 9; pl.z = A.z - rz * 9; }, 16);
+      const d = shot === 'lowrider' ? 0 : phone ? 15 : 17;
+      window.__camOv = shot === 'lowrider' ? { x: A.x + fx * 3.0 + rx * 3.0, y: 1.4, z: A.z + fz * 3.0 + rz * 3.0, lx: A.x, ly: 0.55, lz: A.z } : { x: A.x + rx * d, y: phone ? 4 : 5, z: A.z + rz * d, lx: A.x, ly: 0.6, lz: A.z };
     }, { t, phone: name === 'phone', shot });
     await page.waitForTimeout(2500);
     await page.screenshot({ path: `${dir}/${dev}-${tod}-${shot}.png` });

@@ -8,7 +8,7 @@ import { makeGradePass } from './grade.js';
 import { LocalSession } from './net.js';
 import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
 import { buildCity } from './city.js';
-import { loadCars, makeCar, updateCar, Smoke } from './vehicles.js';
+import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './vehicles.js';
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
@@ -96,6 +96,7 @@ if (FX) {
 }
 export function setGrain(on) { localStorage.setItem('se-grain', on ? '1' : '0'); if (grade) grade.uniforms.uGrain.value = on ? 1 : 0; }
 const city = buildCity(scene, LOW, S().blocks, BASE);
+setCarQuality(LOW, POTATO);
 { const p = player(S()); city.buildAllNear(p.x, p.z); }
 
 // day and night
@@ -124,6 +125,7 @@ function updateDay() {
   const baseExp = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark, bump = (composer ? 0 : 0.26) * (dark + 0.5 * dusk);
   renderer.toneMappingExposure = baseExp + bump;
   // characters: without a post pass keep most of the scene bump off them (it greyed skin and crew colors), smaller rim gain, mild saturation restore at dusk and night only
+  carNight(Math.min(1, dark));
   charNight(Math.min(1.25, dark * 1.25), composer ? 1.15 : 1.45, composer ? 1 : (baseExp + bump * 0.75) / (baseExp + bump), composer ? 0 : 0.22 * Math.min(1, dark + 0.5 * dusk));
   if (Math.abs(night - lastNightSet) > 0.03) {
     lastNightSet = night;
