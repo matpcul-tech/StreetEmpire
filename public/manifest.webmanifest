@@ -3,7 +3,7 @@
   "short_name": "Street Empire",
   "start_url": "./",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "any",
   "background_color": "#120c08",
   "theme_color": "#1a1410",
   "icons": [
