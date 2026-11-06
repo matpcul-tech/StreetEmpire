@@ -84,7 +84,7 @@ const sun = new THREE.DirectionalLight(0xffa060, 2.2);
 if (!LOW) { sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; }
 scene.add(hemi, sun, sun.target);
 
-// post: tone map, then a warm LUT grade, light film grain and vignette
+// post: tone map, then a warm LUT grade, optional soft film grain and vignette
 const FX = !params.has('nofx') && !POTATO;
 let composer = null, grade = null;
 if (FX) {
@@ -92,9 +92,14 @@ if (FX) {
   composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera)); composer.addPass(new OutputPass());
   grade = makeGradePass(ShaderPass); composer.addPass(grade);
-  grade.uniforms.uGrain.value = localStorage.getItem('se-grain') === '0' ? 0 : 1;
+  // Low and potato: grain off. Med and High: off by default, opt in with se-grain=1
+  grade.uniforms.uGrain.value = (LOW || POTATO) ? 0 : (localStorage.getItem('se-grain') === '1' ? 1 : 0);
 }
-export function setGrain(on) { localStorage.setItem('se-grain', on ? '1' : '0'); if (grade) grade.uniforms.uGrain.value = on ? 1 : 0; }
+export function setGrain(on) {
+  if (LOW || POTATO) on = false;
+  localStorage.setItem('se-grain', on ? '1' : '0');
+  if (grade) grade.uniforms.uGrain.value = on ? 1 : 0;
+}
 const city = buildCity(scene, LOW, S().blocks, BASE);
 setCarQuality(LOW, POTATO);
 { const p = player(S()); city.buildAllNear(p.x, p.z); }
@@ -245,7 +250,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyH') sfx.honk();
   if (e.code === 'KeyC') doDodge();
   if (e.code === 'KeyV' && !e.repeat) session.send({ type: 'block', on: true });
-  if (e.code === 'KeyG') { const on = !(grade && grade.uniforms.uGrain.value); setGrain(on); showMsg('Film grain ' + (on ? 'on' : 'off')); }
+  if (e.code === 'KeyG') { if (LOW || POTATO) { showMsg('Film grain off on Low'); return; } const on = !(grade && grade.uniforms.uGrain.value); setGrain(on); showMsg('Film grain ' + (on ? 'on' : 'off')); }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'KeyV') session.send({ type: 'block', on: false }); });
 renderer.domElement.addEventListener('mousedown', () => {
@@ -580,7 +585,7 @@ const startBtn = $('start');
 let loaded = false, wantStart = false;
 startBtn.textContent = 'LOADING... TAP TO START WHEN READY';
 THREE.DefaultLoadingManager.onProgress = (url, done, total) => { $('loadbar').style.width = Math.round((done / total) * 100) + '%'; };
-const grainBox = $('grain'); grainBox.checked = localStorage.getItem('se-grain') !== '0'; grainBox.onchange = () => setGrain(grainBox.checked);
+const grainBox = $('grain'); grainBox.checked = !(LOW || POTATO) && localStorage.getItem('se-grain') === '1'; grainBox.disabled = !!(LOW || POTATO); grainBox.onchange = () => setGrain(grainBox.checked);
 Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }, POTATO).catch((e) => console.error(e)),
   loadCars(BASE).then(() => { carsReady = true; }).catch((e) => console.error(e)),

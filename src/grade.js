@@ -1,6 +1,6 @@
 // Color grade: a 3D look-up table built in code (warm highlights, lifted
-// deep brown shadows, high contrast, slightly washed out), plus film grain and a
-// vignette. Runs after tone mapping in display space.
+// deep brown shadows, high contrast, slightly washed out), plus optional soft
+// film grain and a vignette. Runs after tone mapping in display space.
 import * as THREE from 'three';
 
 function buildLut(N = 16) {
@@ -44,8 +44,9 @@ export function makeGradePass(ShaderPass) {
         g = mix(g, pow(max(g, 0.0), vec3(0.82)) + vec3(0.018, 0.02, 0.034), uNight); // lift night shadows, deep blue-brown floor
         float d = distance(vUv, vec2(0.5));
         g *= 1.0 - smoothstep(0.45, 0.95, d) * (0.45 - 0.2 * uNight);
-        float n = hash(vUv * 1000.0 + fract(uTime * 7.3) * 91.0) - 0.5;
-        g += n * 0.05 * uGrain;
+        // soft grain: low amplitude, coarser hash so phones do not sparkle
+        float n = hash(vUv * 280.0 + fract(uTime * 2.1) * 37.0) - 0.5;
+        g += n * 0.012 * uGrain;
         gl_FragColor = vec4(g, c.a);
       }`,
   });
