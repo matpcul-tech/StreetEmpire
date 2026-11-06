@@ -188,6 +188,19 @@ for (const k of S().pickups) {
 }
 const beacon = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 40, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffcc33, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, toneMapped: false }));
 beacon.position.y = 20; beacon.visible = false; scene.add(beacon);
+const tellRings = [];
+for (let i = 0; i < 8; i++) {
+  const geo = new THREE.RingGeometry(0.62, 0.84, 20); geo.rotateX(-Math.PI / 2);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff5530, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+  mesh.visible = false; mesh.frustumCulled = false; scene.add(mesh); tellRings.push(mesh);
+}
+const hitNums = [];
+const hitProj = new THREE.Vector3();
+function floatHit(x, z, text, color) {
+  const el = document.createElement('div'); el.className = 'hitn'; el.textContent = text; el.style.color = color;
+  document.body.appendChild(el); hitNums.push({ el, x, y: 1.55, z, t: 0.75 });
+  while (hitNums.length > 8) { const old = hitNums.shift(); old.el.remove(); }
+}
 const tracers = [];
 const tracerMat = new THREE.LineBasicMaterial({ color: 0xfff0a0, transparent: true, toneMapped: false });
 for (let i = 0; i < 10; i++) { const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]); const l = new THREE.Line(g, tracerMat.clone()); l.visible = false; l.frustumCulled = false; scene.add(l); tracers.push({ l, t: 0 }); }
@@ -197,7 +210,8 @@ function tracer(x, z, tx, tz) { const t = tracers[tracerI = (tracerI + 1) % trac
 // ---------- input ----------
 const keys = {};
 let yaw = Math.PI, pitch = 0.3, lookIdle = 0;
-let attackBuf = 0, attackQueued = false, sprintTouch = false, started = false;
+let attackBuf = 0, attackQueued = false, sprintTouch = false, started = false, streetReadySent = false;
+function queueAttack() { attackQueued = true; attackBuf = 0.5; }
 const drive = { left: false, right: false, gas: false, brake: false, drift: false };
 function context() {
   const s = S(), p = player(s);
@@ -219,7 +233,9 @@ function doContext() {
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (!started) return;
-  if (e.code === 'KeyF') attackQueued = true;
+  if (e.code === 'KeyF') queueAttack();
+  if (e.code === 'KeyY') session.send({ type: 'street', choice: 'in' });
+  if (e.code === 'KeyN') session.send({ type: 'street', choice: 'off' });
   if (e.code === 'KeyE' || e.code === 'Enter') doContext();
   if (e.code === 'KeyR') session.send({ type: 'recruit' });
   if (e.code === 'KeyT') session.send({ type: 'squad' });
@@ -235,7 +251,7 @@ addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'KeyV') 
 renderer.domElement.addEventListener('mousedown', () => {
   if (!started || isTouch) return;
   if (document.pointerLockElement !== renderer.domElement) renderer.domElement.requestPointerLock();
-  else attackQueued = true;
+  else queueAttack();
 });
 addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== renderer.domElement) return;
@@ -278,7 +294,9 @@ const endTouch = (e) => { for (const t of e.changedTouches) { if (t.identifier =
 addEventListener('touchend', endTouch); addEventListener('touchcancel', endTouch);
 const btn = (id, fn) => document.getElementById(id).addEventListener('pointerdown', (e) => { e.preventDefault(); fn(); });
 const hold = (id, key) => { const el = document.getElementById(id); el.addEventListener('pointerdown', (e) => { e.preventDefault(); drive[key] = true; el.classList.add('on'); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => { drive[key] = false; el.classList.remove('on'); }); };
-btn('bAttack', () => (attackQueued = true));
+btn('bAttack', () => queueAttack());
+btn('streetIn', () => session.send({ type: 'street', choice: 'in' }));
+btn('streetOff', () => session.send({ type: 'street', choice: 'off' }));
 btn('bJump', () => session.send({ type: 'jump' }));
 btn('bSprint', () => { sprintTouch = !sprintTouch; document.getElementById('bSprint').classList.toggle('on', sprintTouch); });
 btn('bCtx', doContext);
@@ -371,6 +389,8 @@ function drawRadar(now) {
   if (g && !s.mission) { dot(g.x, g.z, '#000', 9); dot(g.x, g.z, '#fc3', 7.5); }
   const gt = !s.mission && started ? guideTarget(s, p) : null;
   if (gt && gt.label === 'RING') { ctx.beginPath(); ctx.arc(gt.x, gt.z, 9 + Math.sin(now / 200) * 2, 0, 7); ctx.strokeStyle = '#fc3'; ctx.lineWidth = 2.5; ctx.stroke(); }
+  const call = s.calls && s.calls.active;
+  if (call && !s.mission) { ctx.beginPath(); ctx.arc(call.x, call.z, 4 + Math.sin(now / 160) * 1.2, 0, 7); ctx.strokeStyle = '#e8914a'; ctx.lineWidth = 2; ctx.stroke(); dot(call.x, call.z, '#e8914a', 4); }
   ctx.restore();
   // mission target arrow at the edge if off radar
   const tgt = s.mission && missionTarget(s);
@@ -404,6 +424,11 @@ function alertTarget(s) {
   const c = blockCenter(best);
   return { x: c.x, z: c.z, label: 'RAID' };
 }
+function streetTarget(s) {
+  const a = s.calls && s.calls.active;
+  if (!a || s.mission || a.phase !== 'offer') return null;
+  return { x: a.x, z: a.z, label: 'CALL' };
+}
 function missionTarget(s) {
   const m = s.mission; if (!m) return null;
   if (m.target) return m.target;
@@ -436,14 +461,19 @@ function handleFx(list) {
       const mine = f.by === p.id || f.to === p.id, src = byId(f.by), w = src ? src.weapon : 'fists';
       if (vol > 0) { sfx.impact(src && (w === 'pistol' || w === 'shotgun') && d > 3 ? 'bullet' : w, vol); if (f.ko) sfx.knockout(vol); }
       // sparks and dust, no blood: spray away from the attacker
+      const dir = [f.dx * 4 || 0, f.dz * 4 || 0];
       if (d < 60) {
-        const dir = [f.dx * 4 || 0, f.dz * 4 || 0];
         parts.burst(f.x, 1.25, f.z, f.heavy ? 10 : 6, 4, { color: 0xffd27a, life: 0.25, g: 6, s: 0.07, stretch: 1 }, dir);
         parts.burst(f.x, 0.25, f.z, f.ko ? 12 : 5, 2, { color: 0x9a8064, life: 0.7, g: 1.5, s: 0.22, up: 0.4 });
       }
+      const tagCol = { JAB: '#f4f4f4', CROSS: '#ffd27a', KNUCK: '#d5e8ff', BAT: '#ffb060', SHOT: '#ffe9a0', BUCK: '#ff9966', rush: '#ff7755', flank: '#7ad7ff', retreat: '#ffe14a' };
+      if (f.amt && d < 40) floatHit(f.x, f.z, (f.tag ? f.tag + ' ' : '') + f.amt, f.to === p.id ? '#ff7777' : (tagCol[f.tag] || '#fff1c4'));
+      if (f.tag === 'KNUCK' && d < 60) parts.burst(f.x, 1.2, f.z, 8, 3.5, { color: 0xd5e8ff, life: 0.22, g: 5, s: 0.06, stretch: 1 }, dir);
+      if (f.tag === 'BAT' && d < 60) parts.burst(f.x, 0.35, f.z, 10, 3, { color: 0xc4a070, life: 0.45, g: 2, s: 0.2, up: 0.3 });
       if (mine) {
-        hitStop = Math.max(hitStop, f.ko ? 0.09 : f.heavy ? 0.075 : 0.045);
-        shake = Math.max(shake, f.to === p.id ? 0.5 : f.heavy ? 0.38 : 0.22); camKick = Math.max(camKick, f.heavy ? 0.5 : 0.25);
+        const punch = f.tag === 'KNUCK' || f.tag === 'BAT' || f.tag === 'CROSS';
+        hitStop = Math.max(hitStop, f.ko ? 0.09 : f.tag === 'KNUCK' ? 0.085 : punch ? 0.07 : f.heavy ? 0.06 : 0.04);
+        shake = Math.max(shake, f.to === p.id ? 0.5 : f.tag === 'BAT' ? 0.46 : f.heavy ? 0.38 : 0.22); camKick = Math.max(camKick, f.heavy ? 0.5 : 0.25);
         if (f.ko && f.by === p.id) { slowT = 0.6; fovKick = 6; showMsg('KNOCKOUT'); }
         if (isTouch && navigator.vibrate) navigator.vibrate(f.ko ? [40, 30, 70] : f.to === p.id ? 60 : f.heavy ? 45 : 25);
       }
@@ -453,6 +483,8 @@ function handleFx(list) {
       if (f.to === p.id || f.by === p.id) { shake = Math.max(shake, 0.15); hitStop = Math.max(hitStop, 0.03); }
     } else if (f.type === 'evade' || f.type === 'dodge') { if (f.to === p.id) sfx.whoosh(); parts.burst(f.x, 0.2, f.z, 5, 1.5, { color: 0x9a8064, life: 0.5, g: 1, s: 0.2, up: 0.3 }); }
     else if (f.type === 'whiff') { /* swing sound already played */ }
+    else if (f.type === 'tell' && d < 30) parts.burst(f.x, 0.15, f.z, 4, 1.2, { color: f.style === 'flank' ? 0x7ad7ff : f.style === 'retreat' ? 0xffe14a : 0xff5530, life: 0.35, g: 1, s: 0.12, up: 0.2 });
+    else if (f.type === 'street' && f.state === 'win') pop(`+$${f.reward}`);
     else if (f.type === 'shot') {
       const sg = f.gun === 'shotgun', ry = f.ry ?? Math.atan2(f.tx - f.x, f.tz - f.z), mx = f.x + Math.sin(ry) * 0.8, mz = f.z + Math.cos(ry) * 0.8;
       if (sg) for (let k = -1; k <= 1; k++) tracer(f.x, f.z, f.x + Math.sin(ry + k * 0.12) * 13, f.z + Math.cos(ry + k * 0.12) * 13); else tracer(f.x, f.z, f.tx, f.tz);
@@ -621,7 +653,7 @@ function frame(now) {
       let mx = fx * f + rx * r, mz = fz * f + rz * r; const l = Math.hypot(mx, mz); if (l > 1) { mx /= l; mz /= l; }
       session.input(mx, mz, sprint, dt);
     }
-    if (attackQueued) { if (!attackBuf) attackBuf = 0.4; const before = p.cd; session.send({ type: 'attack', target: lockId }); if (p.cd > before && p.weapon !== 'pistol' && p.weapon !== 'shotgun') sfx.whoosh(); attackBuf = p.cd > before ? 0 : Math.max(0, attackBuf - dt); attackQueued = attackBuf > 0; } // buffer taps made during cooldown
+    if (attackQueued) { if (attackBuf <= 0) attackBuf = 0.5; const before = p.cd; session.send({ type: 'attack', target: lockId }); if (p.cd > before && p.weapon !== 'pistol' && p.weapon !== 'shotgun') sfx.whoosh(); attackBuf = p.cd > before ? 0 : Math.max(0, attackBuf - dt); attackQueued = attackBuf > 0; } // one buffered tap comes out when the swing is legal
     session.tick(dt);
     for (const ev of session.drainEvents()) showMsg(ev.text);
     handleFx(session.drainFx());
@@ -759,7 +791,8 @@ function frame(now) {
   else if (onb.step === 0 && s.opening && s.opening.friends && !s.ents.some((e) => e.scuffler && e.hp > 0)) onbAdvance(1);
   if (onb.step === 2 && s.blocks.filter((b) => b.owner === 'player').length >= 2) onbAdvance(3);
   if (!!s.mission !== onbMission) { onbMission = !!s.mission; renderOnb(); }
-  const tgt = missionTarget(s) || (started ? alertTarget(s) : null) || (started ? guideTarget(s, p) : null);
+  const tgt = missionTarget(s) || (started ? alertTarget(s) : null) || (started ? guideTarget(s, p) : null) || (started ? streetTarget(s) : null);
+  if (started && !streetReadySent && (onb.step < 0 || onb.step > 2)) { streetReadySent = true; session.send({ type: 'streetReady' }); }
   beacon.visible = !!tgt && tgt.label !== 'LOCAL'; if (tgt) { beacon.position.set(tgt.x, 60, tgt.z); beacon.material.opacity = 0.28 + Math.sin(now / 250) * 0.1; }
   const isPkg = s.mission && (s.mission.kind === 'fetch' || s.mission.kind === 'hook') && s.mission.stage === 0;
   pkgMesh.visible = !!isPkg; if (isPkg) { pkgMesh.position.set(tgt.x, 0.9 + Math.sin(now / 300) * 0.15, tgt.z); pkgMesh.rotation.y = now / 600; }
@@ -836,6 +869,40 @@ function frame(now) {
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
   if (here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
+  let ri = 0;
+  const callMark = s.calls && s.calls.active;
+  for (const e of s.ents) {
+    if (!(e.windup > 0) || e.hp <= 0 || ri >= tellRings.length) continue;
+    const ring = tellRings[ri++];
+    ring.visible = true; ring.position.set(e.x, 0.08, e.z);
+    ring.material.color.setHex(e.tell === 'flank' ? 0x44ddff : e.tell === 'retreat' ? 0xffe14a : 0xff5530);
+    ring.material.opacity = 0.55 + 0.35 * Math.min(1, (e.windup || 0) / 0.36);
+    ring.scale.setScalar(0.85 + (1 - Math.min(1, (e.windup || 0) / 0.5)) * 0.5);
+  }
+  if (callMark && callMark.phase === 'offer' && ri < tellRings.length) {
+    const ring = tellRings[ri++];
+    ring.visible = true; ring.position.set(callMark.x, 0.08, callMark.z);
+    ring.material.color.setHex(0xe8914a); ring.material.opacity = 0.75;
+    ring.scale.setScalar(2.1 + Math.sin(now / 180) * 0.12);
+  }
+  for (; ri < tellRings.length; ri++) tellRings[ri].visible = false;
+  for (let i = hitNums.length - 1; i >= 0; i--) {
+    const h = hitNums[i]; h.t -= rdt; h.y += rdt * 0.9;
+    if (h.t <= 0) { h.el.remove(); hitNums.splice(i, 1); continue; }
+    hitProj.set(h.x, h.y, h.z).project(camera);
+    if (hitProj.z > 1) { h.el.style.opacity = '0'; continue; }
+    h.el.style.opacity = String(Math.max(0, Math.min(1, h.t * 2)));
+    h.el.style.left = (hitProj.x * 0.5 + 0.5) * innerWidth + 'px';
+    h.el.style.top = (-hitProj.y * 0.5 + 0.5) * innerHeight + 'px';
+  }
+  const callEl = $('street');
+  if (!callMark || !started || cine.active) callEl.classList.add('hidden');
+  else {
+    callEl.classList.remove('hidden');
+    const text = callMark.phase === 'offer' ? callMark.text : callMark.fightText;
+    if ($('streetText').textContent !== text) $('streetText').textContent = text;
+    $('streetBtns').style.display = callMark.phase === 'offer' ? 'flex' : 'none';
+  }
   if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');
   layoutNotices();
