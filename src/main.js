@@ -257,7 +257,7 @@ addEventListener('touchstart', (e) => {
   if (stickId !== null && !live.has(stickId)) endTouch({ changedTouches: [{ identifier: stickId }] });
   if (lookId !== null && !live.has(lookId)) lookId = null;
   for (const t of e.changedTouches) {
-    if (t.target.closest('button') || t.target.closest('.panel')) continue;
+    if (t.target.closest('button') || t.target.closest('.panel') || t.target.closest('#intro')) continue;
     if (t.clientX < innerWidth * 0.45 && stickId === null && !player(S()).car) {
       stickId = t.identifier; stickOrigin = { x: t.clientX, y: t.clientY };
       stick.style.left = t.clientX - 65 + 'px'; stick.style.top = t.clientY - 65 + 'px'; stick.style.bottom = 'auto'; stick.classList.add('active');
