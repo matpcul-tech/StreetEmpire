@@ -12,7 +12,7 @@ const texCache = new Map();
 let TEXBASE = './';
 function painted(name, rx = 1, ry = 1, srgb = true) {
   let base = texCache.get(name);
-  if (!base) { base = loader.load(`${TEXBASE}tex/${name}.webp`); base.wrapS = base.wrapT = THREE.RepeatWrapping; base.anisotropy = 4; if (srgb) base.colorSpace = THREE.SRGBColorSpace; texCache.set(name, base); }
+  if (!base) { base = loader.load(`${TEXBASE}tex/${name}.webp`); base.wrapS = base.wrapT = THREE.RepeatWrapping; base.anisotropy = 8; base.generateMipmaps = true; base.minFilter = THREE.LinearMipmapLinearFilter; if (srgb) base.colorSpace = THREE.SRGBColorSpace; texCache.set(name, base); }
   if (rx === 1 && ry === 1) return base;
   const t = base.clone(); t.repeat.set(rx, ry); return t;
 }
@@ -20,12 +20,12 @@ function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = 
 function canvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
 function tex(c, rx = 1, ry = 1, srgb = true) {
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
-  if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; return t;
 }
-function grain(g, w, h, amt, n = 4000) { for (let i = 0; i < n; i++) { const v = rnd() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${amt * rnd()})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1 + rnd() * 2); } }
+function grain(g, w, h, amt, n = 1200) { for (let i = 0; i < n; i++) { const v = rnd() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${amt * rnd() * 0.55})`; const s = 2 + rnd() * 5; g.fillRect(rnd() * w, rnd() * h, s, s * (0.6 + rnd() * 0.8)); } }
 
 function drawConcrete(g, w, h, base) {
-  g.fillStyle = base; g.fillRect(0, 0, w, h); grain(g, w, h, 0.12, 9000);
+  g.fillStyle = base; g.fillRect(0, 0, w, h); grain(g, w, h, 0.06, 1800);
   g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 2;
   for (let y = 0; y <= h; y += h / 6) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
   for (let i = 0; i < 14; i++) { g.fillStyle = `rgba(20,15,10,${0.08 + rnd() * 0.1})`; const x = rnd() * w; g.fillRect(x, rnd() * h, 4 + rnd() * 10, 40 + rnd() * 120); }
@@ -56,11 +56,11 @@ function fenceTexture() {
 function dumpsterMat() {
   const c = document.createElement('canvas'); c.width = 128; c.height = 128; const g = c.getContext('2d');
   g.fillStyle = '#3d7a4a'; g.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${20 + Math.random() * 40},${40 + Math.random() * 40},${25 + Math.random() * 30},.25)`; g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2); }
+  for (let i = 0; i < 220; i++) { g.fillStyle = `rgba(${20 + Math.random() * 40},${40 + Math.random() * 40},${25 + Math.random() * 30},.14)`; const s = 3 + Math.random() * 6; g.fillRect(Math.random() * 128, Math.random() * 128, s, s); }
   g.fillStyle = '#23302a'; g.fillRect(0, 0, 128, 18);
   g.fillStyle = 'rgba(0,0,0,.25)'; for (let x = 10; x < 128; x += 24) g.fillRect(x, 18, 5, 110);
   for (let i = 0; i < 10; i++) { const x = Math.random() * 128; const gr = g.createLinearGradient(0, 18, 0, 128); gr.addColorStop(0, 'rgba(130,70,30,.55)'); gr.addColorStop(1, 'rgba(130,70,30,0)'); g.fillStyle = gr; g.fillRect(x, 18, 3 + Math.random() * 5, 40 + Math.random() * 70); }
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
   return new THREE.MeshStandardMaterial({ map: t, roughness: 0.75, metalness: 0.15 });
 }
 export function buildCity(scene, LOW, blocks, base = './') {
@@ -84,7 +84,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const lotMat = new THREE.MeshStandardMaterial({ map: tex(lc, 4, 4), roughness: 0.95 });
   // dry yard grass for the Eastside
   const [yc, yg] = canvas(128, 128); yg.fillStyle = '#5a5a34'; yg.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 2200; i++) { const c = ['#6a6a3a', '#4a4a2a', '#7a6a42', '#3e4628', '#8a7a52'][Math.floor(rnd() * 5)]; yg.fillStyle = c; yg.fillRect(rnd() * 128, rnd() * 128, 1, 2 + rnd() * 3); }
+  for (let i = 0; i < 700; i++) { const c = ['#6a6a3a', '#4a4a2a', '#7a6a42', '#3e4628', '#8a7a52'][Math.floor(rnd() * 5)]; yg.fillStyle = c; yg.fillRect(rnd() * 128, rnd() * 128, 2 + rnd() * 2, 3 + rnd() * 5); }
   const yardMat = new THREE.MeshStandardMaterial({ map: tex(yc, 6, 6), roughness: 1 });
   const courtMat = new THREE.MeshStandardMaterial({ map: painted('court'), roughness: 0.8 });
 
@@ -150,7 +150,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
     const [c, g] = canvas(64, 256); g.clearRect(0, 0, 64, 256);
     g.strokeStyle = '#4a4a26'; g.lineWidth = 3; g.beginPath(); g.moveTo(32, 256); g.lineTo(32, 0); g.stroke();
     for (let y = 8; y < 250; y += 5) { const L = 28 * Math.sin((y / 256) * Math.PI) + 3; g.strokeStyle = ['#56602e', '#46532a', '#6a6a36'][y % 3]; g.lineWidth = 3; g.beginPath(); g.moveTo(32, y); g.lineTo(32 - L, y - 12); g.moveTo(32, y); g.lineTo(32 + L, y - 12); g.stroke(); }
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; return t;
   })();
   const crownParts = [];
   for (let i = 0; i < 9; i++) {

@@ -67,27 +67,27 @@ const SHOES = [0xe8e8e0, 0x1a1a1a, 0xe8e8e0, 0x8a5a30, 0xb03030, 0xe8e8e0];
 
 // styles: top 0 tee, 1 hoodie, 2 jersey, 3 police uniform, 4 suit, 5 tank, 6 jacket
 // pants 0 jeans, 1 slacks; hair 0 short, 1 long, 2 bald
-function look(o) { return { model: 'ual', female: false, top: 0, trim: 0xffffff, pants: 0, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.5, num: -1, beard: 0, acc: {}, ...o }; }
+function look(o) { return { model: 'ual', female: false, top: 0, trim: 0xffffff, pants: 0, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.28, num: -1, beard: 0, acc: {}, ...o }; }
 
 export function lookFor(e, CREWS) {
   const v = e.look ?? (e.id * 7);
   const skin = SKINS[v % SKINS.length], hairC = HAIR[(v >> 1) % HAIR.length];
   if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0x2f8f4a, trim: 0x1e6a34, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1e6a34, back: true, neck: 0x2f8f4a } });
-  if (e.kind === 'giver') return look({ skin: 0x5a3825, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hairC: 0x8a8a8a, hair: 0, beard: 2, grit: 0.15, acc: { hat: 0x1a1a1e } });
-  if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x1a2a55, trim: 0xd0b040, pants: 1, legs: 0x141a30, shoes: 0x0e0e0e, hairC, grit: 0.15, acc: { police: 0x141e40 } });
+  if (e.kind === 'giver') return look({ skin: 0x5a3825, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hairC: 0x8a8a8a, hair: 0, beard: 2, grit: 0.08, acc: { hat: 0x1a1a1e } });
+  if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x1a2a55, trim: 0xd0b040, pants: 1, legs: 0x141a30, shoes: 0x0e0e0e, hairC, grit: 0.08, acc: { police: 0x141e40 } });
   if (e.kind === 'ped') {
     const female = v % 3 === 1;
     const top = [0, 6, 0, 1, 5, 4, 0][(v >> 2) % 7];
     return look({ skin, female, top, topC: TOPS[(v >> 2) % TOPS.length], trim: TOPS[(v >> 5) % TOPS.length], pants: top === 4 ? 1 : (v >> 3) % 3 === 2 ? 1 : 0, legs: PANTS[(v >> 3) % PANTS.length], shoes: SHOES[(v >> 4) % SHOES.length],
-      hair: female ? 1 : (v >> 6) % 5 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 3 === 0 ? 1 : 0, grit: 0.3, acc: !female && v % 4 === 1 ? { cap: TOPS[(v >> 4) % TOPS.length] } : {} });
+      hair: female ? 1 : (v >> 6) % 5 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 3 === 0 ? 1 : 0, grit: 0.16, acc: !female && v % 4 === 1 ? { cap: TOPS[(v >> 4) % TOPS.length] } : {} });
   }
   const c = CREWS[e.crew];
   const female = e.crew === 'neutral' ? v % 2 === 1 : v % 5 === 3;
-  const base = { skin, female, topC: c.shirt, legs: c.pants, hair: female ? 1 : (v >> 3) % 4 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 2, grit: 0.7 };
+  const base = { skin, female, topC: c.shirt, legs: c.pants, hair: female ? 1 : (v >> 3) % 4 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 2, grit: 0.35 };
   if (e.crew === 'reds') return look({ ...base, top: v % 2 ? 2 : 5, trim: 0xf0f0f0, num: v % 100, legs: 0x1a1a1a, shoes: 0xe8e8e0, acc: female ? {} : { rag: c.shirt } });
   if (e.crew === 'blues') return look({ ...base, top: v % 2 ? 1 : 2, trim: 0xe8e8f0, num: v % 100, legs: 0x3a4a66, shoes: 0x1a1a1a, acc: { neck: c.shirt, ...(female ? {} : { cap: 0x1a1a1a }) } });
   if (e.crew === 'golds') return look({ ...base, top: v % 2 ? 2 : 6, trim: 0x1a1a1a, num: v % 100, legs: 0x4a3a28, shoes: 0xc89a18, acc: female ? {} : { cap: c.shirt } });
-  return look({ ...base, top: [0, 1, 6][v % 3], legs: PANTS[v % PANTS.length], grit: 0.4, acc: !female && v % 3 === 0 ? { cap: 0x3a3a3a } : {} });
+  return look({ ...base, top: [0, 1, 6][v % 3], legs: PANTS[v % PANTS.length], grit: 0.22, acc: !female && v % 3 === 0 ? { cap: 0x3a3a3a } : {} });
 }
 
 // ---- painted clothing shader ----
@@ -120,7 +120,7 @@ vec3 paint(vec3 texC){
   vec3 sk = uSkin * clamp(dot(texC, vec3(0.299, 0.587, 0.114)) / uTexSkin, 0.55, 1.4); // skin keeps the model's face and body detail, tinted to this character
   int top = int(uStyle.x+0.5), pants = int(uStyle.y+0.5), hair = int(uStyle.z+0.5);
   bool front = vBN.z > 0.25, back = vBN.z < -0.35;
-  float n1 = vn(p*60.0), n2 = vn(p*9.0);
+  float n1 = vn(p*22.0), n2 = vn(p*5.5);
   vec3 c = sk; float cloth = 0.0;
   float sleeve = top==5 ? 0.17 : (top==0||top==2) ? 0.34 : 0.735;
   if (y > 1.3 && ax > 0.185) {
@@ -207,7 +207,7 @@ vec3 paint(vec3 texC){
     c = uLegs; cloth = 1.0;
     if (y > 0.955) c = pants==1 ? vec3(0.06) : vec3(0.15,0.1,0.07);
     else if (pants==0) {
-      c *= 0.82 + 0.3*vn(vec3(p.x*400.0+p.y*400.0, p.y*40.0, p.z*400.0));
+      c *= 0.88 + 0.18*vn(vec3(p.x*70.0+p.y*70.0, p.y*18.0, p.z*70.0));
       c *= 1.0 + 0.25*smoothstep(0.08, 0.0, abs(y-0.52)) * (front ? 1.0 : 0.3);
       if (y < 0.15) c *= 0.75;
       if (abs(ax - 0.165) < 0.004 && y < 0.95) c = mix(c, vec3(0.75,0.6,0.35), 0.5);
@@ -222,11 +222,11 @@ vec3 paint(vec3 texC){
     if (dot(uShoes, vec3(0.33)) > 0.4 && y > 0.04 && y < 0.07 && !front) c = mix(c, uTop, 0.8);
     if (front && p.z > 0.05 && y > 0.05 && abs(ax - 0.093) < 0.012 && fract(p.z*120.0) < 0.5) c = vec3(0.9);
   }
-  // grit: grime, dust at the hems and fabric noise
+  // grit: soft grime and dust at the hems (low contrast so phones do not speck)
   float g = uMisc.x;
-  c *= 1.0 - cloth * g * (0.25*smoothstep(0.45,0.85,n2) + 0.08*n1);
-  c = mix(c, vec3(0.42,0.35,0.27), cloth * g * 0.35 * smoothstep(0.45, 0.0, y) * n2);
-  c *= 0.97 + 0.06*n1*(1.0-cloth);
+  c *= 1.0 - cloth * g * (0.14*smoothstep(0.45,0.85,n2) + 0.04*n1);
+  c = mix(c, vec3(0.42,0.35,0.27), cloth * g * 0.18 * smoothstep(0.45, 0.0, y) * n2);
+  c *= 0.985 + 0.03*n1*(1.0-cloth);
   return c;
 }
 `;
@@ -247,7 +247,7 @@ function clothMat(L, merged = false) {
   if (merged) { m.side = THREE.DoubleSide; Object.assign(u, { uEyeMap: { value: PARTMAT[L.female ? 'f_eyes' : 'm_eyes']?.map }, uHair1: { value: PARTMAT.hair_short?.map }, uHair2: { value: PARTMAT.hair_long?.map }, uHairTint: { value: col(L.hairC).multiplyScalar(2.0) } }); }
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u, NIGHT);
-    sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.08 * sin(vB.x * 61.0 + vB.y * 47.0) * sin(vB.z * 53.0 - vB.y * 29.0), 0.6, 1.0); // fabric and skin break up, less plastic');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.04 * sin(vB.x * 21.0 + vB.y * 17.0) * sin(vB.z * 19.0 - vB.y * 13.0), 0.7, 1.0); // soft fabric break up, less plastic');
     sh.vertexShader = (merged ? 'attribute float aPart; varying float vPart;\n' : '') + 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;' + (merged ? ' vPart = aPart;' : ''));
     // merged parts: eyes and hair sample their own maps (hair tinted like the old hair material) and skip the outfit paint
     const partColor = merged ? 'if (vPart > 0.5) { if (vPart < 1.5) diffuseColor.rgb = texture2D(uEyeMap, vMapUv).rgb; else diffuseColor.rgb = (vPart < 2.5 ? texture2D(uHair1, vMapUv).rgb : texture2D(uHair2, vMapUv).rgb) * uHairTint; } else diffuseColor.rgb = paint(diffuseColor.rgb);' : 'diffuseColor.rgb = paint(diffuseColor.rgb);';
