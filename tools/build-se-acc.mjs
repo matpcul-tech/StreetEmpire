@@ -34,13 +34,24 @@ function rag() {
   const dots = []; for (let i = 0; i < 14; i++) { const d = new THREE.CircleGeometry(0.006, 5); const a = (i / 14) * Math.PI * 2, e = 0.35 + (i % 3) * 0.25; d.translate(0, 0, R * 1.07); d.rotateX(-e); d.rotateY(a); d.scale(1, 0.92, 1.12); dots.push(shade(d, 1.6)); }
   return merge(shade(s, 1), shade(knot, 0.8), shade(t1, 0.9), shade(t2, 0.85), ...dots);
 }
-// police peaked cap: crown, dark band, glossy visor, badge
+// police peaked cap: crown, dark band, glossy visor, gold badge (absolute RGB in COLOR_0 so one draw call stays multi tone)
+function tint(g, r, gv, b) {
+  g = g.index ? g.toNonIndexed() : g; for (const a of Object.keys(g.attributes)) if (a !== 'position' && a !== 'normal') g.deleteAttribute(a);
+  const n = g.attributes.position.count, c = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { c[i * 3] = r; c[i * 3 + 1] = gv; c[i * 3 + 2] = b; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3)); return g;
+}
 function police() {
+  const navy = [0.10, 0.16, 0.30], bandC = [0.04, 0.05, 0.08], visorC = [0.05, 0.05, 0.06], gold = [0.88, 0.72, 0.28];
   const crown = new THREE.CylinderGeometry(R * 1.18, R * 0.98, 0.07, 18); crown.translate(0, 0.035, 0);
   const top = new THREE.CylinderGeometry(R * 1.2, R * 1.18, 0.01, 18); top.translate(0, 0.072, 0);
-  const band = new THREE.CylinderGeometry(R * 1.0, R * 1.0, 0.024, 18, 1, true); band.translate(0, 0.012, 0);
+  const band = new THREE.CylinderGeometry(R * 1.02, R * 1.02, 0.022, 18, 1, true); band.translate(0, 0.012, 0);
   const visor = new THREE.CylinderGeometry(R * 0.85, R * 0.85, 0.006, 16, 1, false, -Math.PI / 2, Math.PI); visor.scale(1, 1, 0.85); visor.translate(0, -0.002, R * 0.6); visor.rotateX(0.12);
-  return merge(shade(crown, 1), shade(top, 1.05), shade(band, 0.35), shade(visor, 0.2));
+  // badge plate + raised shield on the front of the band
+  const plate = new THREE.BoxGeometry(0.028, 0.032, 0.006); plate.translate(0, 0.028, R * 1.05);
+  const shield = new THREE.CircleGeometry(0.011, 8); shield.translate(0, 0.03, R * 1.085);
+  const bead = new THREE.SphereGeometry(0.004, 6, 4); bead.translate(0, 0.038, R * 1.09);
+  return merge(tint(crown, ...navy), tint(top, navy[0] * 1.08, navy[1] * 1.08, navy[2] * 1.08), tint(band, ...bandC), tint(visor, ...visorC), tint(plate, ...gold), tint(shield, gold[0] * 1.05, gold[1] * 1.05, gold[2] * 0.9), tint(bead, 0.95, 0.9, 0.55));
 }
 // Unc's short brim fedora with a pinched crown and band
 function hat() {

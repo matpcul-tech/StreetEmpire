@@ -101,7 +101,28 @@ function bodyMaterial(wear = 0, kind = 0, stripe = 0xffffff) {
           c *= 0.9 + 0.25 * cn(vP * 140.0); } // metal flake
         // livery and markings: taxi checker band, police doors, muscle stripes, crew stickers
         if (uKind > 0.5 && uKind < 1.5 && abs(vP.y - 0.5) < 0.035 && paintable > 0.0) c = mod(floor(vP.z*40.0)+floor(vP.y*60.0), 2.0) < 1.0 ? vec3(0.05) : vec3(0.95);
-        if (uKind > 1.5 && uKind < 2.5 && abs(vON.x) > 0.6 && vP.y < 0.55 && vP.y > 0.25 && abs(vP.z - 0.5) < 0.18 && paintable > 0.0) c = vec3(0.92);
+        if (uKind > 1.5 && uKind < 2.5 && abs(vON.x) > 0.6 && paintable > 0.0) {
+          // door panel: white field, navy stripe, gold shield badge, PD block letters (short, hard to mirror-garble)
+          if (vP.y < 0.55 && vP.y > 0.28 && abs(vP.z - 0.5) < 0.2) {
+            c = vec3(0.93, 0.93, 0.95);
+            if (abs(vP.y - 0.42) < 0.016) c = vec3(0.12, 0.22, 0.45);
+            // gold shield near the front of the door
+            vec2 sh = vec2(vP.z - 0.40, (vP.y - 0.40) * 1.4);
+            float badge = step(length(max(abs(sh) - vec2(0.025, 0.02), 0.0)), 0.012) * step(sh.y, 0.04);
+            if (badge > 0.5) c = vec3(0.85, 0.68, 0.22);
+            // P and D (two letters, drawn so both doors share the same car-forward order)
+            float u = (vON.x > 0.0 ? (0.58 - vP.z) : (vP.z - 0.42)) / 0.14;
+            float v = (vP.y - 0.33) / 0.07;
+            if (u > 0.0 && u < 1.0 && v > 0.05 && v < 0.95 && abs(vP.y - 0.42) >= 0.016) {
+              float cell = floor(u * 2.0), x = fract(u * 2.0);
+              float ink = 0.0;
+              if (cell < 0.5) ink = step(0.15,x)*step(x,0.35)*step(0.1,v)*step(v,0.9) + step(0.15,x)*step(x,0.8)*step(0.1,v)*step(v,0.28) + step(0.15,x)*step(x,0.8)*step(0.45,v)*step(v,0.62) + step(0.6,x)*step(x,0.8)*step(0.1,v)*step(v,0.62); // P
+              else ink = step(0.15,x)*step(x,0.35)*step(0.1,v)*step(v,0.9) + step(0.15,x)*step(x,0.8)*step(0.1,v)*step(v,0.28) + step(0.15,x)*step(x,0.8)*step(0.72,v)*step(v,0.9) + step(0.6,x)*step(x,0.8)*step(0.1,v)*step(v,0.9); // D
+              if (ink > 0.5) c = vec3(0.08, 0.14, 0.32);
+            }
+          }
+          if (vP.y > 0.18 && vP.y < 0.22 && abs(vP.z) < 0.85) c = vec3(0.9);
+        }
         if (uKind > 2.5 && uKind < 3.5 && abs(vP.x - 0.5) < 0.09 && abs(vP.x - 0.5) > 0.03 && vON.y > 0.3 && paintable > 0.0) c = uStripe;
         if (uKind > 3.5 && abs(vON.x) > 0.6 && vP.y > 0.25 && vP.y < 0.42 && paintable > 0.0) c = uStripe * 0.9;
         float st = cn(vec3(vP.z*9.0 + uSeed, vP.y*9.0, uSeed));

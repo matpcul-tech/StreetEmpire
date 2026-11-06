@@ -74,7 +74,7 @@ export function lookFor(e, CREWS) {
   const skin = SKINS[v % SKINS.length], hairC = HAIR[(v >> 1) % HAIR.length];
   if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0x2f8f4a, trim: 0x1e6a34, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1e6a34, back: true, neck: 0x2f8f4a } });
   if (e.kind === 'giver') return look({ skin: 0x5a3825, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hairC: 0x8a8a8a, hair: 0, beard: 2, grit: 0.08, acc: { hat: 0x1a1a1e } });
-  if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x1a2a55, trim: 0xd0b040, pants: 1, legs: 0x141a30, shoes: 0x0e0e0e, hairC, grit: 0.08, acc: { police: 0x141e40 } });
+  if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x2c4a7a, trim: 0xe0c050, pants: 1, legs: 0x1a2438, shoes: 0x101018, hairC, grit: 0.08, acc: { police: 0xffffff } }); // white so peaked cap vertex colors (navy + gold badge) show
   if (e.kind === 'ped') {
     const female = v % 3 === 1;
     const top = [0, 6, 0, 1, 5, 4, 0][(v >> 2) % 7];
@@ -129,7 +129,7 @@ vec3 paint(vec3 texC){
       if (top==2 && ax > sleeve-0.025) c = uTrim;
       if ((top==1||top==3||top==6) && ax > 0.70) c *= 0.75;
       if (top==4 && ax > 0.715) { c = vec3(0.92); }
-      if (top==3 && ax > 0.24 && ax < 0.31 && y > 1.44) c = mix(c, uTrim, 0.6);
+      if (top==3 && ax > 0.22 && ax < 0.33 && y > 1.42 && y < 1.52) { float pb = step(0.012, min(min(ax-0.22, 0.33-ax), min(y-1.42, 1.52-y))); c = mix(uTrim * 0.35, mix(c, uTrim, 0.85), pb); }
     }
   } else if (y > 1.565) {
     // head: skin, hair, painted face
@@ -185,11 +185,34 @@ vec3 paint(vec3 texC){
       if (y > 1.47 && front && ax < 0.06) c = uTrim;
     }
     if (top==3) {
-      if (front && p.x > 0.05 && p.x < 0.08 && y > 1.36 && y < 1.40) c = uTrim;
-      if (front && ax < 0.006 && y > 1.0) c *= 0.7;
-      if (front && ax > 0.04 && ax < 0.1 && y > 1.30 && y < 1.33) c *= 0.75;
-      if (y < 1.03) c = vec3(0.05);
-      if (y < 1.03 && front && ax < 0.02) c = uTrim;
+      // lighter shirt panel so navy reads at night (front and a softer upper back yoke)
+      if (front && y > 1.05 && y < 1.48 && ax < 0.14) c = mix(c, c * vec3(1.25, 1.2, 1.15) + vec3(0.04, 0.05, 0.08), 0.55);
+      if (!front && y > 1.28 && y < 1.48 && ax < 0.14) c = mix(c, c * vec3(1.15, 1.12, 1.1) + vec3(0.03, 0.04, 0.06), 0.4);
+      // collar: slightly lighter band under the neck
+      if (y > 1.46 && y < 1.505 && ax < 0.1) c = mix(c, vec3(0.22, 0.32, 0.48), 0.65);
+      // chest badge shield (left chest)
+      {
+        vec2 b = vec2(p.x - 0.055, (y - 1.38) * 1.35);
+        float sh = step(length(max(abs(b) - vec2(0.012, 0.01), 0.0)) + min(max(abs(b.x)-0.012, abs(b.y)-0.01), 0.0), 0.006)
+                 * step(b.y, 0.022) * step(-0.02, b.y);
+        float tip = step(abs(b.x) + max(0.0, -b.y - 0.008) * 0.9, 0.018) * step(b.y, -0.004) * step(-0.028, b.y);
+        if (front && (sh + tip) > 0.5) c = uTrim;
+        if (front && (sh + tip) > 0.5 && length(b) < 0.006) c = mix(uTrim, vec3(0.95, 0.9, 0.55), 0.5);
+      }
+      // nameplate bar under the badge
+      if (front && p.x > 0.02 && p.x < 0.09 && y > 1.318 && y < 1.335) c = mix(c, vec3(0.85, 0.82, 0.75), 0.9);
+      // button placket
+      if (front && ax < 0.007 && y > 1.05 && y < 1.48) c *= 0.72;
+      if (front && ax < 0.01 && y > 1.05 && y < 1.48 && mod(floor(y * 28.0), 2.0) < 1.0 && ax < 0.005) c = mix(c, uTrim * 0.7, 0.55);
+      // pocket flaps
+      if (front && ax > 0.045 && ax < 0.105 && y > 1.28 && y < 1.305) c *= 0.7;
+      // duty belt: thick dark band with gold buckle and a radio block
+      if (y > 0.98 && y < 1.055) {
+        c = vec3(0.07, 0.07, 0.09);
+        if (front && ax < 0.028) c = mix(c, uTrim, 0.92);
+        if (front && p.x > 0.08 && p.x < 0.13) c = vec3(0.04); // radio / holster block
+        if (!front && ax > 0.06 && ax < 0.12) c = vec3(0.05); // rear gear
+      }
     }
     if (top==4) {
       float v = (y - 1.25) * 0.24;
@@ -214,6 +237,8 @@ vec3 paint(vec3 texC){
       if (y > 0.87 && back && abs(ax-0.07) < 0.04 && y < 0.93) c *= 0.85;
     } else {
       if (front && abs(ax-0.095) < 0.003) c *= 0.75;
+      // police slacks: faint cool side stripe so legs separate from the shirt at night
+      if (int(uStyle.x+0.5)==3 && abs(ax - 0.155) < 0.008 && y < 0.95 && y > 0.2) c = mix(c, vec3(0.18, 0.24, 0.38), 0.55);
     }
   } else {
     // sneakers or dress shoes
@@ -253,7 +278,7 @@ function clothMat(L, merged = false) {
     const partColor = merged ? 'if (vPart > 0.5) { if (vPart < 1.5) diffuseColor.rgb = texture2D(uEyeMap, vMapUv).rgb; else diffuseColor.rgb = (vPart < 2.5 ? texture2D(uHair1, vMapUv).rgb : texture2D(uHair2, vMapUv).rgb) * uHairTint; } else diffuseColor.rgb = paint(diffuseColor.rgb);' : 'diffuseColor.rgb = paint(diffuseColor.rgb);';
     if (merged) sh.fragmentShader = 'varying float vPart;\nuniform sampler2D uEyeMap, uHair1, uHair2;\nuniform vec3 uHairTint;\n' + sh.fragmentShader;
     sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + partColor)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.22 + alb * vec3(0.42, 0.38, 0.34)); // lift multiplies albedo only, no grey add')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34)); // slightly stronger cool rim so navy uniforms still read at night')
       .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
   };
   m.customProgramCacheKey = () => merged ? 'ualcloth-merged' : 'ualcloth';
@@ -280,10 +305,15 @@ function accessories() {
   const neck = new THREE.CylinderGeometry(ACC.neckR, ACC.neckR * 1.45, 0.07, 12, 1, true);
   const knot = new THREE.ConeGeometry(0.035, 0.08, 4); knot.rotateX(Math.PI); knot.translate(0, -0.05, f * ACC.neckR * 1.25);
   const neckB = mergeGeometries([neck.toNonIndexed(), knot.toNonIndexed()]);
-  // police peaked cap and a short brim hat
+  // police peaked cap (navy + gold badge in vertex colors) and a short brim hat
   const crown = new THREE.CylinderGeometry(r * 1.12, r * 0.98, 0.07, 14); crown.translate(0, 0.035, 0);
+  const band = new THREE.CylinderGeometry(r * 1.0, r * 1.0, 0.02, 14, 1, true); band.translate(0, 0.01, 0);
   const visor = new THREE.CylinderGeometry(r * 0.8, r * 0.8, 0.008, 14, 1, false, -Math.PI / 2, Math.PI); visor.scale(1, 1, 0.9); visor.translate(0, 0, f * r * 0.55); if (f < 0) visor.rotateY(Math.PI);
-  const police = mergeGeometries([crown.toNonIndexed(), visor.toNonIndexed()]);
+  const badge = new THREE.BoxGeometry(0.026, 0.03, 0.005); badge.translate(0, 0.028, f * r * 1.02);
+  const policeParts = [crown, band, visor, badge].map((g) => g.toNonIndexed());
+  const policeCols = [[0.10, 0.16, 0.30], [0.04, 0.05, 0.08], [0.05, 0.05, 0.06], [0.88, 0.72, 0.28]];
+  for (let i = 0; i < policeParts.length; i++) { const n = policeParts[i].attributes.position.count, c = new Float32Array(n * 3); for (let j = 0; j < n; j++) { c[j * 3] = policeCols[i][0]; c[j * 3 + 1] = policeCols[i][1]; c[j * 3 + 2] = policeCols[i][2]; } policeParts[i].setAttribute('color', new THREE.BufferAttribute(c, 3)); }
+  const police = mergeGeometries(policeParts);
   const hatC = new THREE.CylinderGeometry(r * 0.85, r * 1.0, 0.09, 14); hatC.translate(0, 0.045, 0);
   const hatB = new THREE.CylinderGeometry(r * 1.55, r * 1.55, 0.008, 16);
   const hat = mergeGeometries([hatC.toNonIndexed(), hatB.toNonIndexed()]);
@@ -394,7 +424,7 @@ export function makeCharacter(L, shadow) {
     const HY = SKULL.top - 0.065, HZ = SKULL.z;
     if (A.cap) { const m = put(head, AG.cap, A.cap, HY, HZ); if (A.back) m.rotateY(Math.PI); }
     else if (A.rag) put(head, AG.doRag, A.rag, HY - 0.008, HZ);
-    else if (A.police) { put(head, AG.police, A.police, HY + 0.01, HZ); put(head, new THREE.BoxGeometry(0.025, 0.025, 0.004), 0xd0b040, HY + 0.045, HZ + ACC.fwd * 0.118, 0.3); }
+    else if (A.police) put(head, AG.police, A.police, HY + 0.01, HZ, 0.55); // peaked cap carries the gold badge in vertex colors (one draw call)
     else if (A.hat) put(head, AG.hat, A.hat, HY + 0.03, HZ);
   }
   if (neckB && A.neck) put(neckB, AG.neck, A.neck, SKULL.neckY, SKULL.neckZ);
