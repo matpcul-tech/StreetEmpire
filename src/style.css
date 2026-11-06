@@ -118,6 +118,14 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
 #mission,.touch #mission{font:bold 13px/1.25 Arial,sans-serif;background:rgba(0,0,0,.5);border-radius:6px;padding:4px 8px;white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 #mission:has(#mtitle:empty){display:none}
 #onb,.touch #onb{font:bold 13px/1.25 Arial,sans-serif;color:#fff;background:rgba(10,8,6,.62);border-left:3px solid #ffcc33;padding:4px 8px}
+#street{font:bold 12px/1.25 Arial,sans-serif;color:#fff;background:rgba(10,8,6,.78);border-left:3px solid #e8914a;padding:4px 8px;pointer-events:auto;max-width:100%}
+#street.hidden{display:none}
+#street p{margin:0}
+#streetBtns{display:flex;gap:6px;margin-top:4px}
+#streetBtns button{pointer-events:auto;font:bold 12px Arial,sans-serif;padding:5px 8px;border:0;border-radius:4px;min-height:32px}
+#streetIn{background:#e8914a;color:#1a0f08}
+#streetOff{background:#2a2622;color:#eee;border:1px solid rgba(255,255,255,.35)!important}
+.hitn{position:fixed;z-index:7;pointer-events:none;font:bold 15px Arial,sans-serif;text-shadow:1px 1px 2px #000;transform:translate(-50%,-50%)}
 #onb i{font-style:normal;color:#ffcc33;margin-right:4px}
 #capture{font:bold 13px Arial,sans-serif;text-shadow:1px 1px 2px #000}#capture:empty{display:none}
 /* toasts: a top band between the radar and the HUD (desktop and landscape), end of the left strip in portrait */
@@ -182,7 +190,8 @@ body.cine-on #lcol{visibility:hidden}
   /* district tag sits under the radar and under the cash column, full width, so it misses pause and the minimap */
   #dtag{top:max(calc(var(--st) + 10px + var(--rad) + 8px), calc(var(--hudb, 140px) + 4px));left:calc(var(--sl) + 10px);right:calc(var(--sr) + 10px);transform:none;text-align:left;width:auto;max-width:none;overflow:hidden;text-overflow:ellipsis}
   #lcol{top:max(calc(var(--st) + 10px + var(--rad) + 28px), calc(var(--hudb, 140px) + 24px));gap:3px}
-  #lcol #mission,#lcol #onb,#lcol #capture,#lcol #msg{font-size:12px;line-height:1.2;padding:2px 6px}
+  #lcol #mission,#lcol #onb,#lcol #capture,#lcol #msg,#lcol #street{font-size:12px;line-height:1.2;padding:2px 6px}
+  #streetBtns button{min-height:34px;font-size:11px;padding:4px 6px}
   /* right of the road band (the center 36 to 64 percent), directly under the cash column */
   #rstack{display:flex;flex-direction:column;align-items:stretch;gap:4px;position:fixed;z-index:8;pointer-events:none;top:max(calc(var(--st) + 10px + var(--rad) + 28px), calc(var(--hudb, 140px) + 24px));left:64vw;right:calc(var(--sr) + 8px);width:auto;max-width:none}
   #rstack>#pops,#rstack>#big,#rstack>#passCard{position:static!important;top:auto!important;right:auto!important;left:auto!important;bottom:auto!important;transform:none!important;margin:0;width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box}

@@ -37,12 +37,25 @@ export const CAR_TYPES = {
   lowrider: { max: 26, acc: 15, hp: 110 },
 };
 // kb: knockback speed on hit. Ranged weapons spend ammo (pistol) or shells (shotgun).
+// The five weapons stay as they are. Timing, arc and stun are what separate them:
+// fists are a fast jab then cross, knuckles stun, the bat is a slow wide cleave,
+// the pistol is one precise hit, the shotgun is a short cone.
 export const WEAPONS = {
-  fists: { range: 2.8, dmg: 20, cd: 0.42, swing: 0.32, kb: 4 }, knuckles: { range: 2.9, dmg: 30, cd: 0.5, swing: 0.3, kb: 8 },
-  bat: { range: 3.3, dmg: 34, cd: 0.7, swing: 0.5, kb: 9 }, pistol: { range: 28, dmg: 26, cd: 0.35, swing: 0.25, kb: 5 },
-  shotgun: { range: 13, dmg: 24, cd: 0.95, swing: 0.3, kb: 12 },
+  fists: { range: 2.7, dmg: 18, cd: 0.34, swing: 0.26, kb: 3.6 },
+  knuckles: { range: 2.8, dmg: 30, cd: 0.46, swing: 0.3, kb: 8 },
+  bat: { range: 3.4, dmg: 34, cd: 0.74, swing: 0.5, kb: 11 },
+  pistol: { range: 28, dmg: 26, cd: 0.38, swing: 0.22, kb: 5 },
+  shotgun: { range: 12, dmg: 22, cd: 0.95, swing: 0.32, kb: 13 },
 };
 export const AIM_ASSIST = 1.35; // a client lock-on target is honored out to this multiple of weapon range
+// Optional street calls. One at a time, a session cap, and a cooldown so they
+// never become a second police system. Kinds rotate in this order.
+export const CALLS = {
+  first: 36, cd: 46, offer: 14, fight: 28, cap: 5, maxNpc: 3, minDist: 14, strikeCap: 2,
+  kinds: ['incursion', 'ambush', 'deal'],
+};
+const TELL_SEC = { rush: 0.36, flank: 0.46, retreat: 0.52 };
+const APPROACH = { rush: 5.3, flank: 4.3, retreat: 3.7 };
 
 const OFF = (GRID - 1) / 2;
 export function blockCenter(b) { return { x: (b.gx - OFF) * PITCH, z: (b.gz - OFF) * PITCH }; }
@@ -52,7 +65,7 @@ const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 const R = (s) => { s.rng = (s.rng * 1664525 + 1013904223) % 4294967296; return s.rng / 4294967296; };
 
 export function createState(seed = 1, cfg = {}) {
-  const s = { t: 0, nextId: 1, seed, rng: seed % 4294967296, cfg: { traffic: cfg.traffic ?? 10, peds: cfg.peds ?? 14 }, blocks: [], crews: {}, ents: [], cars: [], pickups: [], events: [], fx: [], over: null, mission: null, missionIdx: 0 };
+  const s = { t: 0, nextId: 1, seed, rng: seed % 4294967296, cfg: { traffic: cfg.traffic ?? 10, peds: cfg.peds ?? 14 }, blocks: [], crews: {}, ents: [], cars: [], pickups: [], events: [], fx: [], over: null, mission: null, missionIdx: 0, calls: { cd: CALLS.first, n: 0, active: null, grace: 0, ready: false, capped: false } };
   const starts = { '0,0': 'player', '4,0': 'reds', '4,1': 'reds', '0,4': 'blues', '1,4': 'blues', '4,4': 'golds', '3,4': 'golds' };
   for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
     const id = gz * GRID + gx;
@@ -81,7 +94,7 @@ export function createState(seed = 1, cfg = {}) {
   for (let i = 0; i < s.cfg.peds; i++) spawnPed(s, null);
   return s;
 }
-function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, ...o }; }
+function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
 function makeCar(s, x, z, ry, type, ai) {
   const T = CAR_TYPES[type];
   return { id: 'c' + s.nextId++, type, x, z, ry, v: 0, steer: 0, driver: null, ai, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: ai ? 8 + R(s) * 3 : 0, paint: Math.floor(R(s) * 8) };
@@ -127,7 +140,7 @@ export function openingScuffle(s) {
   let x = p.x, z = p.z - 9;
   for (const [dx, dz] of [[0, -9], [0, 9], [-9, 0], [9, 0], [0, -6]]) if (!insideBuilding(p.x + dx, p.z + dz, 0.8)) { x = p.x + dx; z = p.z + dz; break; }
   const e = spawnUnit(s, 'neutral', 'brawler', home.id, x, z);
-  e.hp = e.max = 48; e.weapon = 'fists'; e.scuffler = true; e.mugger = true; e.opening = true;
+  e.hp = e.max = 48; e.weapon = 'fists'; e.style = 'rush'; e.scuffler = true; e.mugger = true; e.opening = true;
   const pool = s.cars.filter((c) => c.ai && !c.wrecked && !c.driver && !c.cops).map((c) => c.id);
   s.opening = { beat: 'mug', t: 0, grabbed: false, friends: false, ids: [e.id], scoutId: null, scoutCar: null, scoutExisting: false, pool, near: 999, passed: false, done: false };
   log(s, 'A mugger is going for your bag.');
@@ -251,7 +264,7 @@ function weakestHeld(s, crew) { let best = null, bn = 1e9; for (const b of s.blo
 export function spawnUnit(s, crew, role, blockId, x, z) {
   const c = blockCenter(s.blocks[blockId]);
   const a = R(s) * Math.PI * 2, r = 3 + R(s) * 6;
-  const e = newEnt(s, { kind: 'npc', crew, role, home: blockId, target: blockId, x: x ?? c.x + Math.cos(a) * r, z: z ?? c.z + Math.sin(a) * r, hp: 60, weapon: role === 'attacker' && R(s) < 0.3 ? 'bat' : 'fists', look: Math.floor(R(s) * 100) });
+  const e = newEnt(s, { kind: 'npc', crew, role, home: blockId, target: blockId, x: x ?? c.x + Math.cos(a) * r, z: z ?? c.z + Math.sin(a) * r, hp: 60, weapon: role === 'attacker' && R(s) < 0.3 ? 'bat' : 'fists', look: Math.floor(R(s) * 100), style: ['rush', 'flank', 'retreat'][s.nextId % 3] });
   s.ents.push(e);
   if (role === 'defender') armGuard(e, s.blocks[blockId]);
   return e;
@@ -270,7 +283,14 @@ export function blockAt(s, x, z) {
 function neighbors(s, b) { return s.blocks.filter((o) => Math.abs(o.gx - b.gx) + Math.abs(o.gz - b.gz) === 1); }
 const COMBAT = new Set(['player', 'npc']);
 // Can a attack b? Crew members fight other crews. Cops only fight wanted players.
+// A street call that is still an offer is not a fight yet. Once accepted, those
+// actors only chase the player and the squad, so block guards do not pile on.
 function hostile(a, b) {
+  if (!a || !b || a === b) return false;
+  if (a.streetHold) return false;
+  if (b.streetHold && a.kind !== 'player') return false;
+  if (a.street) return b.kind === 'player' || (b.kind === 'npc' && b.role === 'follower' && b.crew === 'player');
+  if (b.street) return a.kind === 'player' || (a.kind === 'npc' && a.role === 'follower' && a.crew === 'player');
   if (a.kind === 'cop') return b.kind === 'player' && b.heat > 0;
   if (b.kind === 'giver') return false;
   if (a.kind === 'player') return b.crew !== a.crew && b.kind !== 'giver';
@@ -283,15 +303,17 @@ function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math
 
 // ---------- actions ----------
 export function applyAction(s, playerId, a) {
+  if (a && a.type === 'streetReady') { ensureCalls(s); s.calls.ready = true; return; }
   const p = s.ents.find((e) => e.id === playerId);
   if (!p || p.hp <= 0) return;
   if (a.type === 'attack' && p.cd <= 0 && !p.car && !p.block && p.dodgeT <= 0) attack(s, p, a.target);
   else if (a.type === 'block') p.block = !!a.on && !p.car;
-  else if (a.type === 'dodge' && !p.car && p.dodgeCd <= 0) {
-    let dx = a.dx ?? -Math.sin(p.ry), dz = a.dz ?? -Math.cos(p.ry); const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
-    p.dodgeT = 0.42; p.dodgeCd = 0.85; p.kx = dx * 15; p.kz = dz * 15; p.block = false;
-    s.fx.push({ type: 'dodge', x: p.x, z: p.z, to: p.id });
-  }
+  else if (a.type === 'dodge' && !p.car && !(p.downT > 0)) {
+    const dx = a.dx ?? -Math.sin(p.ry), dz = a.dz ?? -Math.cos(p.ry);
+    // a tap during the cooldown is kept until the roll is legal, so a mobile mash still comes out once
+    if (p.dodgeCd > 0 || p.dodgeT > 0) { p.dodgeBuf = 0.22; p.dodgeDx = dx; p.dodgeDz = dz; }
+    else startDodge(s, p, dx, dz);
+  } else if (a.type === 'street') streetChoice(s, p, a.choice);
   else if (a.type === 'jump' && !p.car && p.jumpT <= 0) p.jumpT = 0.8;
   else if (a.type === 'weapon') {
     const list = ['fists', ...(p.hasKnux ? ['knuckles'] : []), ...(p.hasBat ? ['bat'] : []), ...(p.ammo > 0 ? ['pistol'] : []), ...(p.shells > 0 ? ['shotgun'] : [])];
@@ -363,6 +385,11 @@ function exitCar(s, p) {
   p.x = c.x - Math.cos(c.ry) * 2.4; p.z = c.z + Math.sin(c.ry) * 2.4;
 }
 
+function startDodge(s, p, dx, dz) {
+  let x = dx || 0, z = dz || 0; const l = Math.hypot(x, z) || 1; x /= l; z /= l;
+  p.dodgeT = 0.36; p.dodgeCd = 0.78; p.dodgeBuf = 0; p.kx = x * 16; p.kz = z * 16; p.block = false; p.swing = 0;
+  s.fx.push({ type: 'dodge', x: p.x, z: p.z, to: p.id });
+}
 const meleeFallback = (p) => (p.hasBat ? 'bat' : p.hasKnux ? 'knuckles' : 'fists');
 function attack(s, p, targetId) {
   if (p.weapon === 'pistol' && p.ammo <= 0) p.weapon = meleeFallback(p);
@@ -396,40 +423,50 @@ function attack(s, p, targetId) {
     if (gun === 'shotgun' && p.shells <= 0) p.weapon = meleeFallback(p);
     return;
   }
-  let best = null, bs = -1e9;
+  const hits = [];
   for (const e of s.ents) if (e !== p && e.hp > 0 && hostile(p, e) && !e.car) {
     const d = Math.sqrt(dist2(e, p)); if (d > w.range) continue;
     const dot = d > 0.01 ? ((e.x - p.x) * fx + (e.z - p.z) * fz) / d : 1;
+    const wide = p.weapon === 'bat' ? -0.15 : 0.05;
+    if (dot <= wide) continue;
     const sc = dot * 2 - d * 0.5 + (d < 1.4 ? 1 : 0) + (e.kind === 'ped' ? -1 : 0) + (e.id === targetId ? 3 : 0);
-    if (dot > -0.2 && sc > bs) { bs = sc; best = e; }
+    hits.push([sc, e, d]);
   }
+  hits.sort((a2, b2) => b2[0] - a2[0]);
+  let best = hits[0] ? hits[0][1] : null;
   // lunge: a locked target just out of reach (knockback, tap timing) still gets hit, same on touch and keyboard
   if (!best && targetId != null) {
     const t = s.ents.find((e) => e.id === targetId);
     if (t && t !== p && t.hp > 0 && !t.car && hostile(p, t)) {
       const d = Math.sqrt(dist2(t, p));
-      if (d <= w.range * 1.6) { const k = Math.max(0, d - w.range * 0.75) / (d || 1); p.x += (t.x - p.x) * k; p.z += (t.z - p.z) * k; best = t; }
+      if (d <= w.range * 1.6) { const k = Math.max(0, d - w.range * 0.75) / (d || 1); p.x += (t.x - p.x) * k; p.z += (t.z - p.z) * k; best = t; hits.unshift([99, t, d]); }
     }
   }
   if (best) {
     p.ry = Math.atan2(best.x - p.x, best.z - p.z);
     const fist = p.weapon === 'fists';
-    damage(s, best, fist ? (p.combo ? 28 : 20) : w.dmg, p, !fist || p.combo === 1, fist && p.combo ? 6 : w.kb);
+    const heavy = p.weapon === 'knuckles' || p.weapon === 'bat' || (fist && p.combo === 1);
+    const kb = fist && p.combo === 0 ? 3.2 : w.kb;
+    const stun = p.weapon === 'knuckles' ? 0.95 : fist && p.combo === 0 ? 0.26 : undefined;
+    const list = p.weapon === 'bat' ? hits.slice(0, 2) : hits.slice(0, 1);
+    if (!list.length) list.push([0, best, 0]);
+    list.forEach(([, e], i) => damage(s, e, i === 0 ? (fist ? (p.combo ? 26 : 16) : w.dmg) : Math.round(w.dmg * 0.6), p, heavy, i === 0 ? kb : kb * 0.7, stun));
   } else s.fx.push({ type: 'whiff', x: p.x, z: p.z, by: p.id });
 }
 
 function panic(s, x, z, r) { for (const e of s.ents) if (e.kind === 'ped' && e.hp > 0 && (e.x - x) ** 2 + (e.z - z) ** 2 < r * r) { e.flee = 6 + R(s) * 4; e.fromX = x; e.fromZ = z; } }
 
-function damage(s, e, amt, src, heavy, kb) {
+function damage(s, e, amt, src, heavy, kb, stunO) {
   if (e.hp <= 0 || e.kind === 'giver') return;
-  // dodge rolls have a short invulnerable window
-  if (e.dodgeT > 0.12) { s.fx.push({ type: 'evade', x: e.x, z: e.z, to: e.id }); return; }
+  if (e.streetHold && src && src.kind === 'player') acceptCall(s, 'hit');
+  // the whole roll is the invulnerable window, so a mobile dodge lines up with the tell
+  if (e.dodging || e.dodgeT > 0) { s.fx.push({ type: 'evade', x: e.x, z: e.z, to: e.id, by: src ? src.id : 0 }); return; }
   // blocking soaks most of a melee hit from the front
   if (e.block && src && src.kind && dist2(e, src) < 16) {
     const d0 = Math.sqrt(dist2(e, src)) || 1, front = ((src.x - e.x) * Math.sin(e.ry) + (src.z - e.z) * Math.cos(e.ry)) / d0;
     if (front > 0.2) { amt = Math.ceil(amt * 0.2); e.hp -= amt; e.kx = (e.x - src.x) / d0 * 2; e.kz = (e.z - src.z) / d0 * 2; s.fx.push({ type: 'block', x: e.x, z: e.z, to: e.id, by: src.id }); if (e.hp <= 0) e.hp = 1; return; }
   }
-  e.hp -= amt; e.hitT = heavy ? 0.45 : 0.3; e.stun = heavy ? 0.7 : 0.4;
+  e.hp -= amt; e.hitT = heavy ? 0.45 : 0.3; e.stun = stunO != null ? stunO : (heavy ? 0.7 : 0.4); e.windup = 0; e.tell = '';
   const ko = e.hp <= 0;
   let dx = 0, dz = 0;
   if (src) {
@@ -437,7 +474,8 @@ function damage(s, e, amt, src, heavy, kb) {
     dx = (e.x - src.x) / d; dz = (e.z - src.z) / d;
     e.kx = dx * k; e.kz = dz * k;
   }
-  s.fx.push({ type: 'hit', x: e.x, z: e.z, by: src ? src.id : 0, to: e.id, heavy: !!heavy, ko, dx, dz, amt });
+  const tag = src && src.kind === 'player' ? (src.weapon === 'fists' ? (src.combo ? 'CROSS' : 'JAB') : src.weapon === 'knuckles' ? 'KNUCK' : src.weapon === 'bat' ? 'BAT' : src.weapon === 'shotgun' ? 'BUCK' : src.weapon === 'pistol' ? 'SHOT' : '') : (src && src.style ? src.style : '');
+  s.fx.push({ type: 'hit', x: e.x, z: e.z, by: src ? src.id : 0, to: e.id, heavy: !!heavy, ko, dx, dz, amt, tag, wpn: src && src.weapon ? src.weapon : '' });
   if (src && src.kind === 'player') {
     addHeat(s, src, e.kind === 'ped' ? 7 : e.kind === 'cop' ? 18 : 2);
     if (ko) addHeat(s, src, e.kind === 'ped' ? 8 : e.kind === 'cop' ? 15 : 4);
@@ -471,11 +509,14 @@ function respawnPlayer(s, p) {
   const own = s.blocks.filter((b) => b.owner === p.crew); if (!own.length) return;
   const busted = p.downBusted; p.downT = 0;
   const c = blockCenter(own[0]);
-  p.x = c.x + BLOCK / 2 + 3; p.z = c.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0;
+  p.x = c.x + BLOCK / 2 + 3; p.z = c.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0; p.dodgeBuf = 0;
   if (busted) { p.ammo = 0; p.shells = 0; p.weapon = meleeFallback(p); }
   // the chase is over: officers leave, and no cruiser keeps a siren
   for (const e of s.ents) if (e.kind === 'cop') e.leave = true;
   for (const car of s.cars) if (car.siren) car.siren = false;
+  // a bust is not an ambush window: the corner call ends and stays quiet for a bit
+  endCall(s, 'bust');
+  const calls = ensureCalls(s); calls.grace = 12; calls.cd = Math.max(calls.cd || 0, 12);
   if (s.mission) failMission(s, 'You went down. Mission failed.');
 }
 
@@ -789,6 +830,7 @@ function policeStep(s, dt) {
   // officers on foot
   for (const e of s.ents) if (e.kind === 'cop' && !e.car && e.hp > 0 && !e.remove) {
     if (st === 0 || e.leave) {
+      e.windup = 0; e.tell = '';
       // back to a live cruiser, or clear out. Never stand planted after the chase.
       if (dist2(e, p) > 70 * 70) { e.remove = true; continue; }
       const c = s.cars.find((c) => c.cops && !c.wrecked && !c.remove && dist2(c, e) < 45 * 45);
@@ -808,11 +850,20 @@ function policeStep(s, dt) {
       }
       continue;
     }
-    if (e.stun > 0) continue;
+    if (e.stun > 0) { e.windup = 0; e.tell = ''; continue; }
     e.leaveT = 0; e.leaveStill = 0; e.leaveX = null;
     const target = p.car ? s.cars.find((c) => c.id === p.car) : p;
     const d = Math.sqrt(dist2(e, target));
     if (p.car && d < 3 && Math.abs(target.v) < 2) { exitCar(s, p); log(s, 'The cops dragged you out of the car.'); continue; }
+    if (e.windup > 0) {
+      e.windup -= dt; e.moving = 0.15; e.ry = Math.atan2(p.x - e.x, p.z - e.z);
+      if (e.windup <= 0) {
+        e.tell = '';
+        if (!p.car && Math.hypot(e.x - p.x, e.z - p.z) < 2.25) damage(s, p, 9, e, false);
+        else s.fx.push({ type: 'whiff', x: e.x, z: e.z, by: e.id, to: p.id });
+      }
+      continue;
+    }
     if (e.weapon === 'pistol' && d < 18 && d > 3 && !p.car) {
       e.ry = Math.atan2(p.x - e.x, p.z - e.z); e.moving = 0;
       if (e.cd <= 0 && clearLine(e, p)) { e.cd = 1.4 + R(s); e.swing = 0.25; s.fx.push({ type: 'shot', x: e.x, z: e.z, tx: p.x, tz: p.z, by: e.id }); if (R(s) < 0.6) damage(s, p, 7, e, false); }
@@ -820,7 +871,10 @@ function policeStep(s, dt) {
     }
     if (d < 1.9 && !p.car) {
       e.ry = Math.atan2(p.x - e.x, p.z - e.z); e.moving = 0;
-      if (e.cd <= 0) { e.cd = 1.0 + R(s) * 0.4; e.swing = 0.32; e.combo = (e.combo + 1) % 2; damage(s, p, 9, e, false); }
+      if (e.cd <= 0) {
+        e.windup = 0.32; e.swing = 0.4; e.cd = 1.15; e.tell = 'rush'; e.style = e.style || 'rush';
+        s.fx.push({ type: 'tell', x: e.x, z: e.z, by: e.id, to: p.id, style: 'rush' });
+      }
     } else moveToward(e, target, 6, dt);
   }
 }
@@ -975,7 +1029,9 @@ export function step(s, dt) {
   // entities
   const chasers = new Map();
   for (const e of s.ents) {
-    if (e.cd > 0) e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.swing > 0) e.swing -= dt; if (e.stun > 0) e.stun -= dt; if (e.pathT > 0) e.pathT -= dt; if (e.jumpT > 0) e.jumpT -= dt; if (e.dodgeT > 0) e.dodgeT -= dt; if (e.dodgeCd > 0) e.dodgeCd -= dt;
+    if (e.cd > 0) e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.swing > 0) e.swing -= dt; if (e.stun > 0) e.stun -= dt; if (e.pathT > 0) e.pathT -= dt; if (e.jumpT > 0) e.jumpT -= dt; if (e.dodgeCd > 0) e.dodgeCd -= dt;
+    if (e.kind === 'player' && e.dodgeBuf > 0) { e.dodgeBuf -= dt; if (e.dodgeCd <= 0 && e.dodgeT <= 0 && e.hp > 0 && !e.car && !(e.downT > 0)) startDodge(s, e, e.dodgeDx, e.dodgeDz); }
+    e.dodging = e.dodgeT > 0; if (e.dodgeT > 0) e.dodgeT = Math.max(0, e.dodgeT - dt);
     if (e.kx || e.kz) { e.x += e.kx * dt; e.z += e.kz * dt; e.kx *= 1 - 6 * dt; e.kz *= 1 - 6 * dt; if (Math.abs(e.kx) + Math.abs(e.kz) < 0.1) e.kx = e.kz = 0; collideBuildings(e, 0.5); clampWorld(e); }
     if (e.kind === 'ped') { pedStep(s, e, dt, p); if (dist2(e, p) > 130 * 130 && e.hp > 0) { e.remove = true; } continue; }
     if (e.kind !== 'npc' || e.hp <= 0) continue;
@@ -985,7 +1041,14 @@ export function step(s, dt) {
       if (car) { e.x = car.x; e.z = car.z; e.ry = car.ry; continue; }
     }
     e.moving = 0;
-    if (e.stun > 0) continue;
+    if (e.stun > 0) { e.windup = 0; e.tell = ''; continue; }
+    // an offer stands and faces you until you choose. It does not walk up and swing.
+    if (e.streetHold) {
+      e.moving = 0; e.windup = 0;
+      const dx = p.x - e.x, dz = p.z - e.z;
+      if (dx * dx + dz * dz > 0.04) e.ry = Math.atan2(dx, dz);
+      continue;
+    }
     // raid party holds on its own block until the gather timer runs out
     if (e.gather > 0) { e.gather = Math.max(0, e.gather - dt); continue; }
     let foe = null, fd = (e.guard ? 30 : e.scout ? 18 : 12) ** 2;
@@ -1040,16 +1103,13 @@ export function step(s, dt) {
       }
       else if (dist2(e, c) > 16) goal = c;
     }
-    if (goal) {
+    if (foe && goal === foe) engage(s, e, foe, dt);
+    else if (goal) {
       const d = Math.sqrt(dist2(goal, e));
-      const reach = e.weapon === 'bat' ? 2.6 : 1.9;
-      if (goal === foe && d < reach) {
-        e.ry = Math.atan2(goal.x - e.x, goal.z - e.z);
-        if (e.cd <= 0) { e.cd = (e.weapon === 'bat' ? 1.3 : 1.0) + R(s) * 0.6; e.swing = e.weapon === 'bat' ? 0.5 : 0.32; e.combo = (e.combo + 1) % 2; damage(s, foe, e.weapon === 'bat' ? 14 : 8, e, e.weapon === 'bat'); }
-      } else if (d > 0.5) {
+      if (d > 0.5) {
         const wp = steerPoint(e, goal);
         const dx = wp.x - e.x, dz = wp.z - e.z, dd = Math.hypot(dx, dz) || 1;
-        const sp = followSpeed && goal !== foe ? followSpeed : 4;
+        const sp = followSpeed || 4;
         let sx = 0, sz = 0;
         for (const o of s.ents) if (o !== e && o.hp > 0 && o.kind === 'npc') { const q = dist2(o, e); if (q < 1 && q > 0) { sx += (e.x - o.x) / q; sz += (e.z - o.z) / q; } }
         e.x += (dx / dd * sp + sx * 0.6) * dt; e.z += (dz / dd * sp + sz * 0.6) * dt;
@@ -1134,10 +1194,272 @@ export function step(s, dt) {
   }
   for (const b of s.blocks) if (b.owner === 'neutral' && R(s) < dt / 50 && s.ents.filter((e) => e.crew === 'neutral' && e.home === b.id && e.hp > 0).length < 2) spawnUnit(s, 'neutral', 'defender', b.id);
   missionStep(s, p, dt);
+  callsStep(s, dt);
   const pt = s.blocks.filter((b) => b.owner === 'player').length;
   const rivals = s.blocks.filter((b) => ['reds', 'blues', 'golds'].includes(b.owner)).length;
   if (rivals === 0 && pt >= 10) s.over = 'win';
   else if (pt === 0) s.over = 'lose';
+}
+
+function npcReach(e) { return e.weapon === 'bat' ? 2.55 : 1.85; }
+function isAggressor(s, e, foe) {
+  const mates = [];
+  for (const o of s.ents) if (o.kind === 'npc' && o.hp > 0 && !o.streetHold && (o === e || o.foeId === foe.id)) mates.push(o);
+  mates.sort((a, b) => {
+    const aw = a.windup > 0 ? 0 : 1, bw = b.windup > 0 ? 0 : 1;
+    if (aw !== bw) return aw - bw;
+    const ad = dist2(a, foe), bd = dist2(b, foe);
+    if (Math.abs(ad - bd) > 0.25) return ad - bd;
+    return a.id - b.id;
+  });
+  return mates.indexOf(e) > -1 && mates.indexOf(e) < CALLS.strikeCap;
+}
+function separateNpc(s, e, dt) {
+  let sx = 0, sz = 0;
+  for (const o of s.ents) if (o !== e && o.hp > 0 && (o.kind === 'npc' || o.kind === 'player' || o.kind === 'cop')) {
+    const q = dist2(o, e); if (q < 1.1 && q > 0) { sx += (e.x - o.x) / q; sz += (e.z - o.z) / q; }
+  }
+  if (sx || sz) { e.x += sx * 0.7 * dt; e.z += sz * 0.7 * dt; }
+}
+// Rush closes, flank steps to the side, retreat backs off when hurt.
+// Only strikeCap of them can be in a swing at once. The rest hold a ring.
+function engage(s, e, foe, dt) {
+  const style = e.style || 'rush';
+  e.foeId = foe.id;
+  if (e.brave > 0) e.brave -= dt;
+  if (e.windup > 0) {
+    e.windup -= dt; e.moving = 0.15;
+    const dx = foe.x - e.x, dz = foe.z - e.z, dd = Math.hypot(dx, dz) || 1;
+    e.ry = Math.atan2(dx, dz);
+    const lunge = style === 'rush' ? 2.2 : 1.05;
+    if (dd > npcReach(e) * 0.7) { e.x += (dx / dd) * lunge * dt; e.z += (dz / dd) * lunge * dt; collideBuildings(e, 0.5); }
+    if (e.windup <= 0) {
+      const told = e.tell; e.tell = '';
+      const d = Math.hypot(foe.x - e.x, foe.z - e.z);
+      if (foe.hp > 0 && d <= npcReach(e) + 0.45) damage(s, foe, e.weapon === 'bat' ? 14 : 8, e, e.weapon === 'bat');
+      else s.fx.push({ type: 'whiff', x: e.x, z: e.z, by: e.id, to: foe.id, style: told });
+      if (style === 'retreat') { e.backOff = 1.25; e.brave = 3.1; }
+      e.flanked = false;
+    }
+    return;
+  }
+  if (e.backOff > 0) {
+    e.backOff -= dt;
+    const dx = e.x - foe.x, dz = e.z - foe.z, dd = Math.hypot(dx, dz) || 1;
+    if (dd < 6.8) { e.x += (dx / dd) * 3.6 * dt; e.z += (dz / dd) * 3.6 * dt; e.ry = Math.atan2(-dx, -dz); e.moving = 0.85; collideBuildings(e, 0.5); }
+    else e.moving = 0.2;
+    return;
+  }
+  const d0 = Math.hypot(foe.x - e.x, foe.z - e.z);
+  if (style === 'retreat' && e.hp < e.max * 0.45 && e.hp > 0 && (e.brave || 0) <= 0 && d0 < 5.5) {
+    e.backOff = 1.35; e.brave = 3.2; return;
+  }
+  // Two may close. The rest stay on a ring for the whole beat, not only during a swing.
+  if (!isAggressor(s, e, foe)) {
+    const ang = Math.atan2(e.z - foe.z, e.x - foe.x);
+    moveToward(e, { x: foe.x + Math.cos(ang) * 6.6, z: foe.z + Math.sin(ang) * 6.6 }, 3.6, dt);
+    separateNpc(s, e, dt);
+    return;
+  }
+  const reach = npcReach(e);
+  let dest = foe;
+  if (style === 'flank' && d0 > reach + 0.15 && !e.flanked) {
+    const side = e.id % 2 ? 1 : -1;
+    const px = -(foe.z - e.z), pz = (foe.x - e.x), pl = Math.hypot(px, pz) || 1;
+    dest = { x: foe.x + (px / pl) * side * 2.6, z: foe.z + (pz / pl) * side * 2.6 };
+    if (Math.hypot(dest.x - e.x, dest.z - e.z) < 1.25) e.flanked = true;
+  }
+  const dd = Math.hypot(dest.x - e.x, dest.z - e.z);
+  if (dest === foe && d0 <= reach && e.cd <= 0) {
+    const sec = (e.weapon === 'bat' ? 0.08 : 0) + (TELL_SEC[style] || 0.4);
+    e.windup = sec; e.swing = sec + 0.06; e.cd = sec + (e.weapon === 'bat' ? 0.85 : 0.62); e.tell = style; e.moving = 0;
+    s.fx.push({ type: 'tell', x: e.x, z: e.z, by: e.id, to: foe.id, style });
+    return;
+  }
+  if (dd > 0.45) moveToward(e, dest, dest === foe ? (APPROACH[style] || 4) : 4.2, dt);
+  separateNpc(s, e, dt);
+}
+
+// ---------- street calls ----------
+// One optional corner event at a time: rival incursion, a posted ambush, or a
+// broken deal. The player steps in or walks off. Nothing starts on the spawn
+// beat, during the opening, a mission, a bust, or while the cops are already here.
+function ensureCalls(s) {
+  if (!s.calls) s.calls = { cd: CALLS.first, n: 0, active: null, grace: 0, ready: false, capped: false, seq: 0 };
+  if (s.calls.seq == null) s.calls.seq = 0;
+  return s.calls;
+}
+function callBlocked(s, p) {
+  const c = s.calls;
+  if (!c.ready || c.grace > 0) return true;
+  if (s.t < 8) return true;
+  if (s.mission) return true;
+  if (s.opening && !s.opening.done) return true;
+  if (!p || p.car || p.hp <= 0 || p.downT > 0) return true;
+  if (stars(p) >= 4) return true;
+  if (s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && dist2(e, p) < 45 * 45)) return true;
+  if (s.blocks.some((b) => b.owner === 'player' && b.raid && b.raid.eta > 0)) return true;
+  const hot = s.ents.filter((e) => e.kind === 'npc' && e.hp > 0 && !e.street && e.crew !== p.crew && dist2(e, p) < 16 * 16).length;
+  return hot >= 3;
+}
+function callSpot(s, p) {
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.75, 0.75], [-0.75, 0.75], [0.75, -0.75], [-0.75, -0.75]];
+  const start = Math.floor(R(s) * dirs.length);
+  for (let i = 0; i < dirs.length; i++) {
+    const [dx, dz] = dirs[(start + i) % dirs.length];
+    const l = Math.hypot(dx, dz) || 1;
+    const dist = CALLS.minDist + 2 + R(s) * 8;
+    const x = p.x + (dx / l) * dist, z = p.z + (dz / l) * dist;
+    if (Math.abs(x) > HALF - 2 || Math.abs(z) > HALF - 2) continue;
+    if (insideBuilding(x, z, 1.1)) continue;
+    if (Math.hypot(x - p.x, z - p.z) < CALLS.minDist) continue;
+    return { x, z };
+  }
+  return null;
+}
+function rivalCrew(s, p) {
+  let best = null, bd = 1e9;
+  for (const b of s.blocks) if (RIVALS.has(b.owner)) {
+    const d = dist2(blockCenter(b), p);
+    if (d < bd) { bd = d; best = b.owner; }
+  }
+  return best;
+}
+function placeCall(s, crew, homeId, x, z, o) {
+  const e = spawnUnit(s, crew, 'brawler', homeId, x, z);
+  e.street = true; e.streetHold = true; e.streetId = o.id; e.hp = e.max = o.hp || 54;
+  if (o.weapon) e.weapon = o.weapon;
+  if (o.style) e.style = o.style;
+  e.opening = false;
+  return e;
+}
+function endCall(s, why) {
+  const c = ensureCalls(s), a = c.active;
+  if (!a) return;
+  for (const e of s.ents) if (e.streetId === a.id && !(why === 'win' && e.hp <= 0)) e.remove = true;
+  s.ents = s.ents.filter((e) => !(e.remove && e.streetId === a.id));
+  c.active = null;
+  c.cd = why === 'bust' ? Math.max(c.cd, 12) : CALLS.cd;
+  s.fx.push({ type: 'street', state: 'end', why, kind: a.kind });
+}
+function skimStash(s, p, frac) {
+  const b = blockAt(s, p.x, p.z);
+  if (!b || b.owner !== p.crew) return 0;
+  const take = Math.floor((b.stash || 0) * frac);
+  if (take < 1) return 0;
+  b.stash -= take;
+  return take;
+}
+function declineCall(s, why) {
+  const c = s.calls, a = c && c.active, p = player(s);
+  if (!a || a.phase !== 'offer') { endCall(s, why); return; }
+  let note = a.leave;
+  if (p && a.skim > 0) {
+    const took = skimStash(s, p, a.skim);
+    if (took > 0) note = a.skimNote.replace('$N', '$' + took);
+  }
+  log(s, note);
+  s.fx.push({ type: 'street', state: 'off', kind: a.kind, why });
+  endCall(s, why === 'timeout' ? 'timeout' : 'off');
+}
+function acceptCall(s, how) {
+  const c = ensureCalls(s), a = c.active, p = player(s);
+  if (!a || a.phase !== 'offer') return;
+  a.phase = 'fight'; a.t = CALLS.fight;
+  for (const e of s.ents) if (e.streetId === a.id) e.streetHold = false;
+  if (a.heat && p) addHeat(s, p, a.heat);
+  s.fx.push({ type: 'street', state: 'fight', kind: a.kind, how: how || 'choice' });
+}
+function streetChoice(s, p, choice) {
+  const a = ensureCalls(s).active;
+  if (!a || a.phase !== 'offer') return;
+  if (choice === 'in') acceptCall(s, 'choice');
+  else declineCall(s, 'off');
+}
+function offerCall(s, p) {
+  const c = s.calls;
+  const kind = CALLS.kinds[c.n % CALLS.kinds.length];
+  const crew = kind === 'deal' ? (rivalCrew(s, p) || 'reds') : rivalCrew(s, p);
+  if (!crew) { c.cd = 8; return; }
+  const spot = callSpot(s, p);
+  if (!spot) { c.cd = 3; return; }
+  const home = blockAt(s, spot.x, spot.z) || blockAt(s, p.x, p.z) || s.blocks[0];
+  const name = CREWS[crew].name;
+  const a = { id: ++c.seq, kind, phase: 'offer', crew, x: spot.x, z: spot.z, t: CALLS.offer, block: home.id, reward: 70, rep: 6, skim: 0, heat: 0 };
+  if (kind === 'incursion') {
+    a.reward = 80; a.rep = 8; a.skim = 0.25;
+    a.text = `${name} are pushing this corner. Step in, or let them shake it down.`;
+    a.fightText = `${name} rush the corner. Drop them or leave.`;
+    a.leave = `${name} rough up the corner and move on.`;
+    a.skimNote = `${name} shook $N out of the corner and left.`;
+    a.win = `You broke the ${name} push.`;
+  } else if (kind === 'ambush') {
+    a.reward = 60; a.rep = 6; a.skim = 0;
+    a.text = `Two ${name} are posted up the block. Face them, or go around.`;
+    a.fightText = `The ${name} lookouts come at you.`;
+    a.leave = 'You went around. They pack it in.';
+    a.skimNote = a.leave;
+    a.win = 'The lookouts are down.';
+  } else {
+    a.reward = 100; a.rep = 4; a.skim = 0.12; a.heat = 6;
+    a.text = 'A deal on the corner just broke. Break it up, or leave it.';
+    a.fightText = 'Both sides turn on you.';
+    a.leave = 'They settle it and scatter.';
+    a.skimNote = 'They settle it and skim $N off the block.';
+    a.win = 'You took the purse.';
+  }
+  c.n += 1; c.active = a;
+  const specs = kind === 'incursion'
+    ? [{ x: 0, z: 0, weapon: 'fists', style: 'rush', hp: 56 }, { x: 1.5, z: 0.8, weapon: 'bat', style: 'flank', hp: 60 }, { x: -1.5, z: 0.6, weapon: 'fists', style: 'retreat', hp: 50 }]
+    : kind === 'ambush'
+      ? [{ x: 0, z: 0, weapon: 'fists', style: 'rush', hp: 58 }, { x: 1.6, z: -0.4, weapon: 'bat', style: 'flank', hp: 60 }]
+      : [{ x: 0, z: 0, weapon: 'fists', style: 'rush', hp: 52, crew }, { x: 1.5, z: 0.2, weapon: 'fists', style: 'retreat', hp: 48, crew: 'neutral' }];
+  for (const sp of specs.slice(0, CALLS.maxNpc)) {
+    const x = spot.x + sp.x, z = spot.z + sp.z;
+    if (insideBuilding(x, z, 0.7)) { sp.x = 0; sp.z = 0; }
+    placeCall(s, sp.crew || crew, home.id, spot.x + sp.x, spot.z + sp.z, { id: a.id, weapon: sp.weapon, style: sp.style, hp: sp.hp });
+  }
+  s.fx.push({ type: 'street', state: 'offer', kind, x: a.x, z: a.z, crew, text: a.text });
+}
+function callsStep(s, dt) {
+  const c = ensureCalls(s), p = player(s);
+  if (c.grace > 0) c.grace = Math.max(0, c.grace - dt);
+  const a = c.active;
+  if (a) {
+    const live = () => s.ents.filter((e) => e.streetId === a.id && e.hp > 0);
+    if (s.mission || !p || p.hp <= 0 || p.downT > 0) {
+      if (s.mission) log(s, 'The corner call clears off. Finish the job with Unc.');
+      endCall(s, p && (p.hp <= 0 || p.downT > 0) ? 'down' : 'mission');
+      return;
+    }
+    const away = Math.hypot(p.x - a.x, p.z - a.z);
+    if (a.phase === 'offer') {
+      a.t -= dt;
+      if (away > 34) { declineCall(s, 'off'); return; }
+      if (a.t <= 0) { declineCall(s, 'timeout'); return; }
+      return;
+    }
+    if (!live().length) {
+      s.crews.player.cash += a.reward; s.crews.player.rep += a.rep;
+      log(s, `${a.win} +$${a.reward}`);
+      s.fx.push({ type: 'street', state: 'win', kind: a.kind, reward: a.reward, rep: a.rep });
+      endCall(s, 'win');
+      return;
+    }
+    a.t -= dt;
+    if (a.t <= 0 || away > 42) {
+      log(s, a.t <= 0 ? 'They scatter before you finish it.' : 'You left the corner. They scatter.');
+      endCall(s, a.t <= 0 ? 'timeout' : 'leave');
+    }
+    return;
+  }
+  if (callBlocked(s, p)) return;
+  if (c.n >= CALLS.cap) {
+    if (!c.capped) { c.capped = true; log(s, 'The corner stays quiet.'); }
+    return;
+  }
+  if (c.cd > 0) { c.cd -= dt; return; }
+  offerCall(s, p);
 }
 
 function aiThink(s, k, dt) {
