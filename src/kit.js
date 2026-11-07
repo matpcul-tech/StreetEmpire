@@ -82,7 +82,7 @@ function prepCar(scene, spec, slot, low) {
     }
     const paint = collectPaint(scene, spec);
     shadows(root, !low, false); if (low) cheapen(root);
-    return { root, paint, hasWheels: true, slot, spec };
+    return { root, paint, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, slot, spec };
   }
   // fallback for untagged models: meshes named like a wheel and much smaller than the body
   const found = [];
@@ -100,7 +100,7 @@ function prepCar(scene, spec, slot, low) {
   const paint = collectPaint(scene, spec);
   shadows(root, !low, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
-  return { root, paint, hasWheels: nWheels > 0, slot, spec };
+  return { root, paint, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
 }
 
 function collectPaint(scene, spec) {
@@ -132,8 +132,64 @@ export function cloneKitCar(T, paintHex) {
     const swap = (m) => { if (!T.paint.includes(m)) return m; const key = m.uuid + paintHex; let t = tinted.get(key); if (!t) { t = m.clone(); t.color = new THREE.Color(paintHex); t.map = m.map; tinted.set(key, t); } return t; };
     o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
   });
+  else if (paintHex != null && T.key) model.traverse((o) => {
+    if (!o.isMesh) return;
+    const swap = (m) => (m.map ? keyedPaint(m, T.key, paintHex) : m);
+    o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
+  });
   const wheels = []; for (const c of model.children) if (c.name === 'wheel') wheels.push({ node: c, front: c.position.z > 0 });
   return { model, wheels };
+}
+
+// Repaint for models whose paint is baked into one texture (AI-made cars, atlases): the body's
+// dominant hue is found once per model, and each car's material repaints only pixels near that
+// hue, keeping their shading. Glass, tires, chrome and lamps (other hues or grays) are untouched.
+// White, gray or black bodies have no hue to key on, so those models keep their own color.
+function paintKey(scene) {
+  let map = null; scene.traverse((o) => { if (!map && o.isMesh) for (const m of [].concat(o.material)) if (m.map && m.map.image) { map = m.map; break; } });
+  if (!map || typeof document === 'undefined') return null;
+  const N = 128, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  try { ctx.drawImage(map.image, 0, 0, N, N); } catch (e) { return null; }
+  const px = ctx.getImageData(0, 0, N, N).data, bins = new Array(36).fill(0), sum = [];
+  let lit = 0, sat = 0; const c = new THREE.Color(), hsl = {};
+  const hsv = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; };
+  for (let i = 0; i < px.length; i += 4) {
+    const [h, s, v] = hsv(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255);
+    if (v < 0.12) continue; lit++;
+    if (s < 0.25) continue; sat++;
+    const k = Math.floor(h * 36) % 36; bins[k]++; (sum[k] ||= []).push([px[i], px[i + 1], px[i + 2]]);
+  }
+  if (!lit || sat / lit < 0.05) return null;
+  let best = 0; for (let k = 0; k < 36; k++) if (bins[k] + bins[(k + 1) % 36] + bins[(k + 35) % 36] > bins[best] + bins[(best + 1) % 36] + bins[(best + 35) % 36]) best = k;
+  const pick = [].concat(sum[best] || [], sum[(best + 1) % 36] || [], sum[(best + 35) % 36] || []);
+  const avg = pick.reduce((a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]], [0, 0, 0]).map((v) => v / pick.length / 255);
+  c.setRGB(avg[0], avg[1], avg[2], THREE.SRGBColorSpace); // shader works in linear color
+  return hsv(c.r, c.g, c.b);
+}
+const keyed = new Map();
+function keyedPaint(m, key, paintHex) {
+  const id = m.uuid + ':' + paintHex; let t = keyed.get(id); if (t) return t;
+  const pc = new THREE.Color(paintHex);
+  const hsvOf = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; };
+  const uKey = { value: new THREE.Vector3(...key) }, uPaint = { value: new THREE.Vector3(...hsvOf(pc.r, pc.g, pc.b)) };
+  t = m.clone();
+  t.onBeforeCompile = (sh) => {
+    sh.uniforms.uKey = uKey; sh.uniforms.uPaint = uPaint;
+    sh.fragmentShader = 'uniform vec3 uKey;\nuniform vec3 uPaint;\n' +
+      'vec3 kRgb2Hsv(vec3 c){vec4 K=vec4(0.,-1./3.,2./3.,-1.);vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));float d=q.x-min(q.w,q.y);float e=1e-10;return vec3(abs(q.z+(q.w-q.y)/(6.*d+e)),d/(q.x+e),q.x);}\n' +
+      'vec3 kHsv2Rgb(vec3 c){vec4 K=vec4(1.,2./3.,1./3.,3.);vec3 p=abs(fract(c.xxx+K.xyz)*6.-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);}\n' +
+      sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec3 hv = kRgb2Hsv(diffuseColor.rgb);
+          float dh = abs(hv.x - uKey.x); dh = min(dh, 1.0 - dh);
+          float w = (1.0 - smoothstep(0.035, 0.065, dh)) * smoothstep(0.10, 0.22, hv.y);
+          vec3 nh = vec3(uPaint.x, clamp(hv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(hv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, kHsv2Rgb(nh), w);
+        }`);
+  };
+  t.customProgramCacheKey = () => 'kit-keyed-paint';
+  keyed.set(id, t); return t;
 }
 
 export function placeKitBuilding(T) { return T.root.clone(true); }
