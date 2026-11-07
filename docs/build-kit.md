@@ -59,6 +59,14 @@ For CC BY models, upload a text file with the same name next to it (`sedan.txt` 
 
 Other commands: `list`, `remove car sedan`, `remove building house house-2`, `inbox`.
 
+## Checking a model for flaws
+
+`node tools/kit-check.mjs model.glb` (slot read from the file name) reports:
+- **Open windows**: window openings with no glass, so you can see through the car. AI-made models often leave the rear side windows open.
+- **Size**: width and height against the real vehicle for that slot.
+
+`node tools/kit-glaze.mjs in.glb out.glb` fills every open window it finds with glass, using a dark glass pixel the model already has, so the game's finish pass shades it like the other windows. Import `out.glb` as usual (`@keep`).
+
 ## Picking models that work
 
 - Pick low poly or game ready models of 5k to 40k triangles. Film-quality cars of 300k triangles get cut down hard and can look melted.
