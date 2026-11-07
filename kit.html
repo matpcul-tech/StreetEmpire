@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#07101f" />
+<meta name="robots" content="noindex" />
+<link rel="icon" type="image/png" href="./art/icon-32.png" />
+<title>Street Empire Build Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
+<style>
+:root{--bg:#07101f;--card:#0d1a30;--line:#1c2c48;--gold:#d4a843;--teal:#00d4b8;--text:#e8e4dd;--mute:#8a96ab;--bad:#e2655a}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 Outfit,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:max(14px,env(safe-area-inset-top)) 16px 12px;border-bottom:1px solid var(--line)}
+h1{font:700 22px 'Playfair Display',serif;margin:0;color:var(--gold);flex:1}
+.shield{display:flex;align-items:center;gap:6px;font:600 11px Outfit;letter-spacing:.12em;color:var(--teal)}
+.shield i{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(0,212,184,.6);animation:p 1.8s infinite}
+@keyframes p{70%{box-shadow:0 0 0 8px rgba(0,212,184,0)}100%{box-shadow:0 0 0 0 rgba(0,212,184,0)}}
+main{max-width:1100px;margin:0 auto;padding:14px 16px 40px;display:grid;gap:14px}
+@media(min-width:860px){main{grid-template-columns:300px 1fr}}
+@media(max-width:859px){main>section:last-child{order:-1}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+h2{font:600 17px 'Playfair Display',serif;margin:0 0 8px;color:var(--text)}
+.slots{display:grid;gap:6px}
+.slot{display:flex;justify-content:space-between;align-items:center;width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#0a1528;color:var(--text);font:500 14px Outfit;text-align:left;cursor:pointer}
+.slot small{color:var(--mute);font-weight:400}
+.slot.on{border-color:var(--gold);box-shadow:inset 3px 0 0 var(--gold)}
+.slot.empty{opacity:.55;cursor:default}
+.tag{font:600 10px Outfit;letter-spacing:.1em;padding:3px 7px;border-radius:99px;background:rgba(0,212,184,.12);color:var(--teal)}
+.slot.empty .tag{background:rgba(138,150,171,.12);color:var(--mute)}
+#view{position:relative;height:min(62vh,520px);border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#050b16}
+#view canvas{display:block;width:100%;height:100%;touch-action:none}
+#hint{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--mute);padding:20px;pointer-events:none}
+#stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:12px}
+.stat{background:#0a1528;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.stat b{display:block;font:600 18px Outfit;color:var(--gold)}
+.stat span{font-size:12px;color:var(--mute)}
+#notes{margin:10px 0 0;padding-left:18px;color:var(--mute);font-size:13px}
+#notes li.bad{color:var(--bad)}
+.how ol{margin:6px 0 0;padding-left:18px;color:var(--mute);font-size:13.5px}
+.how code{background:#0a1528;border:1px solid var(--line);padding:1px 5px;border-radius:5px;color:var(--text);font-size:12.5px}
+a{color:var(--teal)}
+</style>
+</head>
+<body>
+<header><h1>Build Kit</h1><div class="shield"><i></i>KIT LIVE</div></header>
+<main>
+  <section>
+    <div class="card"><h2>Cars</h2><div class="slots" id="cars"></div></div>
+    <div class="card" style="margin-top:14px"><h2>Buildings</h2><div class="slots" id="buildings"></div></div>
+    <div class="card how" style="margin-top:14px">
+      <h2>Add a model</h2>
+      <ol>
+        <li>Download a <code>.glb</code> or a glTF <code>.zip</code> (Sketchfab: Download 3D Model, glTF).</li>
+        <li>Rename it to the slot: <code>sedan.glb</code>, <code>house-2.zip</code>.</li>
+        <li>On GitHub open <code>kit-inbox/cars</code> or <code>kit-inbox/buildings</code>, then Add file, Upload files, Commit.</li>
+        <li>In about 3 minutes it shows here and in the game.</li>
+      </ol>
+      <p style="color:var(--mute);font-size:13px;margin:8px 0 0">Facing the wrong way? Add <code>@yaw180</code> (or 90, -90) before the extension and upload again. Credit file: same name with <code>.txt</code>.</p>
+    </div>
+  </section>
+  <section>
+    <div id="view"><div id="hint">Pick an installed model to preview it.<br/>Gold arrow points to the front. The outline is the space it gets in game.</div></div>
+    <div id="stats"></div>
+    <ul id="notes"></ul>
+  </section>
+</main>
+<script type="module" src="./src/kitview.js"></script>
+</body>
+</html>

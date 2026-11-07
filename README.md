@@ -137,6 +137,10 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 - Tinted see-through glass that shows the drivers.
 - Glowing taillights, brake lights that flare when braking or stopped, and headlight flares at night.
 
+## Build kit (realistic models)
+
+Swap the built-in cars and buildings for downloaded realistic models, slot by slot, from a phone: upload a `.glb` or glTF `.zip` named after its slot (`sedan.glb`, `house-2.zip`) into `kit-inbox/cars` or `kit-inbox/buildings`. A workflow shrinks it for phones (triangle budget, merged draw calls, WebP textures, meshopt), installs it and redeploys. Preview everything at `kit.html`. Full guide, file name settings and a checked model list: `docs/build-kit.md`.
+
 ## Release QA
 
 See `docs/qa-checklist.md`. Tools: `tools/visual-qa.mjs` (brightness and silhouette gate), `tools/playtest.mjs` (scripted playthrough), `tools/night.mjs` and `tools/carshots.mjs` (review shots).

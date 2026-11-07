@@ -1,0 +1,80 @@
+# Build kit: realistic cars and buildings
+
+The build kit swaps the built-in cars and buildings for downloaded models, slot by slot. Anything not installed keeps the built-in look, and a model that fails to load falls back too, so a bad upload never breaks the game.
+
+- Viewer: https://matpcul-tech.github.io/StreetEmpire/kit.html (preview every installed model the way the game sees it: front arrow, space in game, triangles, draw calls, spinning wheels, credit)
+- Manifest: `public/models/kit/kit.json`
+- Runtime: `src/kit.js` (used by `src/vehicles.js` and `src/city.js`)
+- Importer: `tools/kit-import.mjs`
+- Phone upload: `kit-inbox/` plus `.github/workflows/kit.yml`
+
+## Slots
+
+| Kind | Slots | In game |
+| --- | --- | --- |
+| car | sedan, muscle, suv, van, taxi, police, lowrider | scaled to 4.4 m long (set `len`), sits on the road, wheels spin and steer, paint changes per car, police get the light bar, headlight beams and brake glow are added |
+| building | house, store, apt, tower, shed | fitted into the 13 m corner lot, turned to face a street, the hustle sign is added; a slot can hold variants (`house`, `house-2`, `house-3`) and the city mixes them |
+
+Which buildings each district uses: Eastside is store, house and apt. Downtown is tower and apt. Harbor is shed.
+
+## Add a model from your phone
+
+1. Download the model as `.glb`, or as a glTF `.zip` (Sketchfab: Download 3D Model, then glTF). FBX, OBJ and BLEND need converting to glTF first.
+2. Rename it to its slot: `sedan.glb`, `police.zip`, `house-2.glb`.
+3. In the GitHub app or site open `kit-inbox/cars` or `kit-inbox/buildings`, then Add file, Upload files, Commit to main. GitHub's upload limit is 25 MB per file.
+4. The Build kit import workflow shrinks it for phones, installs it, commits, and redeploys. Its summary page lists triangles, file size, wheels found and any warnings. A file it cannot use stays in the inbox and the run shows FAILED with the reason.
+5. Check it at kit.html, then in the game.
+
+### Settings in the file name
+
+Add them before the extension, each starting with `@`:
+
+| Tag | Meaning | Example |
+| --- | --- | --- |
+| `@yaw180` | turn the model (degrees) when it faces the wrong way. Cars guess the front from their lamps when this is left out | `van@yaw180.glb` |
+| `@len4.9` | car length in meters (default 4.4) | `suv@len4.9.zip` |
+| `@fp11` | building footprint in meters (default 13, the full lot) | `store@fp11.glb` |
+| `@nopaint` | car keeps its own color on every copy | `taxi@nopaint.glb` |
+
+### Credit
+
+For CC BY models, upload a text file with the same name next to it (`sedan.txt` for `sedan.glb`) holding the title, author, link and license. It is stored in kit.json and written into CREDITS.md automatically.
+
+## What the importer does
+
+`node tools/kit-import.mjs add car sedan path/to/file.zip` (or `npm run kit -- add ...`) runs the same steps the workflow runs:
+
+1. Reads `.glb`, `.gltf` or a `.zip` (Draco compressed files too).
+2. Cars: guesses the front from tail and head lamp parts.
+3. Simplifies when over budget: 40k triangles for a car, 60k for a building.
+4. Flattens and merges parts by material to cut draw calls. Car wheel parts (tire, rim, nuts, brake disc) are gathered into one node per corner first, so each corner still spins. The steering wheel is left in the body.
+5. Textures to WebP, 1024 px or less. Quantize and meshopt.
+6. Writes `public/models/kit/...`, updates kit.json and the credits.
+
+Other commands: `list`, `remove car sedan`, `remove building house house-2`, `inbox`.
+
+## Picking models that work
+
+- Pick low poly or game ready models of 5k to 40k triangles. Film-quality cars of 300k triangles get cut down hard and can look melted.
+- Fewer materials is better. Each material costs a draw call per copy on screen.
+- Cars: separate wheel objects named wheel, tire or rim spin. A body material named paint or body gets per-car colors.
+- No real brands, badges or plates, to match the style guide (docs/art-style.md). Generic 70s to 90s American cars fit the city best.
+- Licenses: CC0 needs nothing. CC BY needs the credit file. Avoid NC (non commercial) if the game may ever earn money, and never use ripped game assets.
+
+### Cars checked so far (Sketchfab, downloadable)
+
+| Model | Author | License | Triangles | Fits slot |
+| --- | --- | --- | --- | --- |
+| [Kiri '86 low poly model](https://sketchfab.com/3d-models/kiri-86-low-poly-model-5c17c582ef9549798f694b660feea42a) | Daniel Zhabotinsky | CC BY 4.0 | 20.3k | sedan, taxi |
+| [Doutrive '78 low poly model](https://sketchfab.com/3d-models/doutrive-78-low-poly-model-30700a84311c4bea9ef722f0773ce92a) | Daniel Zhabotinsky | CC BY 4.0 | 24.6k | suv (70s pickup) |
+| [LowPoly old Car](https://sketchfab.com/3d-models/lowpoly-old-car-dcdbebf75afb418f911b2b0e13a9d393) | pbwmograph | CC BY 4.0 | 8.7k | sedan, lowrider base |
+
+The same author's Riverside '88 (a late 80s American sedan) is also worth checking for sedan or police. Confirm the license on each page before uploading, licenses can change.
+
+### Finding more
+
+On Sketchfab, search for the vehicle or building, then filter Downloadable, License (CC0 or CC Attribution) and Face count (up to 50k). Good search words: "low poly", "game ready", "PBR", plus an era or type ("80s sedan", "corner store", "stucco house", "warehouse").
+
+## Characters
+
+Not in the kit yet. The people share one rig and 18 animation clips (Quaternius Universal Animation Library), and their clothes are painted in a shader from that rig's rest pose. A realistic character has to be rigged to the same skeleton or every animation breaks, so it needs its own import step (retargeting) rather than a drop-in slot. That is the next kit slice.

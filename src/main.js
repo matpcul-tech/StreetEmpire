@@ -8,6 +8,7 @@ import { makeGradePass } from './grade.js';
 import { LocalSession } from './net.js';
 import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
 import { buildCity } from './city.js';
+import { loadKit } from './kit.js';
 import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './vehicles.js';
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
@@ -588,7 +589,8 @@ THREE.DefaultLoadingManager.onProgress = (url, done, total) => { $('loadbar').st
 const grainBox = $('grain'); grainBox.checked = !(LOW || POTATO) && localStorage.getItem('se-grain') === '1'; grainBox.disabled = !!(LOW || POTATO); grainBox.onchange = () => setGrain(grainBox.checked);
 Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }, POTATO).catch((e) => console.error(e)),
-  loadCars(BASE).then(() => { carsReady = true; }).catch((e) => console.error(e)),
+  // build kit first, so the first cars and city sections already use its models
+  Promise.all([loadKit(BASE, { low: LOW }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
 ]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
 startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
 function startGame() {
