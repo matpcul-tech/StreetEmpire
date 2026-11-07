@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { kitCar, cloneKitCar } from './kit.js';
 
 // lowrider: Street Empire pack kitbash (tools/build-se-cars.mjs)
 const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police', lowrider: '../se-pack/cars/lowrider' };
@@ -238,7 +239,12 @@ function carGeometry(type, paint) {
   geoCache.set(key, out); return out;
 }
 
+// paint for a car, shared by the built-in and kit paths
+function paintHexFor(c) { return c.type === 'police' ? 0x1c1c22 : c.type === 'taxi' ? 0xd8a818 : c.type === 'lowrider' ? PAINT_LOW[c.paint % PAINT_LOW.length] : PAINT[c.paint % PAINT.length]; }
+
 export function makeCar(c) {
+  const KT = kitCar(c.type);
+  if (KT) return makeKitCar(c, KT);
   const P = parts(), T = templates[c.type] || templates.sedan;
   const g = new THREE.Group();
   const model = new THREE.Group();
@@ -259,13 +265,36 @@ export function makeCar(c) {
   if (geo.decals) body.add(new THREE.Mesh(geo.decals, decalAtlas()));
   for (const w of geo.wheels) { const m = new THREE.Mesh(w.geo, mat); m.position.copy(w.pos); model.add(m); wheels.push({ node: m, front: w.front }); }
   g.add(model);
+  const L = addLights(g, c);
+  g.userData = { wheels, spinA: 0, siren: L.siren, model, body, burnt: false, baseY: model.position.y, tails: L.tails, flares: L.flares };
+  g.userData.paintHex = paintHexFor(c);
+  return g;
+}
+
+// A kit car: the realistic model as authored (its own PBR materials), paint
+// tinted per car, plus the same lamps, beams, flares and siren as the built-in cars.
+function makeKitCar(c, KT) {
+  const g = new THREE.Group();
+  const paintHex = c.type === 'police' || c.type === 'taxi' || KT.spec.paint === false ? null : paintHexFor(c);
+  const { model, wheels } = cloneKitCar(KT, paintHex);
+  model.rotation.order = 'YXZ';
+  g.add(model);
+  const L = addLights(g, c, new THREE.Box3().setFromObject(model).max.y + 0.08);
+  L.heads.visible = false; L.tails.visible = false; // the model has its own lamps; only the glow flares and beams are added
+  g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true };
+  g.userData.paintHex = paintHexFor(c);
+  return g;
+}
+
+function addLights(g, c, roofY = 1.75) {
+  const P = parts();
   const lamps = new THREE.Group();
   for (const x of [-0.62, 0.62]) {
     const h = new THREE.Mesh(P.lamp, P.head); h.position.set(x, 0.75, 2.2); lamps.add(h);
     const t = new THREE.Mesh(P.lamp, P.tail); t.position.set(x, 0.8, -2.2); lamps.add(t);
   }
   const LG = lampGeos(lamps);
-  g.add(new THREE.Mesh(LG.head, P.head));
+  const heads = new THREE.Mesh(LG.head, P.head); g.add(heads);
   const tails = new THREE.Mesh(LG.tail, P.tailDim); g.add(tails);
   const flares = new THREE.Group();
   for (const x of [-0.62, 0.62]) { const f = new THREE.Sprite(P.flare); f.position.set(x, 0.75, 2.3); f.scale.setScalar(0.9); flares.add(f); const r = new THREE.Sprite(P.flareR); r.position.set(x, 0.8, -2.3); r.scale.setScalar(0.9); r.userData.tail = true; flares.add(r); }
@@ -274,11 +303,9 @@ export function makeCar(c) {
   let siren = null;
   if (c.type === 'police') {
     siren = [new THREE.Mesh(P.sirenGeo, P.sirenR), new THREE.Mesh(P.sirenGeo, P.sirenB)];
-    siren[0].position.set(-0.25, 1.75, -0.1); siren[1].position.set(0.25, 1.75, -0.1); g.add(...siren);
+    siren[0].position.set(-0.25, roofY, -0.1); siren[1].position.set(0.25, roofY, -0.1); g.add(...siren);
   }
-  g.userData = { wheels, spinA: 0, siren, model, body, burnt: false, baseY: model.position.y, tails, flares };
-  g.userData.paintHex = c.type === 'police' ? 0x1c1c22 : c.type === 'taxi' ? 0xd8a818 : c.type === 'lowrider' ? PAINT_LOW[c.paint % PAINT_LOW.length] : PAINT[c.paint % PAINT.length];
-  return g;
+  return { siren, tails, flares, heads };
 }
 let lampGeo = null;
 function lampGeos(grp) {
@@ -293,7 +320,7 @@ function lampGeos(grp) {
 export function updateCar(g, c, dt, night, now) {
   const u = g.userData;
   u.spinA += (c.v * dt) / 0.37;
-  for (const w of u.wheels) { w.node.rotation.x = -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
+  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
   let d = c.ry - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
   g.rotation.y += Math.abs(d) > 0.01 ? d * Math.min(1, dt * (c.ai ? 6 : 30)) : d;
   g.position.x += (c.x - g.position.x) * Math.min(1, dt * (c.ai ? 8 : 40));

@@ -1,0 +1,46 @@
+name: Build kit import
+# Upload a model from your phone into kit-inbox/cars or kit-inbox/buildings
+# (GitHub app or site: Add file, Upload files). This job shrinks it for phones,
+# installs it into public/models/kit, commits the result and redeploys the game.
+on:
+  push:
+    branches: [main]
+    paths: ['kit-inbox/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: kit
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Import models from kit-inbox
+        id: imp
+        run: node tools/kit-import.mjs inbox
+        continue-on-error: true
+      - name: Commit installed models
+        run: |
+          git config user.name "street-empire-kit"
+          git config user.email "kit@users.noreply.github.com"
+          git add -A public/models/kit kit-inbox
+          if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
+          git commit -m "kit: import models from kit-inbox"
+          git push
+      - name: Redeploy the game
+        run: gh workflow run pages.yml --ref main
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Fail if an import failed
+        if: steps.imp.outcome == 'failure'
+        run: exit 1

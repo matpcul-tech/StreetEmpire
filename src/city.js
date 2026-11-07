@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCK, PITCH, GRID, ZONE_R, blockCenter, buildingsFor, districtOf } from './state.js';
+import { kitReady, kitBuilding, placeKitBuilding } from './kit.js';
 
 let rnd = mulberry(7);
 // Painted, photo-based textures (public/tex, WebP, 512 or 1024 px). The loader
@@ -191,6 +192,18 @@ export function buildCity(scene, LOW, blocks, base = './') {
       props.hoop.push([c.x, 0, c.z - 6.4, 0], [c.x, 0, c.z + 6.4, Math.PI]);
     }
     buildingsFor(b).forEach((k, bi) => {
+      // build kit: a realistic model replaces the painted box for this lot, facing one of its two streets
+      const KB = kitBuilding(k.kind, b.id * 7 + bi);
+      if (KB) {
+        const m = add(placeKitBuilding(KB)); const alongX = (b.id + bi) % 2 === 0;
+        m.rotation.y = alongX ? (k.sx > 0 ? Math.PI / 2 : -Math.PI / 2) : (k.sz > 0 ? 0 : Math.PI); m.position.set(k.x, 0, k.z);
+        if (bi === 0) {
+          const sm = new THREE.MeshBasicMaterial({ map: signTexture(b.hustle, neon[b.id % neon.length], S), toneMapped: false });
+          const sign = add(new THREE.Mesh(new THREE.PlaneGeometry(7, 1.75), sm)); sign.position.set(k.x + k.sx * (k.w / 2 + 0.08), Math.min(KB.height + 1.3, 6), k.z); sign.rotation.y = k.sx * Math.PI / 2;
+          out.neon.push([k.x + k.sx * (k.w / 2 + 3.5), k.z, neon[b.id % neon.length]]);
+        }
+        return;
+      }
       const mats = new Array(6);
       const side = (rx, ry) => { const a = k.kind === 'store' ? 'cinder' : k.kind === 'house' ? 'stucco' : k.kind === 'shed' ? 'metal' : 'brick'; return wallMat(a, rx, ry); };
       let upperY = 0, upperH = k.h;
@@ -361,7 +374,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
       else if (d < R && !pending.includes(b)) pending.push(b);
     }
     // build at most one section per frame to avoid hitches
-    if (pending.length) { pending.sort((a, b2) => { const ca = blockCenter(a), cb = blockCenter(b2); return Math.hypot(ca.x - px, ca.z - pz) - Math.hypot(cb.x - px, cb.z - pz); }); const b = pending.shift(); built.set(b.id, buildBlock(b)); }
+    if (pending.length && kitReady()) { pending.sort((a, b2) => { const ca = blockCenter(a), cb = blockCenter(b2); return Math.hypot(ca.x - px, ca.z - pz) - Math.hypot(cb.x - px, cb.z - pz); }); const b = pending.shift(); built.set(b.id, buildBlock(b)); }
     return built.size;
   };
   out.buildAllNear = (px, pz) => { for (let i = 0; i < 40; i++) out.update(px, pz); };

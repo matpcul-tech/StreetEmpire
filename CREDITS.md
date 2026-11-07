@@ -16,3 +16,11 @@ Everything under `public/models/se-pack/` is built by scripts in `tools/` (see
 `public/models/se-pack/README.md`). The accessories, the lowrider parts, the
 car paint, grime, decals (plates, stickers, taxi ad) and the painted clothing
 are original to this project, as are the painted city textures in `public/tex/` (made by `tools/process-art.py` from generated art) and everything generated in code (city, sound). All brand names, plates and logos are made up.
+
+<!-- kit-credits:start -->
+## Build kit models
+
+Installed through tools/kit-import.mjs (generated from public/models/kit/kit.json).
+
+None installed.
+<!-- kit-credits:end -->
