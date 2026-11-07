@@ -3,37 +3,37 @@
     "lowrider": {
       "file": "cars/lowrider-v1.glb",
       "yaw": 0,
-      "length": 4.4,
+      "length": 5.4,
       "paint": true
     },
     "muscle": {
       "file": "cars/muscle-coupe-v1.glb",
       "yaw": 0,
-      "length": 4.4,
+      "length": 4.8,
       "paint": true
     },
     "police": {
       "file": "cars/police-v6.glb",
       "yaw": 0,
-      "length": 4.4,
+      "length": 5.2,
       "paint": true
     },
     "sedan": {
       "file": "cars/sedan-v6.glb",
       "yaw": 0,
-      "length": 4.4,
+      "length": 4.9,
       "paint": true
     },
     "suv": {
       "file": "cars/suv-v1.glb",
       "yaw": 0,
-      "length": 4.4,
+      "length": 4.8,
       "paint": true
     },
     "van": {
       "file": "cars/van-v1.glb",
       "yaw": 0,
-      "length": 4.4,
+      "length": 5.1,
       "paint": true
     }
   },

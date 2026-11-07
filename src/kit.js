@@ -17,6 +17,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'];
+// real-world lengths in meters per slot, used when kit.json gives none
+export const CAR_LENGTH = {'sedan': 4.9, 'muscle': 4.8, 'suv': 4.8, 'van': 5.1, 'taxi': 4.9, 'police': 5.2, 'lowrider': 5.4, 'pickup': 5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
@@ -66,7 +68,7 @@ function prepCar(scene, spec, slot, low) {
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
-  const k = (spec.length || 4.4) / Math.max(size.z, 1e-6);
+  const k = (spec.length || CAR_LENGTH[slot] || 4.8) / Math.max(size.z, 1e-6);
   inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
   root.updateMatrixWorld(true);
   // wheels, first choice: wheel nodes the importer tagged (extras.kitWheel, read by GLTFLoader into userData).
