@@ -32,7 +32,7 @@ export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lo
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 // phone budgets: triangles per model and texture size
 const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 } };
-const WHEEL = /^(?!.*steer)(?=.*(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel
+const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 
 await MeshoptEncoder.ready; await MeshoptSimplifier.ready;
 // let edges collapse across UV and normal seams (store-bought models are split at every seam) and drop tiny detached bits
@@ -87,7 +87,8 @@ async function mergeForPhones(doc, kind) {
   await doc.transform(flatten());
   const scene = root.getDefaultScene() || root.listScenes()[0];
   const meshNodes = root.listNodes().filter((n) => n.getMesh());
-  const label = (n) => n.getName() + ' ' + n.getMesh().getName();
+  // node, mesh and material names: many models only name their tires through the material (Tireside, Rim1)
+  const label = (n) => [n.getName(), n.getMesh().getName(), ...n.getMesh().listPrimitives().map((p) => p.getMaterial()?.getName() || '')].join(' ');
   const keep = new Set();
   if (kind === 'car') {
     const all = getBounds(scene), cx = (all.min[0] + all.max[0]) / 2, cz = (all.min[2] + all.max[2]) / 2, H = all.max[1] - all.min[1], L = all.max[2] - all.min[2];
@@ -133,12 +134,18 @@ export async function importModel(kind, slot, file, opts = {}) {
     notes.push(back || front ? `front detected from the lamps: yaw ${opts.yaw}` : 'could not find lamps to tell the front; assumed it faces +z (yaw 0). Check it in kit.html');
   }
   if (before > B.tris) {
+    // Textured models keep their UV seams locked: collapsing across a seam drags the texture
+    // across the surface, which shows as patchy paint and sawtooth window edges. Only untextured
+    // models (flat colors per material) may collapse across seams to reach the budget.
+    const textured = doc.getRoot().listTextures().length > 0 && process.env.KIT_PERMISSIVE !== '1';
+    const simplifier = textured ? MeshoptSimplifier : PERMISSIVE;
     // step the allowed error up until the model fits (1 to 8 percent of its size)
     for (const error of [0.01, 0.02, 0.04, 0.08]) {
       if (triCount(doc) <= B.tris * 1.15) break;
-      await doc.transform(simplify({ simplifier: PERMISSIVE, ratio: Math.max(0.05, B.tris / triCount(doc)), error }), prune());
+      await doc.transform(simplify({ simplifier, ratio: Math.max(0.05, B.tris / triCount(doc)), error }), prune());
     }
-    notes.push(`simplified ${before} to ${triCount(doc)} triangles (budget ${B.tris})`);
+    notes.push(`simplified ${before} to ${triCount(doc)} triangles (budget ${B.tris}${textured ? ', texture seams kept' : ''})`);
+    if (textured && triCount(doc) > B.tris * 1.5) notes.push(`still ${triCount(doc)} triangles after keeping the texture seams; this model is heavy for phones, a lower poly download will look and run better`);
   }
   await mergeForPhones(doc, kind);
   await doc.transform(
