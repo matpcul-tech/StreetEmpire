@@ -18,12 +18,6 @@
       "length": 5.2,
       "paint": true
     },
-    "sedan": {
-      "file": "cars/sedan-v6.glb",
-      "yaw": 0,
-      "length": 4.9,
-      "paint": true
-    },
     "suv": {
       "file": "cars/suv-v1.glb",
       "yaw": 0,
