@@ -69,7 +69,20 @@ function prepCar(scene, spec, slot, low) {
   const k = (spec.length || 4.4) / Math.max(size.z, 1e-6);
   inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
   root.updateMatrixWorld(true);
-  // wheels: meshes named like a wheel and much smaller than the body
+  // wheels, first choice: wheel nodes the importer tagged (extras.kitWheel, read by GLTFLoader into userData).
+  // Their origin is the axle the modeler or importer set, so the pivot goes exactly there and nothing shifts.
+  const rigs = []; scene.traverse((o) => { if (o.userData && o.userData.kitWheel) rigs.push(o); });
+  if (rigs.length >= 2) {
+    for (const w of rigs) {
+      const pivot = new THREE.Group(); pivot.name = 'wheel'; pivot.rotation.order = 'YXZ';
+      w.getWorldPosition(pivot.position); root.worldToLocal(pivot.position); root.add(pivot); pivot.updateMatrixWorld(true);
+      pivot.attach(w); // the wheel keeps its authored transform inside the pivot; the pivot only adds spin and steer
+    }
+    const paint = collectPaint(scene, spec);
+    shadows(root, !low, false); if (low) cheapen(root);
+    return { root, paint, hasWheels: true, slot, spec };
+  }
+  // fallback for untagged models: meshes named like a wheel and much smaller than the body
   const found = [];
   scene.traverse((o) => { if (o.isMesh && WHEEL.test([o.name, o.parent ? o.parent.name : '', ...[].concat(o.material).map((m) => m.name || '')].join(' '))) found.push(o); });
   const bodyH = new THREE.Box3().setFromObject(root, true).getSize(new THREE.Vector3()).y;
@@ -82,11 +95,16 @@ function prepCar(scene, spec, slot, low) {
     if (!pivot) { pivot = new THREE.Group(); pivot.name = 'wheel'; pivot.rotation.order = 'YXZ'; pivot.position.copy(c); root.add(pivot); pivot.updateMatrixWorld(true); pivots.push(pivot); }
     pivot.attach(m); // keeps the world transform, so the wheel now turns around its own center
   }
-  const paint = [];
-  scene.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (spec.paint !== false && PAINTABLE.test(m.name || '') && !paint.includes(m)) paint.push(m); });
+  const paint = collectPaint(scene, spec);
   shadows(root, !low, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
   return { root, paint, hasWheels: nWheels > 0, slot, spec };
+}
+
+function collectPaint(scene, spec) {
+  const paint = [];
+  scene.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (spec.paint !== false && PAINTABLE.test(m.name || '') && !paint.includes(m)) paint.push(m); });
+  return paint;
 }
 
 // A building template: turned to +z, footprint fitted into the 13 m lot,

@@ -35,6 +35,8 @@ Add them before the extension, each starting with `@`:
 | `@len4.9` | car length in meters (default 4.4) | `suv@len4.9.zip` |
 | `@fp11` | building footprint in meters (default 13, the full lot) | `store@fp11.glb` |
 | `@nopaint` | car keeps its own color on every copy | `taxi@nopaint.glb` |
+| `@keep` | finished model: skip simplifying and merging, so parts, wheel rig and pivots stay exactly as built (textures and file are still compressed) | `sedan@keep.glb` |
+| `@tex2048` | keep textures up to 2048 px instead of 1024 for a hero car (four times the phone video memory per texture) | `sedan@keep@tex2048.glb` |
 
 ### Credit
 
@@ -47,7 +49,11 @@ For CC BY models, upload a text file with the same name next to it (`sedan.txt` 
 1. Reads `.glb`, `.gltf` or a `.zip` (Draco compressed files too).
 2. Cars: guesses the front from tail and head lamp parts.
 3. Simplifies when over budget: 40k triangles for a car, 60k for a building.
-4. Flattens and merges parts by material to cut draw calls. Car wheel parts (tire, rim, nuts, brake disc) are gathered into one node per corner first, so each corner still spins. The steering wheel is left in the body.
+4. Merges parts by material to cut draw calls, keeping each wheel separate:
+   - A wheel rig the modeler built (a node per wheel named wheel, tire or rim, origin on the axle) is kept exactly: same nodes, same pivots. Its origin has to sit on the wheel; an origin left at the car center is not trusted.
+   - Otherwise wheel parts (tire, rim, nuts, brake disc), found by node, mesh or material name, are gathered into one node per corner with its pivot at the middle of the parts.
+   - Either way the wheel nodes are tagged, and the game spins and steers them around exactly that pivot. The steering wheel is left in the body.
+   - A model that is one solid piece (a raw Meshy export) has no wheels to find: it still drives, but the wheels do not spin. Split the wheels into separate parts first.
 5. Textures to WebP, 1024 px or less. Quantize and meshopt.
 6. Writes `public/models/kit/...`, updates kit.json and the credits.
 

@@ -2,7 +2,9 @@
 // or a .zip from Sketchfab and similar sites) into a phone-ready kit asset and
 // records it in public/models/kit/kit.json, which the game reads at load.
 //
-//   node tools/kit-import.mjs add car sedan ~/Downloads/old-sedan.zip [--yaw 180] [--length 4.6] [--no-paint]
+//   node tools/kit-import.mjs add car sedan ~/Downloads/old-sedan.zip [--yaw 180] [--length 4.6] [--no-paint] [--keep] [--tex 2048]
+//     --keep: finished model, skip simplifying and merging (wheel rig, parts and pivots stay exactly as built)
+//     --tex 2048: keep textures up to 2048 px instead of 1024
 //   node tools/kit-import.mjs add building house ~/Downloads/bungalow.glb [--yaw 90] [--footprint 12]
 //   node tools/kit-import.mjs inbox          process everything in kit-inbox/ (used by the GitHub workflow)
 //   node tools/kit-import.mjs list
@@ -82,14 +84,49 @@ function triCount(doc) {
 // node per corner (wheel_fl, wheel_fr, wheel_rl, wheel_rr) so each corner
 // still spins on its own. Store-bought cars often have 50+ parts; this brings
 // them down to about one draw call per material.
-async function mergeForPhones(doc, kind) {
+// A wheel rig already in the model: group nodes named like a wheel (wheel_fl, Wheel.FR, tire_rr) that
+// hold the wheel meshes and sit where the modeler put the axle. Kept as they are so their pivots do not move.
+function findWheelRigs(doc) {
+  const scene = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0];
+  const all = getBounds(scene), L = all.max[2] - all.min[2], H = all.max[1] - all.min[1];
+  const hasMesh = (n) => !!n.getMesh() || n.listChildren().some(hasMesh);
+  const rigs = doc.getRoot().listNodes().filter((n) => {
+    if (n.getMesh() || !n.listChildren().length || !WHEEL.test(n.getName()) || !hasMesh(n)) return false;
+    const b = getBounds(n);
+    if (b.max[2] - b.min[2] >= L * 0.4 || b.max[1] - b.min[1] >= H * 0.7) return false; // one wheel, not a group of all four
+    // its origin must sit on the wheel (within a quarter of the wheel's size of its middle; an offset caliper moves the
+    // middle a few cm); an origin left at the car's center would swing the wheel around the wrong point
+    const t = n.getWorldTranslation(), size = Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
+    return Math.hypot(t[0] - (b.min[0] + b.max[0]) / 2, t[1] - (b.min[1] + b.max[1]) / 2, t[2] - (b.min[2] + b.max[2]) / 2) < size * 0.25;
+  });
+  // keep the outermost wheel node of each chain (wheel_fl > wheel_fl_spin > tire keeps wheel_fl)
+  return rigs.filter((n) => !rigs.some((o) => o !== n && isAncestor(o, n)));
+}
+function isAncestor(a, n) { for (let p = n.getParentNode(); p; p = p.getParentNode()) if (p === a) return true; return false; }
+
+// Fewer draw calls: parts are merged by material. For cars the wheels stay separate, one node per wheel:
+// - a wheel rig the modeler built is kept exactly (same nodes, same pivots), and only merged inside itself
+// - otherwise wheel parts (tire, rim, nuts, brake disc) are gathered under one node per corner
+//   (wheel_pl, wheel_pr, wheel_nl, wheel_nr) with its pivot at the center of the parts
+// Every wheel node is tagged extras.kitWheel so the game uses its pivot as is.
+// Store-bought cars often have 50+ parts; this brings them down to about one draw call per material.
+async function mergeForPhones(doc, kind, notes) {
   const root = doc.getRoot();
+  const keep = new Set();
+  const rigs = kind === 'car' ? findWheelRigs(doc) : [];
+  if (rigs.length >= 2) {
+    // no flatten: it would bake the rig away. Merge siblings in place instead.
+    for (const n of rigs) { n.setExtras({ ...n.getExtras(), kitWheel: true }); keep.add(n); }
+    for (const n of root.listNodes()) if (!keep.has(n)) { n.setName(''); if (n.getMesh()) n.getMesh().setName(''); }
+    await doc.transform(join({ keepNamed: true }), prune());
+    notes.push(`kept the model's own wheel rig (${rigs.length} wheels, pivots unchanged)`);
+    return;
+  }
   await doc.transform(flatten());
   const scene = root.getDefaultScene() || root.listScenes()[0];
   const meshNodes = root.listNodes().filter((n) => n.getMesh());
   // node, mesh and material names: many models only name their tires through the material (Tireside, Rim1)
   const label = (n) => [n.getName(), n.getMesh().getName(), ...n.getMesh().listPrimitives().map((p) => p.getMaterial()?.getName() || '')].join(' ');
-  const keep = new Set();
   if (kind === 'car') {
     const all = getBounds(scene), cx = (all.min[0] + all.max[0]) / 2, cz = (all.min[2] + all.max[2]) / 2, H = all.max[1] - all.min[1], L = all.max[2] - all.min[2];
     const corners = {};
@@ -102,7 +139,7 @@ async function mergeForPhones(doc, kind) {
     }
     for (const [k, parts] of Object.entries(corners)) {
       const c = [0, 0, 0]; for (const n of parts) { const b = getBounds(n); for (let i = 0; i < 3; i++) c[i] += (b.min[i] + b.max[i]) / 2 / parts.length; }
-      const corner = doc.createNode('wheel_' + k).setTranslation(c); scene.addChild(corner); keep.add(corner);
+      const corner = doc.createNode('wheel_' + k).setTranslation(c).setExtras({ kitWheel: true }); scene.addChild(corner); keep.add(corner);
       for (const n of parts) { const t = n.getTranslation(); scene.removeChild(n); n.setTranslation([t[0] - c[0], t[1] - c[1], t[2] - c[2]]); corner.addChild(n); }
     }
   }
@@ -133,7 +170,10 @@ export async function importModel(kind, slot, file, opts = {}) {
     opts.yaw = facesMinusZ ? 180 : 0;
     notes.push(back || front ? `front detected from the lamps: yaw ${opts.yaw}` : 'could not find lamps to tell the front; assumed it faces +z (yaw 0). Check it in kit.html');
   }
-  if (before > B.tris) {
+  const texSize = Math.min(2048, opts.tex || B.tex);
+  if (texSize > B.tex) notes.push(`textures kept up to ${texSize} px (default ${B.tex}); heavier on phone memory`);
+  if (opts.keep) notes.push('finished model: no simplifying or merging, only texture and file compression');
+  if (before > B.tris && !opts.keep) {
     // Textured models keep their UV seams locked: collapsing across a seam drags the texture
     // across the surface, which shows as patchy paint and sawtooth window edges. Only untextured
     // models (flat colors per material) may collapse across seams to reach the budget.
@@ -147,13 +187,15 @@ export async function importModel(kind, slot, file, opts = {}) {
     notes.push(`simplified ${before} to ${triCount(doc)} triangles (budget ${B.tris}${textured ? ', texture seams kept' : ''})`);
     if (textured && triCount(doc) > B.tris * 1.5) notes.push(`still ${triCount(doc)} triangles after keeping the texture seams; this model is heavy for phones, a lower poly download will look and run better`);
   }
-  await mergeForPhones(doc, kind);
+  if (!opts.keep) await mergeForPhones(doc, kind, notes);
+  else if (kind === 'car') { const rigs = findWheelRigs(doc); for (const n of rigs) n.setExtras({ ...n.getExtras(), kitWheel: true }); if (rigs.length) notes.push(`kept the model's own wheel rig (${rigs.length} wheels, pivots unchanged)`); }
   await doc.transform(
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [B.tex, B.tex], quality: 82 }),
+    // 1024 px by default: a 2048 texture takes four times the phone's video memory per car. @tex2048 keeps fine detail on hero cars.
+    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: opts.keep ? 90 : 82 }),
     quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
   );
   const names = doc.getRoot().listNodes().map((n) => n.getName() + ' ' + (n.getMesh() ? n.getMesh().getName() : ''));
-  const wheels = doc.getRoot().listNodes().filter((n) => /^wheel_/.test(n.getName())).length;
+  const wheels = doc.getRoot().listNodes().filter((n) => n.getExtras()?.kitWheel).length;
   if (kind === 'car' && !wheels) notes.push('no wheel nodes found (name them wheel, tire or rim to make them spin); the car still drives');
   const mats = doc.getRoot().listMaterials().map((m) => m.getName());
   if (kind === 'car' && opts.paint !== false && !mats.some((n) => /paint|body|carpaint|exterior|shell/i.test(n))) notes.push('no paint material found (name it paint or body to get per-car colors); the model keeps its own color');
@@ -200,6 +242,8 @@ function parseInboxName(base) {
     else if ((r = /^len(\d+(\.\d+)?)$/i.exec(t))) opts.length = +r[1];
     else if ((r = /^fp(\d+(\.\d+)?)$/i.exec(t))) opts.footprint = +r[1];
     else if (/^nopaint$/i.test(t)) opts.paint = false;
+    else if (/^keep$/i.test(t)) opts.keep = true;
+    else if ((r = /^tex(1024|2048)$/i.exec(t))) opts.tex = +r[1];
   }
   return { stem: stem.toLowerCase(), opts };
 }
@@ -244,6 +288,7 @@ const flags = {}; const pos = [];
 for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
   if (a === '--no-paint') flags.paint = false;
+  else if (a === '--keep') flags.keep = true;
   else if (a.startsWith('--')) flags[a.slice(2)] = isNaN(+rest[i + 1]) ? rest[i + 1] : +rest[i + 1], i++;
   else pos.push(a);
 }
