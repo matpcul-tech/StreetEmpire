@@ -23,5 +23,12 @@ are original to this project, as are the painted city textures in `public/tex/` 
 
 Installed through tools/kit-import.mjs (generated from public/models/kit/kit.json).
 
-None installed.
+| Slot | Credit and license |
+|---|---|
+| car: lowrider | no credit given (add a .txt next to the upload) |
+| car: muscle | no credit given (add a .txt next to the upload) |
+| car: police | no credit given (add a .txt next to the upload) |
+| car: sedan | no credit given (add a .txt next to the upload) |
+| car: suv | no credit given (add a .txt next to the upload) |
+| car: van | no credit given (add a .txt next to the upload) |
 <!-- kit-credits:end -->
