@@ -31,6 +31,8 @@ const KIT = path.join(ROOT, 'public/models/kit');
 const MANIFEST = path.join(KIT, 'kit.json');
 const INBOX = path.join(ROOT, 'kit-inbox');
 export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'];
+// real-world lengths in meters, so kit cars match the people (a 4.4 m lowrider put the driver's head through the roof)
+export const CAR_LENGTH = {'sedan':  4.9, 'muscle':  4.8, 'suv':  4.8, 'van':  5.1, 'taxi':  4.9, 'police':  5.2, 'lowrider':  5.4, 'pickup':  5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 // phone budgets: triangles per model and texture size
 const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 } };
@@ -210,7 +212,7 @@ export async function importModel(kind, slot, file, opts = {}) {
   const m = readManifest(); m.cars ||= {}; m.buildings ||= {};
   const credit = opts.credit || null;
   if (kind === 'car') {
-    m.cars[slot] = { file: rel, yaw: opts.yaw || 0, length: opts.length || 4.4, paint: opts.paint !== false, ...(credit && { credit }) };
+    m.cars[slot] = { file: rel, yaw: opts.yaw || 0, length: opts.length || CAR_LENGTH[slot] || 4.8, paint: opts.paint !== false, ...(credit && { credit }) };
   } else {
     const list = (m.buildings[slot] = [].concat(m.buildings[slot] || []).filter((e) => e.file !== rel));
     list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });

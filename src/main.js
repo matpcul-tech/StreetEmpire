@@ -629,6 +629,10 @@ function guideTarget(s, p) {
 
 const DRIVER_DROP = 0.55; // seat height minus the hips of the Driving_Loop pose
 function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' ? 0.8 : 0.55; }
+// a seated driver's head tops out about 1.64 m above his seat position (measured, caps included);
+// kit cars seat him from their own roof so his head stays inside, built-in cars keep the per-type seat
+const DRIVER_HEAD = 1.72;
+function seatY(c, u) { const y = sitOffset(c.type) - DRIVER_DROP; return u.kit && u.roof ? Math.min(y, u.roof - DRIVER_HEAD) : y; }
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -734,7 +738,7 @@ function frame(now) {
     const u = g.userData;
     if (wantDriver && !u.driver) {
       const look = c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
-      if (modelReady(look.model)) { u.driver = makeCharacter(look, false); u.driver.position.set(-0.42, sitOffset(c.type) - DRIVER_DROP, 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
+      if (modelReady(look.model)) { u.driver = makeCharacter(look, false); u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
     } else if (!wantDriver && u.driver) { g.remove(u.driver); u.driver = null; }
     if (u.driver) animate(u.driver, { hp: 1 }, rdt, true);
     // damage smoke
