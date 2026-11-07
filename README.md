@@ -137,6 +137,11 @@ Pushes to `main` deploy to GitHub Pages through `.github/workflows/pages.yml`.
 - Tinted see-through glass that shows the drivers.
 - Glowing taillights, brake lights that flare when braking or stopped, and headlight flares at night.
 
+## v0.11 street surfaces and lamp halos
+
+- Road, sidewalks and stucco walls get CC0 ambientCG normal and roughness maps (`public/tex/pbr`, 512 px) under the warm painted color maps, so they catch light like real asphalt, concrete and plaster without leaving the West Coast palette. Taken from the art/street-demo look test, which used them at 1K.
+- Every street lamp gets a soft sodium halo at night, drawn as one point cloud (one draw call for the whole city).
+
 ## Build kit (realistic models)
 
 Swap the built-in cars and buildings for downloaded realistic models, slot by slot, from a phone: upload a `.glb` or glTF `.zip` named after its slot (`sedan.glb`, `house-2.zip`) into `kit-inbox/cars` or `kit-inbox/buildings`. A workflow shrinks it for phones (triangle budget, merged draw calls, WebP textures, meshopt), installs it and redeploys. Preview everything at `kit.html`. Full guide, file name settings and a checked model list: `docs/build-kit.md`.

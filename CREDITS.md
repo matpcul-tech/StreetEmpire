@@ -6,6 +6,7 @@ require it.
 
 | Asset | Used for | Author | License | Source |
 |---|---|---|---|---|
+| Asphalt026B, Concrete031, Plaster001 (normal and roughness maps, resized to 512 px WebP) | surface relief on the road, sidewalks and stucco walls in `public/tex/pbr/`, under the original painted color maps | ambientCG | CC0 1.0 | https://ambientcg.com/a/Asphalt026B, https://ambientcg.com/a/Concrete031, https://ambientcg.com/a/Plaster001 |
 | Universal Base Characters [Standard] | male and female bodies, eyes, brows, hair (short parted, buzzed, long, buns) and beard in `public/models/se-pack/people*.glb` | Quaternius | CC0 1.0 | https://quaternius.itch.io/universal-base-characters |
 | Universal Animation Library [Standard] (UAL1) | idle, walk, jog, sprint, punches, bat swing, pistol, hits, death, roll, jump, driving and sitting clips in `people*.glb` | Quaternius | CC0 1.0 | https://quaternius.itch.io/universal-animation-library |
 | Car Kit | sedan, sports sedan, SUV, van, taxi and police cars in `public/models/cars/`, and the base of `se-pack/cars/lowrider.glb` | Kenney | CC0 1.0 | https://kenney.nl/assets/car-kit |
