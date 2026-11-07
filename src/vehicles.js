@@ -279,7 +279,7 @@ function makeKitCar(c, KT) {
   const { model, wheels } = cloneKitCar(KT, paintHex);
   model.rotation.order = 'YXZ';
   g.add(model);
-  const L = addLights(g, c, new THREE.Box3().setFromObject(model).max.y + 0.08);
+  const L = addLights(g, c, new THREE.Box3().setFromObject(model, true).max.y + 0.08);
   L.heads.visible = false; L.tails.visible = false; // the model has its own lamps; only the glow flares and beams are added
   g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true };
   g.userData.paintHex = paintHexFor(c);

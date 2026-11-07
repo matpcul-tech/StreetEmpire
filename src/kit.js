@@ -18,7 +18,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'];
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
-const WHEEL = /^(?!.*steer)(?=.*(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel
+const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
 
 const kit = { cars: {}, buildings: {} };
@@ -65,17 +65,17 @@ function prepCar(scene, spec, slot, low) {
   const root = new THREE.Group(); root.name = 'kit-car';
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
+  const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
   const k = (spec.length || 4.4) / Math.max(size.z, 1e-6);
   inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
   root.updateMatrixWorld(true);
   // wheels: meshes named like a wheel and much smaller than the body
   const found = [];
-  scene.traverse((o) => { if (o.isMesh && WHEEL.test(o.name + ' ' + (o.parent ? o.parent.name : ''))) found.push(o); });
-  const bodyH = new THREE.Box3().setFromObject(root).getSize(new THREE.Vector3()).y;
+  scene.traverse((o) => { if (o.isMesh && WHEEL.test([o.name, o.parent ? o.parent.name : '', ...[].concat(o.material).map((m) => m.name || '')].join(' '))) found.push(o); });
+  const bodyH = new THREE.Box3().setFromObject(root, true).getSize(new THREE.Vector3()).y;
   const pivots = [];
   for (const m of found) {
-    const wb = new THREE.Box3().setFromObject(m), c = wb.getCenter(new THREE.Vector3()), ws = wb.getSize(new THREE.Vector3());
+    const wb = new THREE.Box3().setFromObject(m, true), c = wb.getCenter(new THREE.Vector3()), ws = wb.getSize(new THREE.Vector3());
     if (ws.y > bodyH * 0.7 || ws.x > 1.2 || ws.z > 1.4) continue; // one mesh holding all four wheels: leave it static
     // parts of one wheel (tire, rim, nuts) share a pivot
     let pivot = pivots.find((p) => p.position.distanceTo(c) < 0.35);
@@ -95,7 +95,7 @@ function prepBuilding(scene, spec, low) {
   const root = new THREE.Group(); root.name = 'kit-building';
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
+  const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
   const fit = spec.footprint || 13, k = (spec.scale || 1) * fit / Math.max(size.x, size.z, 1e-6);
   inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
   shadows(root, !low, !low); if (low) cheapen(root);
