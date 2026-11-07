@@ -82,7 +82,7 @@ function prepCar(scene, spec, slot, low) {
     }
     const paint = collectPaint(scene, spec);
     shadows(root, !low, false); if (low) cheapen(root);
-    return { root, paint, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, slot, spec };
+    return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, slot, spec };
   }
   // fallback for untagged models: meshes named like a wheel and much smaller than the body
   const found = [];
@@ -100,7 +100,7 @@ function prepCar(scene, spec, slot, low) {
   const paint = collectPaint(scene, spec);
   shadows(root, !low, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
-  return { root, paint, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
+  return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
 }
 
 function collectPaint(scene, spec) {
@@ -132,9 +132,10 @@ export function cloneKitCar(T, paintHex) {
     const swap = (m) => { if (!T.paint.includes(m)) return m; const key = m.uuid + paintHex; let t = tinted.get(key); if (!t) { t = m.clone(); t.color = new THREE.Color(paintHex); t.map = m.map; tinted.set(key, t); } return t; };
     o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
   });
-  else if (paintHex != null && T.key) model.traverse((o) => {
+  else if (T.atlas) model.traverse((o) => {
+    // single-texture (atlas) models: per-pixel finish, plus the car's paint when it has a body hue
     if (!o.isMesh) return;
-    const swap = (m) => (m.map ? keyedPaint(m, T.key, paintHex) : m);
+    const swap = (m) => (m.map ? finishMaterial(m, T.key, T.key ? paintHex : null) : m);
     o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
   });
   const wheels = []; for (const c of model.children) if (c.name === 'wheel') wheels.push({ node: c, front: c.position.z > 0 });
@@ -167,29 +168,48 @@ function paintKey(scene) {
   c.setRGB(avg[0], avg[1], avg[2], THREE.SRGBColorSpace); // shader works in linear color
   return hsv(c.r, c.g, c.b);
 }
-const keyed = new Map();
-function keyedPaint(m, key, paintHex) {
-  const id = m.uuid + ':' + paintHex; let t = keyed.get(id); if (t) return t;
-  const pc = new THREE.Color(paintHex);
-  const hsvOf = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; };
-  const uKey = { value: new THREE.Vector3(...key) }, uPaint = { value: new THREE.Vector3(...hsvOf(pc.r, pc.g, pc.b)) };
-  t = m.clone();
+// Finish pass for atlas models (AI-made cars bake everything into one texture with one flat,
+// rough finish, which reads as clay). Each pixel is sorted by its own color:
+// - body: near the body hue -> glossy paint (and repainted to the car's color when one is given)
+// - glass: dark, unsaturated -> darker, near-mirror, reflects the sky
+// - chrome: bright, unsaturated, only on colored-body cars -> polished metal
+//   (a white or silver body would otherwise turn to mirror, so keyless models skip chrome)
+// Everything else keeps the model's own roughness and metalness.
+const finished = new Map();
+function hsvOfColor(col) { const r = col.r, g = col.g, b = col.b, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; }
+function finishMaterial(m, key, paintHex) {
+  const id = m.uuid + ':' + (key ? 'k' : 'n') + ':' + (paintHex == null ? '-' : paintHex); let t = finished.get(id); if (t) return t;
+  const uKey = { value: new THREE.Vector3(...(key || [0, 0, 1])) };
+  const uPaint = { value: new THREE.Vector3(...(paintHex == null ? (key || [0, 0, 1]) : hsvOfColor(new THREE.Color(paintHex)))) };
+  const uMode = { value: new THREE.Vector2(key ? 1 : 0, paintHex == null ? 0 : 1) }; // x: has body hue (paint gloss + chrome), y: repaint
+  t = m.clone(); t.envMapIntensity = 1.0;
   t.onBeforeCompile = (sh) => {
-    sh.uniforms.uKey = uKey; sh.uniforms.uPaint = uPaint;
-    sh.fragmentShader = 'uniform vec3 uKey;\nuniform vec3 uPaint;\n' +
+    Object.assign(sh.uniforms, { uKey, uPaint, uMode });
+    sh.fragmentShader = 'uniform vec3 uKey;\nuniform vec3 uPaint;\nuniform vec2 uMode;\n' +
       'vec3 kRgb2Hsv(vec3 c){vec4 K=vec4(0.,-1./3.,2./3.,-1.);vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));float d=q.x-min(q.w,q.y);float e=1e-10;return vec3(abs(q.z+(q.w-q.y)/(6.*d+e)),d/(q.x+e),q.x);}\n' +
       'vec3 kHsv2Rgb(vec3 c){vec4 K=vec4(1.,2./3.,1./3.,3.);vec3 p=abs(fract(c.xxx+K.xyz)*6.-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);}\n' +
-      sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-        {
-          vec3 hv = kRgb2Hsv(diffuseColor.rgb);
-          float dh = abs(hv.x - uKey.x); dh = min(dh, 1.0 - dh);
-          float w = (1.0 - smoothstep(0.035, 0.065, dh)) * smoothstep(0.10, 0.22, hv.y);
-          vec3 nh = vec3(uPaint.x, clamp(hv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(hv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));
-          diffuseColor.rgb = mix(diffuseColor.rgb, kHsv2Rgb(nh), w);
-        }`);
+      sh.fragmentShader
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          vec3 kHv = kRgb2Hsv(diffuseColor.rgb);
+          float kDh = abs(kHv.x - uKey.x); kDh = min(kDh, 1.0 - kDh);
+          float kBody = uMode.x * (1.0 - smoothstep(0.035, 0.065, kDh)) * smoothstep(0.10, 0.22, kHv.y);
+          float kGlass = (1.0 - smoothstep(0.25, 0.4, kHv.y)) * smoothstep(0.006, 0.014, kHv.z) * (1.0 - smoothstep(0.07, 0.11, kHv.z));
+          float kChrome = uMode.x * (1.0 - smoothstep(0.10, 0.18, kHv.y)) * smoothstep(0.30, 0.45, kHv.z);
+          if (uMode.y > 0.5) {
+            vec3 kNh = vec3(uPaint.x, clamp(kHv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(kHv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));
+            diffuseColor.rgb = mix(diffuseColor.rgb, kHsv2Rgb(kNh), kBody);
+          }
+          diffuseColor.rgb *= 1.0 - 0.45 * kGlass;`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+          roughnessFactor = mix(roughnessFactor, 0.32, kBody * 0.9);
+          roughnessFactor = mix(roughnessFactor, 0.06, kGlass);
+          roughnessFactor = mix(roughnessFactor, 0.18, kChrome);`)
+        .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
+          metalnessFactor = mix(metalnessFactor, 0.0, max(kBody, kGlass));
+          metalnessFactor = mix(metalnessFactor, 1.0, kChrome);`);
   };
-  t.customProgramCacheKey = () => 'kit-keyed-paint';
-  keyed.set(id, t); return t;
+  t.customProgramCacheKey = () => 'kit-finish';
+  finished.set(id, t); return t;
 }
 
 export function placeKitBuilding(T) { return T.root.clone(true); }
