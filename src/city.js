@@ -72,7 +72,10 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const SIZE = GRID * PITCH + 80;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), v3 = new THREE.Vector3(), v3b = new THREE.Vector3();
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshStandardMaterial({ map: painted('asphalt', SIZE / 14, SIZE / 14), roughness: 0.82 }));
+  // surface relief (v0.11): CC0 ambientCG normal and roughness maps (public/tex/pbr) under the warm painted color maps,
+  // so the palette stays West Coast while the asphalt, concrete and stucco catch light like real surfaces
+  const relief = (name, rx, ry, scale) => ({ normalMap: painted('pbr/' + name + '_n', rx, ry, false), normalScale: new THREE.Vector2(scale, scale) });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshStandardMaterial({ map: painted('asphalt', SIZE / 14, SIZE / 14), roughness: 1, roughnessMap: painted('pbr/asphalt_r', SIZE / 4.5, SIZE / 4.5, false), ...relief('asphalt', SIZE / 4.5, SIZE / 4.5, 1.2) }));
   ground.rotation.x = -Math.PI / 2; ground.receiveShadow = !LOW; scene.add(ground);
   // harbor water beyond the far edge
   const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE * 3, 200), new THREE.MeshStandardMaterial({ color: 0x0c1a22, roughness: 0.15, metalness: 0.6 }));
@@ -80,7 +83,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
   water.rotation.x = -Math.PI / 2; water.position.set(0, -0.3, SIZE / 2 + 100); scene.add(water);
   water2.rotation.x = -Math.PI / 2; water2.position.set(SIZE / 2 + 100, -0.31, 0); scene.add(water2);
 
-  const sidewalkMat = new THREE.MeshStandardMaterial({ map: painted('sidewalk', (BLOCK + 4) / 6, (BLOCK + 4) / 6), roughness: 0.9 });
+  const sidewalkMat = new THREE.MeshStandardMaterial({ map: painted('sidewalk', (BLOCK + 4) / 6, (BLOCK + 4) / 6), roughness: 1, roughnessMap: painted('pbr/concrete_r', (BLOCK + 4) / 3, (BLOCK + 4) / 3, false), ...relief('concrete', (BLOCK + 4) / 3, (BLOCK + 4) / 3, 1.0) });
   const [lc, lg] = canvas(S / 2, S / 2); drawConcrete(lg, S / 2, S / 2, '#4a4642');
   const lotMat = new THREE.MeshStandardMaterial({ map: tex(lc, 4, 4), roughness: 0.95 });
   // dry yard grass for the Eastside
@@ -131,7 +134,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const wallMat = (name, rx, ry, emis = null, eBase = 0.8, rough = 0.88) => {
     const key = `${name}:${rx.toFixed(2)}:${ry.toFixed(2)}:${emis}`;
     if (matCache.has(key)) return matCache.get(key);
-    const m = new THREE.MeshStandardMaterial({ map: painted(name, rx, ry), roughness: rough });
+    const m = new THREE.MeshStandardMaterial({ map: painted(name, rx, ry), roughness: rough, ...(name === 'stucco' && relief('stucco', rx * 1.5, ry * 1.5, 0.6)) });
     if (emis) { m.emissiveMap = painted(emis, rx, ry); m.emissive = new THREE.Color(0xffffff); m.emissiveIntensity = eBase; out.emissive.push([m, eBase]); }
     matCache.set(key, m); return m;
   };
@@ -341,7 +344,14 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const pools = new THREE.InstancedMesh(poolGeo, new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }), lamps.length);
   lamps.forEach(([x, z, r], i) => pools.setMatrixAt(i, m4.compose(v3.set(x + Math.sin(r) * 2.1, 0.26, z + Math.cos(r) * 2.1), q.identity(), one)));
   scene.add(pools);
-  out.nightOnly.push(pools); out.lampMat = lampMat;
+  // halos (v0.11): a soft sodium glow around every lamp head at night, one Points draw call for the whole city
+  const haloTex = (() => { const [c, g] = canvas(64, 64); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,214,150,1)'); gr.addColorStop(0.18, 'rgba(255,170,90,.55)'); gr.addColorStop(0.5, 'rgba(255,140,60,.14)'); gr.addColorStop(1, 'rgba(255,120,40,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const haloPos = new Float32Array(lamps.length * 3);
+  lamps.forEach(([x, z, r], i) => { haloPos[i * 3] = x + Math.sin(r) * 2.1; haloPos[i * 3 + 1] = 6.6; haloPos[i * 3 + 2] = z + Math.cos(r) * 2.1; });
+  const haloGeo = new THREE.BufferGeometry(); haloGeo.setAttribute('position', new THREE.BufferAttribute(haloPos, 3));
+  const halos = new THREE.Points(haloGeo, new THREE.PointsMaterial({ map: haloTex, size: 4.2, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: true }));
+  halos.frustumCulled = false; scene.add(halos);
+  out.nightOnly.push(pools, halos); out.lampMat = lampMat;
   out.lamps = lamps.map(([x, z, r]) => [x + Math.sin(r) * 2.1, z + Math.cos(r) * 2.1]);
   // neon and lit window spill: tinted additive pools on the ground, no lights needed
   const wTex = (() => { const [c, g] = canvas(64, 64); const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return tex(c); })();
