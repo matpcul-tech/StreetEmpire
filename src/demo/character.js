@@ -28,7 +28,7 @@ function paintMaterial(hoodie, jeans) {
     color: 0xffffff,
     roughness: 0.78,
     metalness: 0.04,
-    envMapIntensity: 0.55,
+    envMapIntensity: 0.28,
   });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uHoodie = { value: hoodie.c };

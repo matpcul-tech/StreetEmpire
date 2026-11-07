@@ -182,11 +182,11 @@ addEventListener('resize', () => {
 
 function applyTime() {
   const day = 1 - night;
-  sunDir.set(-0.42 * (day > 0.5 ? 1 : 0.35), 0.12 + 0.58 * day, 0.38).normalize();
-  if (night > 0.5) sunDir.set(0.2, -0.06, 0.4).normalize();
+  sunDir.set(-0.55, 0.78, 0.18).normalize();
+  if (night > 0.5) sunDir.set(0.22, -0.05, 0.42).normalize();
   su.sunPosition.value.copy(sunDir);
-  su.rayleigh.value = night > 0.5 ? 0.12 : 2.0;
-  su.turbidity.value = night > 0.5 ? 1.8 : 4.5;
+  su.rayleigh.value = night > 0.5 ? 0.12 : 1.45;
+  su.turbidity.value = night > 0.5 ? 1.8 : 2.8;
   su.mieCoefficient.value = night > 0.5 ? 0.004 : 0.006;
   sun.position.copy(sunDir).multiplyScalar(60);
   sun.target.position.set(0, 0, 0);
@@ -198,11 +198,11 @@ function applyTime() {
   scene.fog.color.set(night > 0.5 ? 0x16141c : 0x8a8072);
   scene.fog.near = night > 0.5 ? 12 : 22;
   scene.fog.far = night > 0.5 ? (LOW ? 85 : 115) : (LOW ? 140 : 175);
-  renderer.toneMappingExposure = 0.72 + 0.08 * day + (LOW ? 0.34 : 0.22) * night;
+  renderer.toneMappingExposure = 0.66 + 0.06 * day + (LOW ? 0.28 : 0.22) * night;
   scene.environmentIntensity = 0.18 + 0.4 * day + 0.35 * night;
   if (grade) { grade.uniforms.uNight.value = night; grade.uniforms.uDusk.value = 0; }
   if (bloom) {
-    bloom.strength = night > 0.5 ? (LOW ? 0.36 : 0.42) : 0.09;
+    bloom.strength = night > 0.5 ? (LOW ? 0.38 : 0.42) : 0.045;
     bloom.threshold = night > 0.5 ? 0.72 : 0.9;
   }
   if (street) {
@@ -217,8 +217,8 @@ function applyTime() {
     street.glass.envMapIntensity = 0.7 + 1.1 * night;
   }
   for (const s of spots) {
-      if (s.isSpotLight) s.intensity = night > 0.5 && !LOW ? 20 : 0;
-      else s.intensity = night > 0.5 ? (LOW ? 3.5 : 6) : 0;
+      if (s.isSpotLight) s.intensity = night > 0.5 ? (LOW ? 16 : 20) : 0;
+      else s.intensity = night > 0.5 ? (LOW ? 9 : 6) : 0;
     }
   for (const g of glowSprites) g.visible = night > 0.5;
   rebuildEnv();
@@ -334,17 +334,20 @@ window.__demo = {
     street = buildStreet(scene, maps, LOW);
     const glowMat = makeGlow();
     for (const p of street.lampPositions) {
+      const spot = new THREE.SpotLight(0xffc078, 0, 22, 0.95, 0.7, 1.05);
+      spot.position.copy(p);
+      spot.target.position.set(p.x, 0, p.z);
       if (!LOW) {
-        const spot = new THREE.SpotLight(0xffc078, 0, 20, 0.95, 0.7, 1.05);
-        spot.position.copy(p);
-        spot.target.position.set(p.x, 0, p.z);
-        scene.add(spot, spot.target);
-        spots.push(spot);
-        const fill = new THREE.PointLight(0xffb060, 0, 12, 1.4);
-        fill.position.copy(p);
-        scene.add(fill);
-        spots.push(fill);
+        spot.castShadow = true;
+        spot.shadow.mapSize.set(512, 512);
+        spot.shadow.bias = -0.001;
       }
+      scene.add(spot, spot.target);
+      spots.push(spot);
+      const fill = new THREE.PointLight(0xffb060, 0, LOW ? 15 : 12, 1.35);
+      fill.position.copy(p);
+      scene.add(fill);
+      spots.push(fill);
       const spr = new THREE.Sprite(glowMat);
       spr.position.copy(p); spr.scale.set(2.4, 2.4, 1); spr.visible = false;
       scene.add(spr); glowSprites.push(spr);
