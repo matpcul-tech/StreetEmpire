@@ -97,6 +97,12 @@
         "yaw": 0,
         "height": 1.9,
         "gender": "m"
+      },
+      {
+        "file": "characters/golds-m-2.glb",
+        "yaw": 0,
+        "height": 1.86,
+        "gender": "m"
       }
     ],
     "reds": [
