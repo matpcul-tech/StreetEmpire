@@ -56,6 +56,56 @@
         "file": "characters/player.glb",
         "yaw": 0
       }
+    ],
+    "blues": [
+      {
+        "file": "characters/blues-m-1.glb",
+        "yaw": 0,
+        "height": 1.84
+      }
+    ],
+    "crew": [
+      {
+        "file": "characters/crew-f-1.glb",
+        "yaw": 0,
+        "height": 1.68
+      },
+      {
+        "file": "characters/crew-m-1.glb",
+        "yaw": 0,
+        "height": 1.8
+      },
+      {
+        "file": "characters/crew-m-2.glb",
+        "yaw": 0,
+        "height": 1.74
+      }
+    ],
+    "golds": [
+      {
+        "file": "characters/golds-m-1.glb",
+        "yaw": 0,
+        "height": 1.9
+      }
+    ],
+    "reds": [
+      {
+        "file": "characters/reds-f-1.glb",
+        "yaw": 0,
+        "height": 1.7
+      },
+      {
+        "file": "characters/reds-m-2.glb",
+        "yaw": 0,
+        "height": 1.76
+      }
+    ],
+    "unc": [
+      {
+        "file": "characters/unc.glb",
+        "yaw": 0,
+        "height": 1.76
+      }
     ]
   }
 }
