@@ -4,8 +4,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Impac
 #hud{position:fixed;top:max(8px,env(safe-area-inset-top));right:12px;text-align:right;pointer-events:none;text-shadow:2px 2px 0 #000,-1px -1px 0 #000}
 #clock{font-size:22px;color:#eee}
 #weapon{font-size:15px;color:#ddd;margin:2px 0}
-#cash{font-size:30px;color:#3c6;letter-spacing:1px}
-#stars{font-size:22px;letter-spacing:2px}#stars i{font-style:normal;color:rgba(0,0,0,.35);-webkit-text-stroke:1px rgba(255,255,255,.35)}#stars i.on{color:#fff;-webkit-text-stroke:0}#stars.flash i.on{color:#ffd23a}#stars.none{opacity:.35}
+#cash{font-size:30px;color:#f4e6c4;letter-spacing:1px}
+/* heat meter: five slanted bars that fill orange to red (the game's own look, not wanted stars) */
+#stars{display:flex;align-items:center;gap:6px;font-size:13px;letter-spacing:2px;color:#f4e6c4}#stars b{font-weight:normal;opacity:.9;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,0 0 4px #000}#stars span{display:flex;gap:3px}#stars i{display:block;width:9px;height:16px;transform:skewX(-18deg);background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.35)}#stars i.on{background:linear-gradient(#ffb04a,#e8401c);border-color:#2a0a00}#stars.flash i.on{background:#ff2a1a}#stars.none{opacity:.45}
 #hp{width:150px;height:10px;background:#300;border:2px solid #000;margin:3px 0 0 auto}#hpbar{height:100%;background:#e33;width:100%;transition:width .15s}
 #sub{font-size:14px;color:#ccc;margin-top:3px}#sub span{margin-left:8px}
 #big{position:fixed;top:32%;left:0;right:0;text-align:center;font-size:44px;letter-spacing:3px;color:#ffcc33;text-shadow:3px 3px 0 #000;pointer-events:none;opacity:0;transition:opacity .3s}
@@ -39,7 +40,7 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 .panel button{font:bold 18px Impact,sans-serif;padding:12px 26px;background:#a63;color:#fff;border:0;letter-spacing:2px}
 .panel button:disabled{opacity:.6}
 .keys{font-size:14px;color:#efe2d0;line-height:1.5}
-@media (max-width:500px){#radar{width:136px;height:136px}#cash{font-size:24px}#clock{font-size:18px}#stars{font-size:18px}#hp{width:120px}}
+@media (max-width:500px){#radar{width:136px;height:136px}#cash{font-size:24px}#clock{font-size:18px}#stars i{height:14px;width:8px}#hp{width:120px}}
 .driving #touch button.small{display:none}
 .touch #msg{bottom:auto;top:172px;left:12px;right:12px;font-size:12px;line-height:1.25;background:rgba(0,0,0,.45);border-radius:6px;padding:3px 8px;max-height:3.9em;overflow:hidden}.touch #msg:empty{display:none}
 .touch #mission{bottom:auto;top:140px;left:12px;right:12px;font-size:12px;line-height:1.25;background:rgba(0,0,0,.5);border-radius:6px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.touch #mission:has(#mtitle:empty){display:none}
@@ -81,7 +82,7 @@ body.cine-bars #cineSkip{display:block}
 #passCard{position:fixed;left:50%;top:30%;transform:translate(-50%,-50%) scale(.9);z-index:39;min-width:260px;text-align:center;background:rgba(8,8,8,.78);border-top:3px solid #ffcc33;border-bottom:3px solid #ffcc33;padding:14px 26px;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;font-family:Arial,sans-serif}
 #passCard.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 #passCard .pc-k{font-size:30px;letter-spacing:3px;color:#ffcc33;text-shadow:2px 2px 0 #000;font-weight:bold}
-#passCard .pc-t{font-size:16px;color:#eee;margin-top:4px}#passCard .pc-r{font-size:24px;color:#4c4;margin-top:8px;font-weight:bold}#passCard .pc-s{font-size:14px;color:#ccc;margin-top:2px}
+#passCard .pc-t{font-size:16px;color:#eee;margin-top:4px}#passCard .pc-r{font-size:24px;color:#ffb04a;margin-top:8px;font-weight:bold}#passCard .pc-s{font-size:14px;color:#ccc;margin-top:2px}
 .touch #passCard{top:26%}.touch #passCard .pc-k{font-size:22px}
 #downTint{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .4s}
 #downTint.on{opacity:1}#downTint.wasted{background:radial-gradient(ellipse at center,rgba(60,0,0,.05),rgba(40,0,0,.55))}#downTint.busted{background:radial-gradient(ellipse at center,rgba(0,10,60,.05),rgba(0,20,60,.5))}
@@ -94,7 +95,7 @@ html,body,canvas{-webkit-touch-callout:none;-webkit-user-select:none;user-select
 #onb.hidden,#prompt.hidden{display:none}
 #prompt{position:fixed;left:50%;bottom:120px;transform:translateX(-50%);padding:6px 14px;background:rgba(0,0,0,.6);border:2px solid #ffcc33;border-radius:6px;font:bold 18px Arial,sans-serif;color:#fff;pointer-events:none;z-index:6}
 #pops{position:fixed;top:calc(max(8px,env(safe-area-inset-top)) + 150px);right:14px;pointer-events:none;text-align:right;z-index:6}
-.pop{font:bold 15px Arial,sans-serif;color:#5d5;text-shadow:1px 1px 0 #000,-1px -1px 0 #000;animation:popup 2.6s ease-out forwards}
+.pop{font:bold 15px Arial,sans-serif;color:#ffc078;text-shadow:1px 1px 0 #000,-1px -1px 0 #000;animation:popup 2.6s ease-out forwards}
 @keyframes popup{0%{opacity:0;transform:translateY(6px)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0;transform:none}}
 .touch #pops{top:auto;bottom:260px;right:12px}
 #bPause{display:none;position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:7;width:42px;height:34px;border-radius:8px;border:2px solid rgba(255,255,255,.4);background:rgba(0,0,0,.5);color:#fff;font:bold 15px Arial,sans-serif;touch-action:none}
@@ -110,7 +111,7 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
    cash popups under the cash counter, prompts low and small, big moments short and small. */
 :root{--st:env(safe-area-inset-top,0px);--sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--sb:env(safe-area-inset-bottom,0px);--rad:200px}
 @media (max-width:500px){:root{--rad:136px}}
-@media (max-height:500px) and (orientation:landscape){:root{--rad:112px}#radar{width:112px!important;height:112px!important}#cash{font-size:22px}#clock{font-size:16px}#stars{font-size:16px}#weapon{font-size:12px}#sub{font-size:12px}#hp{width:110px}}
+@media (max-height:500px) and (orientation:landscape){:root{--rad:112px}#radar{width:112px!important;height:112px!important}#cash{font-size:22px}#clock{font-size:16px}#stars i{height:12px;width:7px}#weapon{font-size:12px}#sub{font-size:12px}#hp{width:110px}}
 #radar{top:calc(var(--st) + 10px);left:calc(var(--sl) + 10px)}
 #hud{top:calc(var(--st) + 8px);right:calc(var(--sr) + 12px)}
 #lcol{position:fixed;top:calc(var(--st) + var(--rad) + 20px);left:calc(var(--sl) + 10px);width:min(300px,52vw);display:flex;flex-direction:column;gap:4px;align-items:flex-start;pointer-events:none;z-index:6}
@@ -178,7 +179,7 @@ body.cine-on #lcol{visibility:hidden}
   #lcol{left:calc(var(--sl) + var(--rad) + 22px)!important;max-width:260px}
   #sub{font-size:11px;margin-top:1px;white-space:nowrap}
 }
-#stars i{color:rgba(0,0,0,.55);-webkit-text-stroke:1px rgba(255,255,255,.7)}#stars i.on{color:#fff;-webkit-text-stroke:1px #000;text-shadow:0 0 3px #000}#stars.none{opacity:.55}
+#stars i{background:rgba(0,0,0,.6);border-color:rgba(255,255,255,.7)}#stars i.on{border-color:#000;box-shadow:0 0 3px #000}#stars b{text-shadow:0 0 3px #000}#stars.none{opacity:.6}
 
 /* Portrait phone: two bands. Left column is mission, capture, tutorial, toast.
    Right stack under Rep/Turf holds cash pops, the momentary title, and the pass card.

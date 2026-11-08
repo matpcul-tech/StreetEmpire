@@ -41,7 +41,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - A 5 by 5 block city across Eastside, Downtown (taller towers) and the Harbor, built in sections as you move.
 - Pedestrians walk the sidewalks, flee from fights and gunfire, and can be knocked down (they get back up).
 - Weapon pickups: a bat and a pistol (non-gory: targets just fall down).
-- GTA-style rotating radar with turf colors, crews, cops, pickups and mission markers.
+- Rotating radar with turf colors, crews, cops, pickups and mission markers.
 - Unc gives five short missions: Bag Back, Package Run, Send a Message, Chop Job and Take Over.
 - Mobile controls: floating stick, context button (CAR, TALK, EXIT), HIT or SHOOT, JUMP, RUN, weapon switch, and GAS, BRAKE and steering buttons when driving.
 

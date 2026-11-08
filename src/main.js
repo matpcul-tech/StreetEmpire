@@ -375,7 +375,7 @@ function drawRadar(now) {
     if (Math.abs(c.x - p.x) > 140 || Math.abs(c.z - p.z) > 140) continue;
     ctx.globalAlpha = b.owner === 'neutral' ? 0.35 : 0.6; ctx.fillStyle = CREWS[b.owner].css;
     ctx.fillRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK);
-    ctx.globalAlpha = 0.9; ctx.strokeStyle = b.owner === 'player' ? '#7f7' : 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.2 / sc * 2; ctx.strokeRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK);
+    ctx.globalAlpha = 0.9; ctx.strokeStyle = b.owner === 'player' ? '#ffc078' : 'rgba(0,0,0,.6)'; ctx.lineWidth = 1.2 / sc * 2; ctx.strokeRect(c.x - BLOCK / 2, c.z - BLOCK / 2, BLOCK, BLOCK);
     // the capture ring in the middle of each block
     ctx.beginPath(); ctx.arc(c.x, c.z, 5, 0, 7); ctx.strokeStyle = CREWS[b.owner].css; ctx.lineWidth = 1.5; ctx.stroke();
     if (b.owner === 'player') { const n = guardsOf(s, b).length; ctx.save(); ctx.translate(c.x, c.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 15px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(n + '', 0, 0); ctx.fillStyle = n ? '#bfb' : '#f88'; ctx.fillText(n + '', 0, 0); ctx.restore(); }
@@ -837,7 +837,7 @@ function frame(now) {
   city.update(pv.x, pv.z);
   // HUD
   const cr = s.crews.player;
-  $('cash').textContent = '$' + String(Math.floor(cr.cash)).padStart(8, '0');
+  $('cash').textContent = '$' + Math.floor(cr.cash).toLocaleString('en-US');
   document.documentElement.style.setProperty('--hudb', Math.ceil($('hud').getBoundingClientRect().bottom) + 'px');
   // uncollected hustle cash, so the popup matches what is actually sitting on the blocks
   if (started && !paused) {
@@ -858,7 +858,7 @@ function frame(now) {
   // with no heat the row is a faint outline, so dark empty stars never read as earned ones
   const stRaw = stars(p); if (stRaw !== starWant) { starWant = stRaw; starHold = 0.5; } else if (starHold > 0 && (starHold -= rdt) <= 0) starShown = starWant;
   if (stRaw > starShown && starShown === 0) starShown = stRaw; // going wanted shows at once
-  const st = starShown, si = $('stars').children; for (let i = 0; i < 5; i++) si[i].classList.toggle('on', i < st);
+  const st = starShown, si = $('stars').querySelectorAll('i'); for (let i = 0; i < 5; i++) si[i].classList.toggle('on', i < st);
   $('stars').classList.toggle('none', st === 0);
   $('stars').classList.toggle('flash', st > 0 && p.calmT < 3 && Math.floor(now / 400) % 2 === 0);
   document.body.classList.toggle('driving', !!p.car);
