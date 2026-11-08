@@ -311,6 +311,13 @@ function applyBones(root, list, amount, flip) {
   }
 }
 
+// Drop a measured curl and keep only the imported finger rest. Used when that
+// curl shears the mesh. Other files keep the curl measureGrip returned.
+export function holdImportedHand(grip) {
+  const bones = (grip && grip.bones || []).map((b) => ({ name: b.name, rest: b.rest, side: b.side }));
+  return { kind: 'unsolved', bones };
+}
+
 export function measureGrip(root, frames, offset) {
   const mesh = bodyMesh(root);
   if (!mesh || !frames) return null;
@@ -327,6 +334,15 @@ export function measureGrip(root, frames, offset) {
 
 export function applyGrip(root, grip, amount) {
   if (!grip) return;
+  // This hand's curl split the skinned triangles. Leave every finger at the
+  // imported rest pose. The arm clip still plays. A fist is not solved.
+  if (grip.kind === 'unsolved') {
+    for (const g of grip.bones || []) {
+      const b = root.getObjectByName(g.name); if (!b || !g.rest) continue;
+      b.quaternion.copy(g.rest);
+    }
+    return;
+  }
   if (grip.bones && amount) {
     for (const side of ['r', 'l']) {
       const list = grip.bones.filter((g) => g.side === side);

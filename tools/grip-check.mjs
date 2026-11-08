@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { retarget, mapBones, restPose } from '../src/retarget.js';
-import { measureGrip, applyGrip } from '../src/grip.js';
+import { measureGrip, applyGrip, holdImportedHand } from '../src/grip.js';
 import { GRIP } from '../src/chars.js';
 import { pickCharacter } from '../src/kit.js';
 
@@ -232,18 +232,23 @@ console.log('crew hip bind', +crewHip.toFixed(4));
 if (crewHip < 0.5) fail('crew hip bind collapsed');
 
 const crew2 = await prep('public/models/kit/characters/crew-m-2.glb');
-console.log('crew2', crew2.grip && crew2.grip.kind);
+console.log('crew2 measured', crew2.grip && crew2.grip.kind);
 if (crew2.r.missing.length) fail('crew-m-2 missing bones ' + crew2.r.missing.join(','));
 for (const n of CLIPS) if (!crew2.r.clips[n]) fail('crew-m-2 missing clip ' + n);
-if (!crew2.grip || crew2.grip.kind !== 'bones') fail('crew-m-2 has named finger bones and should curl those');
-else {
-  const open = middleTip(crew2.tgt);
-  applyGrip(crew2.tgt, crew2.grip, 1);
+const held = holdImportedHand(crew2.grip);
+console.log('crew2 grip', held.kind);
+if (held.kind !== 'unsolved' || !held.bones.length) fail('crew-m-2 grip is unsolved: the curl shears the hand, so the imported rest is kept');
+if (orange.grip.kind !== 'bones') fail('the orange curl must stay in place');
+{
+  const mixer = new THREE.AnimationMixer(crew2.tgt);
+  const act = mixer.clipAction(crew2.r.clips.Pistol_Idle_Loop); act.play(); mixer.setTime(0.4);
+  applyGrip(crew2.tgt, held, 0.85);
   crew2.tgt.updateMatrixWorld(true);
-  const shut = middleTip(crew2.tgt);
-  const openD = open.tip.distanceTo(open.hand), shutD = shut.tip.distanceTo(shut.hand);
-  console.log('crew2 middle tip to wrist', { open: +openD.toFixed(3), shut: +shutD.toFixed(3) });
-  if (shutD > openD - 0.012) fail('crew-m-2 fist does not bring the middle finger toward the wrist');
+  for (const b of held.bones) {
+    const bone = crew2.tgt.getObjectByName(b.name);
+    if (!bone || bone.quaternion.angleTo(b.rest) > 1e-3) fail('crew-m-2 finger left the imported rest pose: ' + b.name);
+  }
+  console.log('crew2 fingers held at the imported rest');
 }
 const crew2Names = await namesOf('public/models/kit/characters/crew-m-2.glb');
 const c2Orange = nDiff(crew2Names, orangeNames), c2Blue = nDiff(crew2Names, blueNames), c2Gold = nDiff(crew2Names, goldNames);
@@ -259,6 +264,7 @@ console.log('crew male picks', picked.join(','));
 if (both.size !== 2 || picked[0] === picked[1]) fail('crew men must alternate crew-m-1 and crew-m-2, not always the first file');
 const womanOnly = pickCharacter(menPool, 3, 'f');
 if (womanOnly) fail('a crew woman must keep the painted body until crew-f-1 exists');
+restPose(crew2.tgt, (() => { let m = null; crew2.tgt.traverse((o) => { if (o.isSkinnedMesh && (!m || o.geometry.attributes.position.count > m.geometry.attributes.position.count)) m = o; }); return m; })());
 const c2Box = new THREE.Box3().setFromObject(crew2.tgt, true);
 const c2H = c2Box.max.y - c2Box.min.y;
 console.log('crew2 measured height', +c2H.toFixed(3), 'feet', +c2Box.min.y.toFixed(3));

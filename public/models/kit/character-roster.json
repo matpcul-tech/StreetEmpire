@@ -178,7 +178,7 @@
       "file": "characters/crew-m-2.glb",
       "height": 1.74,
       "status": "installed",
-      "who": "Your crew, older stockier man. Installed. World bounds measure 1.74 m with the feet at 0, matching the mesh POSITION Y extent. 66 joints and 40 named finger bones. Joint names match the other 66-joint rigs. Joint order matches Gold Line. 16 indices differ from the orange player, Unc, and crew-m-1. 32 differ from Blue Hand. Clips are retargeted by name. Men alternate crew-m-1 and crew-m-2. Women stay on the painted body until crew-f-1.",
+      "who": "Your crew, older stockier man. Installed. World bounds measure 1.74 m with the feet at 0, matching the mesh POSITION Y extent. 66 joints and 40 named finger bones. Joint names match the other 66-joint rigs. Joint order matches Gold Line. 16 indices differ from the orange player, Unc, and crew-m-1. 32 differ from Blue Hand. Clips are retargeted by name. Men alternate crew-m-1 and crew-m-2. Women stay on the painted body until crew-f-1. The finger curl is not used. It split the palm and fingers into sharp triangles. The hands stay at the imported rest pose. The grip is unsolved.",
       "prompt": "Adult man around forty, stockier build, short hair with a little gray. Faded orange tee under an open worn orange jacket, dark blue jeans, scuffed white sneakers. 1990s West Coast, dusty, realistic. Arms down. No logos, no tattoos, no cap.",
       "generation": "installed",
       "measuredHeightM": 1.74,
