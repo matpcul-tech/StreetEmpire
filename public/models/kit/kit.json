@@ -49,5 +49,13 @@
       "paint": true
     }
   },
-  "buildings": {}
+  "buildings": {},
+  "characters": {
+    "player": [
+      {
+        "file": "characters/player.glb",
+        "yaw": 0
+      }
+    ]
+  }
 }
