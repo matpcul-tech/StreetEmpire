@@ -12,8 +12,10 @@
 // Car slots: sedan, muscle, suv, van, taxi, police, lowrider, pickup.
 // Building slots: house, store, apt, tower, shed (a slot can hold variants).
 // Character slots: player, unc, crew, reds, blues, golds, locals, cop, ped
-// ("characters": { "player": [ { "file": "characters/player.glb", "yaw": 0, "height": 1.8 } ] }).
+// ("characters": { "player": [ { "file": "characters/player.glb", "yaw": 0, "height": 1.8, "gender": "m" } ] }).
 // Characters are rigged models; src/retarget.js plays the game's clips on them.
+// gender "m" or "f" is optional. A missing file is left out of kit.json and that person keeps the painted body.
+// The full list to generate is public/models/kit/character-roster.json. Only installed files are loaded.
 // Models face +z (the glTF convention); yaw (degrees) turns one that does not.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -34,7 +36,23 @@ export const kitReady = () => done;
 export const kitCar = (type) => kit.cars[type] || null;
 export function kitBuilding(kind, seed) { const v = kit.buildings[kind]; return v && v.length ? v[seed % v.length] : null; }
 export const kitInfo = () => kit;
-export function kitCharacter(slot, seed = 0) { const v = kit.characters[slot]; return v && v.length ? v[Math.abs(seed | 0) % v.length] : null; }
+// Pick one installed variant. When a slot has gendered files, men and women stay in their own pool.
+// Untagged files (the orange player) are used when nothing is tagged, and as the fallback when the
+// requested gender has no file yet. An empty pool means the painted body.
+export function pickCharacter(list, seed = 0, gender = null) {
+  if (!list || !list.length) return null;
+  let v = list;
+  if (gender) {
+    const tagged = list.filter((t) => t.spec && t.spec.gender);
+    if (tagged.length) {
+      const hit = tagged.filter((t) => t.spec.gender === gender);
+      v = hit.length ? hit : list.filter((t) => !t.spec.gender);
+    }
+  }
+  if (!v.length) return null;
+  return v[Math.abs(seed | 0) % v.length];
+}
+export function kitCharacter(slot, seed = 0, gender = null) { return pickCharacter(kit.characters[slot], seed, gender); }
 
 // Loads every kit model. Resolves even when nothing is installed.
 export async function loadKit(base, { low = false } = {}) {

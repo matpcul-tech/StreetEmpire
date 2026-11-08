@@ -2,6 +2,7 @@
 // (src/retarget.js), across the rigs the art team is likely to send.
 // Run: node tools/retarget-test.mjs
 import { canonical } from '../src/retarget.js';
+import { pickCharacter } from '../src/kit.js';
 
 const cases = {
   // Meshy auto rig (Humanoid)
@@ -29,4 +30,16 @@ for (const [name, want] of Object.entries(cases)) {
   if (got !== want) { fail++; console.log(`FAIL ${name}: got ${got}, want ${want}`); }
 }
 console.log(fail ? `${fail} of ${Object.keys(cases).length} bone names wrong` : `all ${Object.keys(cases).length} bone names match`);
+
+const row = (file, gender) => ({ spec: { file, gender } });
+const pool = [row('reds-m-1.glb', 'm'), row('reds-m-2.glb', 'm'), row('reds-f-1.glb', 'f')];
+const men = new Set([0, 1, 2, 3, 4].map((s) => pickCharacter(pool, s, 'm').spec.file));
+const woman = [0, 1].map((s) => pickCharacter(pool, s, 'f').spec.file);
+const open = pickCharacter([row('player.glb')], 3, 'm').spec.file;
+let gfail = 0;
+if ([...men].some((f) => f.includes('-f-')) || men.size !== 2) { gfail++; console.log('FAIL men pool', [...men]); }
+if (woman[0] !== 'reds-f-1.glb' || woman[1] !== 'reds-f-1.glb') { gfail++; console.log('FAIL women pool', woman); }
+if (open !== 'player.glb') { gfail++; console.log('FAIL untagged file', open); }
+if (pickCharacter(pool, 0, 'x') !== null) { gfail++; console.log('FAIL a missing gender must keep the painted body'); }
+if (gfail) fail += gfail; else console.log('gender pools keep men, women and untagged files apart');
 process.exitCode = fail ? 1 : 0;

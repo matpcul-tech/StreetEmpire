@@ -54,7 +54,10 @@
     "player": [
       {
         "file": "characters/player.glb",
-        "yaw": 0
+        "yaw": 0,
+        "height": 1.8,
+        "gender": "m",
+        "credit": "Original Street Empire player. Meshy humanoid, local 1024 texture prep, shoe logos painted off."
       }
     ]
   }

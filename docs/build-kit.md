@@ -104,7 +104,11 @@ A rigged character in a slot replaces the painted people for whoever wears that 
 | cop | police on foot and in cars |
 | ped | people on the street and drivers |
 
-A slot can hold variants (`reds.glb`, `reds-2.glb`, `reds-3.glb`); the game mixes them across the crew. Potato quality keeps the light painted people.
+A slot can hold variants. The game mixes the installed files for that person. Men and women use separate files when the name contains `-m-` or `-f-` (`reds-m-1.glb`, `reds-f-1.glb`). A file with no gender tag, such as `player.glb`, is used for that whole slot. If the requested gender has no file yet, that person keeps the painted body and its crew colors. Potato quality keeps the light painted people.
+
+The exact files the game will use are listed in `public/models/kit/character-roster.json`. Generate only those. A name that is not in that list is never asked for. Upload each one to `kit-inbox/characters` with the inbox name from the roster, including `@h1.82` when a height is set. The importer writes `gender` and `height` into kit.json. Until a file is installed, the painted outfit for that crew stays, so the streets keep their colors.
+
+Kit characters keep the albedo, normal and packed maps from the GLB. The clothing paint shader stays on the shared painted body only. Crew color for a finished character is the texture, not a recolor of someone else's mesh.
 
 ### From Meshy
 
@@ -121,8 +125,9 @@ Mixamo, Unreal, Unity, Blender Rigify and 3ds Max Biped style rigs work too: bon
 
 | Tag | Meaning | Example |
 | --- | --- | --- |
-| `@yaw180` | the model faces away from the gold arrow in kit.html | `cop@yaw180.glb` |
-| `@h1.9` | height in meters (default 1.8; a boss can stand taller) | `reds@h1.92.glb` |
+| `@yaw180` | the model faces away from the gold arrow in kit.html | `cop-m-1@yaw180.glb` |
+| `@h1.9` | height in meters (default 1.8, or 1.68 when gender is f and height is omitted) | `reds-m-1@h1.82.glb` |
+| `@m` `@f` | gender pool, if the name does not already contain `-m-` or `-f-` | `unc@m.glb` |
 
 ### What the importer does
 
@@ -131,7 +136,7 @@ Mixamo, Unreal, Unity, Blender Rigify and 3ds Max Biped style rigs work too: bon
 1. Refuses a model with no skeleton, or one missing bones the game animates, with the reason.
 2. Drops animations in the file.
 3. Simplifies to 15k triangles (texture seams kept). A crew can put ten of these on screen at once.
-4. Textures to WebP, 1024 px or less. Quantize and meshopt. Parts and skeleton stay as rigged.
+4. Textures to WebP, 1024 px or less. Parts and the skeleton stay as rigged. Quantize and meshopt are skipped on characters: both collapse the inverse bind matrices, so the clips would play on the wrong rest pose. Cars and buildings still use them.
 5. Writes `public/models/kit/characters/...` and updates kit.json and the credits.
 
 In game (`src/chars.js`, `src/retarget.js`): weapons go in the right hand in the same grip as the painted people, and the night rim light is added to the character's materials. A model the retargeter cannot use keeps the painted body for that slot, and the browser console says why.

@@ -79,7 +79,7 @@ export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'gi
 export function lookFor(e, CREWS) {
   const L = paintedLook(e, CREWS);
   if (!tmpl || potatoPeople) return L;
-  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v);
+  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v, L.female ? 'f' : 'm');
   if (!T || !prepKit(T)) return L;
   return { ...L, model: `kit:${slot}:${T.spec.file}`, kitT: T };
 }
@@ -465,7 +465,8 @@ const kitPrep = new WeakMap();
 const kitMats = new Map();
 function kitMat(m) {
   if (!m || kitMats.has(m)) return kitMats.get(m) || m;
-  const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45);
+  // keep the authored albedo, normal and packed maps. The paint shader is only for the shared Quaternius body.
+  const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45); k.color.set(0xffffff);
   k.onBeforeCompile = (sh) => nightPatch(sh); k.customProgramCacheKey = () => 'kitchar';
   kitMats.set(m, k); return k;
 }
@@ -478,10 +479,11 @@ export function prepKit(T) {
     const r = retarget(src, Object.values(clips), T.root);
     if (r.missing.length) console.warn('kit character', T.spec.file, 'missing bones:', r.missing.join(', '));
     if (!r.clips.Idle_Loop) throw new Error('no idle clip');
-    const box = new THREE.Box3().setFromObject(T.root, true), k = (T.spec.height || 1.8) / Math.max(1e-6, box.max.y - box.min.y);
+    const wantH = T.spec.height || (T.spec.gender === 'f' ? 1.68 : 1.8);
+    const box = new THREE.Box3().setFromObject(T.root, true), k = wantH / Math.max(1e-6, box.max.y - box.min.y);
     T.root.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(kitMat) : kitMat(o.material); });
     const hs = r.hand ? r.hand.bone.getWorldScale(new THREE.Vector3()).x : 1;
-    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: 1 / (hs * k) }, hips: r.bones.get('pelvis')?.name, k, lo: box.min.y, missing: r.missing };
+    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: 1 / (hs * k) }, hips: r.bones.get('pelvis')?.name, head: r.bones.get('Head')?.name, neck: r.bones.get('neck_01')?.name, k, lo: box.min.y, missing: r.missing };
   } catch (e) { console.warn('kit character', T.spec.file, 'cannot use the game animations, keeping the painted body:', e.message); }
   kitPrep.set(T, P); return P;
 }
@@ -491,7 +493,10 @@ function makeKitCharacter(T, shadow) {
   model.traverse((o) => { if (o.isMesh) { o.castShadow = !!shadow; o.frustumCulled = false; } });
   const W = weapons();
   const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat), shotgun = new THREE.Mesh(W.shotgun, W.gunMat), knux = new THREE.Mesh(W.knux, W.goldMat);
+  // game attachment names on this rig's bones: hand_r, Head, neck_01, pelvis. Weapons use the grip frame, not the alias.
+  const alias = (boneName, name) => { const b = boneName && model.getObjectByName(boneName); if (b && b.name !== name && !b.getObjectByName(name)) { const a = new THREE.Object3D(); a.name = name; b.add(a); } };
   const handBone = P.hand && model.getObjectByName(P.hand.name);
+  alias(P.hand && P.hand.name, 'hand_r'); alias(P.head, 'Head'); alias(P.neck, 'neck_01'); alias(P.hips, 'pelvis');
   if (handBone) {
     // a frame on the new hand that matches the game rig's hand frame, in meters, so the grips line up
     const grip = new THREE.Object3D(); grip.quaternion.copy(P.hand.quat); grip.scale.setScalar(P.hand.scale); handBone.add(grip);

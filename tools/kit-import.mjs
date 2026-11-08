@@ -6,7 +6,7 @@
 //     --keep: finished model, skip simplifying and merging (wheel rig, parts and pivots stay exactly as built)
 //     --tex 2048: keep textures up to 2048 px instead of 1024
 //   node tools/kit-import.mjs add building house ~/Downloads/bungalow.glb [--yaw 90] [--footprint 12]
-//   node tools/kit-import.mjs add character player ~/Downloads/meshy-rigged.glb [--yaw 180] [--height 1.85]
+//   node tools/kit-import.mjs add character player ~/Downloads/meshy-rigged.glb [--yaw 180] [--height 1.85] [--gender m]
 //     characters must be rigged (Meshy Rigging, Mixamo and most humanoid rigs work); the game's own
 //     animations are retargeted onto the skeleton in game (src/retarget.js), so animations in the file are dropped
 //   node tools/kit-import.mjs inbox          process everything in kit-inbox/ (used by the GitHub workflow)
@@ -159,6 +159,16 @@ async function mergeForPhones(doc, kind, notes) {
   await doc.transform(join({ keepNamed: true }), prune());
 }
 
+// Length of the hip inverse-bind translation. quantize() has been seen to collapse this.
+function hipBind(doc) {
+  const skin = doc.getRoot().listSkins()[0]; if (!skin) return 0;
+  const joints = skin.listJoints();
+  const i = joints.findIndex((j) => /hips|pelvis/i.test(j.getName()));
+  if (i < 0) return 0;
+  const m = skin.getInverseBindMatrices().getElement(i, []);
+  return Math.hypot(m[12], m[13], m[14]);
+}
+
 // A character needs a skeleton with arms, legs, spine and head the retargeter can name.
 function checkCharacter(doc, notes) {
   const skins = doc.getRoot().listSkins();
@@ -215,11 +225,15 @@ export async function importModel(kind, slot, file, opts = {}) {
   }
   if (!opts.keep && kind !== 'character') await mergeForPhones(doc, kind, notes); // characters keep their parts and skeleton as rigged
   else if (kind === 'car') { const rigs = findWheelRigs(doc); for (const n of rigs) n.setExtras({ ...n.getExtras(), kitWheel: true }); if (rigs.length) notes.push(`kept the model's own wheel rig (${rigs.length} wheels, pivots unchanged)`); }
-  await doc.transform(
-    // 1024 px by default: a 2048 texture takes four times the phone's video memory per car. @tex2048 keeps fine detail on hero cars.
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: opts.keep ? 90 : 82 }),
-    quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
-  );
+  // quantize() and meshopt() both rewrite a skinned mesh's inverse bind matrices (the hip bind collapses
+  // from about 0.92 m to about 0.08 m) and the game clips then play on the wrong rest pose.
+  // Cars and buildings have no skin, so they still quantize and meshopt. Characters keep full-precision binds.
+  const compress = [textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: opts.keep ? 90 : 82 })];
+  if (kind !== 'character') compress.push(quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  else notes.push('kept full precision inverse binds and weights; meshopt and quantize collapse a skinned bind pose');
+  const bindBefore = kind === 'character' ? hipBind(doc) : 0;
+  await doc.transform(...compress);
+  if (kind === 'character' && Math.abs(hipBind(doc) - bindBefore) > 0.05) throw new Error('inverse bind matrices changed during import, the skeleton would not match the mesh');
   const names = doc.getRoot().listNodes().map((n) => n.getName() + ' ' + (n.getMesh() ? n.getMesh().getName() : ''));
   const wheels = doc.getRoot().listNodes().filter((n) => n.getExtras()?.kitWheel).length;
   if (kind === 'car' && !wheels) notes.push('no wheel nodes found (name them wheel, tire or rim to make them spin); the car still drives');
@@ -240,7 +254,8 @@ export async function importModel(kind, slot, file, opts = {}) {
   } else if (kind === 'character') {
     m.characters ||= {};
     const list = (m.characters[slot] = [].concat(m.characters[slot] || []).filter((e) => e.file !== rel));
-    list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(credit && { credit }) });
+    const gender = opts.gender === 'f' || opts.gender === 'm' ? opts.gender : inferGender(variant);
+    list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(gender && { gender }), ...(credit && { credit }) });
   } else {
     const list = (m.buildings[slot] = [].concat(m.buildings[slot] || []).filter((e) => e.file !== rel));
     list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
@@ -264,6 +279,14 @@ export function removeModel(kind, slot, variant) {
 
 // kit-inbox/cars/<slot>.glb|.zip and kit-inbox/buildings/<slot>[-variant].glb|.zip
 // optional settings in the file name: sedan@yaw180.glb, house-2@yaw90@fp12.zip
+// reds-m-1 and reds-f-1 tag the pool. Untagged names stay available to every gender.
+function inferGender(stem) {
+  const s = String(stem || '');
+  if (/(^|-)(f|female)(-|$)/i.test(s)) return 'f';
+  if (/(^|-)(m|male)(-|$)/i.test(s)) return 'm';
+  return undefined;
+}
+
 function parseInboxName(base) {
   const [stem, ...tags] = base.replace(/\.(glb|gltf|zip)$/i, '').split('@');
   const opts = {};
@@ -273,6 +296,8 @@ function parseInboxName(base) {
     else if ((r = /^len(\d+(\.\d+)?)$/i.exec(t))) opts.length = +r[1];
     else if ((r = /^fp(\d+(\.\d+)?)$/i.exec(t))) opts.footprint = +r[1];
     else if ((r = /^h(\d+(\.\d+)?)$/i.exec(t))) opts.height = +r[1];
+    else if (/^(f|female)$/i.test(t)) opts.gender = 'f';
+    else if (/^(m|male)$/i.test(t)) opts.gender = 'm';
     else if (/^nopaint$/i.test(t)) opts.paint = false;
     else if (/^keep$/i.test(t)) opts.keep = true;
     else if ((r = /^tex(1024|2048)$/i.exec(t))) opts.tex = +r[1];
@@ -321,6 +346,7 @@ for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
   if (a === '--no-paint') flags.paint = false;
   else if (a === '--keep') flags.keep = true;
+  else if (a === '--gender') flags.gender = rest[++i];
   else if (a.startsWith('--')) flags[a.slice(2)] = isNaN(+rest[i + 1]) ? rest[i + 1] : +rest[i + 1], i++;
   else pos.push(a);
 }

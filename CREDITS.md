@@ -33,4 +33,5 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: sedan | no credit given (add a .txt next to the upload) |
 | car: taxi | no credit given (add a .txt next to the upload) |
 | car: pickup | no credit given (add a .txt next to the upload) |
+| character: player (player) | Original Street Empire player. Meshy humanoid, local 1024 texture prep, shoe logos painted off. |
 <!-- kit-credits:end -->
