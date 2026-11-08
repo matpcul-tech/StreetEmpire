@@ -114,4 +114,12 @@ const scale = 1 / (hs * (1.78 / h));
 const frame = (hand) => hand && { bone: hand.bone, quat: hand.quat, scale };
 const morphTry = measureGrip(tgt, { r: frame(r.hand), l: frame(r.handL) }, GRIP);
 if (morphTry && morphTry.kind === 'mesh') fail('the one-sided chain must not grow a hand-mesh bend');
+const goldPool = [
+  { spec: { file: 'characters/golds-m-1.glb', gender: 'm' } },
+  { spec: { file: 'characters/golds-m-2.glb', gender: 'm' } },
+];
+const goldMen = [0, 1].map((s) => pickCharacter(goldPool, s, 'm').spec.file);
+if (goldMen.join(',') !== 'characters/golds-m-1.glb,characters/golds-m-2.glb') fail('gold men must alternate the two real meshes');
+if (pickCharacter(goldPool, 3, 'f')) fail('a Gold Line woman must keep the painted body');
+if (gripForFile('characters/golds-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-m-2 curl must not be kept');
 if (!process.exitCode) console.log('blues-m-2 check ok');

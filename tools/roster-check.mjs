@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 12],
-  ['remainingNames', n((f) => f.status !== 'installed'), 12],
+  ['installed', n((f) => f.status === 'installed'), 13],
+  ['remainingNames', n((f) => f.status !== 'installed'), 11],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 7],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 6],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -47,6 +47,10 @@ const golds = files.find((f) => f.file === 'characters/golds-m-1.glb');
 if (!golds || golds.status !== 'installed' || golds.gender !== 'm') fail.push('golds-m-1 must be installed as a man');
 if (golds.joints !== 66 || golds.fingerBones !== 40 || golds.jointIndexDiffFromPlayer !== 16 || golds.jointIndexDiffFromBlue !== 32) fail.push('golds-m-1 rig record');
 if (golds.measuredHeightM !== 1.9 || golds.fittedHeightM !== 1.9) fail.push('golds-m-1 height record');
+const golds2 = files.find((f) => f.file === 'characters/golds-m-2.glb');
+if (!golds2 || golds2.status !== 'installed' || golds2.gender !== 'm') fail.push('golds-m-2 must be installed as a man');
+if (golds2.joints !== 66 || golds2.fingerBones !== 40 || golds2.jointIndexDiffFromPlayer !== 0) fail.push('golds-m-2 rig record');
+if (golds2.measuredHeightM !== 1.86 || golds2.fittedHeightM !== 1.86) fail.push('golds-m-2 height record');
 const unc = files.find((f) => f.file === 'characters/unc.glb');
 if (!unc || unc.status !== 'installed' || unc.gender !== 'm') fail.push('unc must be installed as a man');
 if (unc.joints !== 66 || unc.fingerBones !== 40 || unc.jointIndexDiffFromPlayer !== 0 || unc.jointIndexDiffFromBlue !== 16) fail.push('unc rig record');
