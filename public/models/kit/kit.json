@@ -86,6 +86,15 @@
         "gender": "m",
         "credit": "Original Street Empire Gold Line, young tall wiry man. Meshy humanoid, local 1024 texture prep."
       }
+    ],
+    "unc": [
+      {
+        "file": "characters/unc.glb",
+        "yaw": 0,
+        "height": 1.76,
+        "gender": "m",
+        "credit": "Original Street Empire Unc, older man in a worn suit. Meshy humanoid, local 1024 texture prep."
+      }
     ]
   }
 }

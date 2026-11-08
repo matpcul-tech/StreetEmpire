@@ -166,4 +166,35 @@ const hipLen = Math.hypot(hipM[12], hipM[13], hipM[14]);
 console.log('gold hip bind', +hipLen.toFixed(4));
 if (hipLen < 0.5) fail('gold hip bind collapsed');
 
+const unc = await prep('public/models/kit/characters/unc.glb');
+console.log('unc', unc.grip && unc.grip.kind);
+if (unc.r.missing.length) fail('unc missing bones ' + unc.r.missing.join(','));
+for (const n of CLIPS) if (!unc.r.clips[n]) fail('unc missing clip ' + n);
+if (!unc.grip || unc.grip.kind !== 'bones') fail('unc has named finger bones and should curl those');
+else {
+  const open = middleTip(unc.tgt);
+  applyGrip(unc.tgt, unc.grip, 1);
+  unc.tgt.updateMatrixWorld(true);
+  const shut = middleTip(unc.tgt);
+  const openD = open.tip.distanceTo(open.hand), shutD = shut.tip.distanceTo(shut.hand);
+  console.log('unc middle tip to wrist', { open: +openD.toFixed(3), shut: +shutD.toFixed(3) });
+  if (shutD > openD - 0.012) fail('unc fist does not bring the middle finger toward the wrist');
+}
+const uncNames = await namesOf('public/models/kit/characters/unc.glb');
+const uncVsOrange = nDiff(uncNames, orangeNames), uncVsBlue = nDiff(uncNames, blueNames);
+console.log('unc joint index diffs', { vsOrange: uncVsOrange, vsBlue: uncVsBlue });
+if (uncVsOrange !== 0 || uncVsBlue !== 16) fail('unc joint order should match orange and differ from blue');
+const uncBox = new THREE.Box3().setFromObject(unc.tgt, true);
+const uncH = uncBox.max.y - uncBox.min.y;
+console.log('unc measured height', +uncH.toFixed(3), 'feet', +uncBox.min.y.toFixed(3));
+if (uncH < 1.72 || uncH > 1.8 || uncBox.min.y > 0.02) fail('unc world bounds are not the measured 1.76 m body with feet at 0');
+const uncHip = await io.read('public/models/kit/characters/unc.glb');
+const uncJoints = uncHip.getRoot().listSkins()[0].listJoints();
+const uncI = uncJoints.findIndex((j) => /hips/i.test(j.getName()));
+const uncM = uncHip.getRoot().listSkins()[0].getInverseBindMatrices().getElement(uncI, []);
+const uncHipLen = Math.hypot(uncM[12], uncM[13], uncM[14]);
+console.log('unc hip bind', +uncHipLen.toFixed(4));
+if (uncHipLen < 0.5) fail('unc hip bind collapsed');
+if (!reds.grip) console.log('reds grip still unused');
+
 if (!process.exitCode) console.log('grip check ok');
