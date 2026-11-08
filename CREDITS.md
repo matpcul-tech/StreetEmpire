@@ -30,4 +30,5 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: police | no credit given (add a .txt next to the upload) |
 | car: suv | no credit given (add a .txt next to the upload) |
 | car: van | no credit given (add a .txt next to the upload) |
+| car: sedan | no credit given (add a .txt next to the upload) |
 <!-- kit-credits:end -->
