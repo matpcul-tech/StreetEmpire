@@ -61,48 +61,62 @@
       {
         "file": "characters/blues-m-1.glb",
         "yaw": 0,
-        "height": 1.84
+        "height": 1.84,
+        "gender": "m"
       },
       {
         "file": "characters/blues-m-2.glb",
         "yaw": 0,
-        "height": 1.78
+        "height": 1.78,
+        "gender": "m"
       }
     ],
     "crew": [
       {
         "file": "characters/crew-f-1.glb",
         "yaw": 0,
-        "height": 1.68
+        "height": 1.68,
+        "gender": "f"
       },
       {
         "file": "characters/crew-m-1.glb",
         "yaw": 0,
-        "height": 1.8
+        "height": 1.8,
+        "gender": "m"
       },
       {
         "file": "characters/crew-m-2.glb",
         "yaw": 0,
-        "height": 1.74
+        "height": 1.74,
+        "gender": "m"
       }
     ],
     "golds": [
       {
         "file": "characters/golds-m-1.glb",
         "yaw": 0,
-        "height": 1.9
+        "height": 1.9,
+        "gender": "m"
       }
     ],
     "reds": [
       {
+        "file": "characters/reds-m-1.glb",
+        "yaw": 0,
+        "height": 1.82,
+        "gender": "m"
+      },
+      {
         "file": "characters/reds-f-1.glb",
         "yaw": 0,
-        "height": 1.7
+        "height": 1.7,
+        "gender": "f"
       },
       {
         "file": "characters/reds-m-2.glb",
         "yaw": 0,
-        "height": 1.76
+        "height": 1.76,
+        "gender": "m"
       }
     ],
     "unc": [

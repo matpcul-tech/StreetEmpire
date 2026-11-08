@@ -6,7 +6,7 @@
 //     --keep: finished model, skip simplifying and merging (wheel rig, parts and pivots stay exactly as built)
 //     --tex 2048: keep textures up to 2048 px instead of 1024
 //   node tools/kit-import.mjs add building house ~/Downloads/bungalow.glb [--yaw 90] [--footprint 12]
-//   node tools/kit-import.mjs add character player ~/Downloads/meshy-rigged.glb [--yaw 180] [--height 1.85]
+//   node tools/kit-import.mjs add character player ~/Downloads/meshy-rigged.glb [--yaw 180] [--height 1.85] [--gender m]
 //     characters must be rigged (Meshy Rigging, Mixamo and most humanoid rigs work); the game's own
 //     animations are retargeted onto the skeleton in game (src/retarget.js), so animations in the file are dropped
 //   node tools/kit-import.mjs inbox          process everything in kit-inbox/ (used by the GitHub workflow)
@@ -240,7 +240,8 @@ export async function importModel(kind, slot, file, opts = {}) {
   } else if (kind === 'character') {
     m.characters ||= {};
     const list = (m.characters[slot] = [].concat(m.characters[slot] || []).filter((e) => e.file !== rel));
-    list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(credit && { credit }) });
+    const gender = opts.gender === 'f' || opts.gender === 'm' ? opts.gender : inferGender(variant);
+    list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(gender && { gender }), ...(credit && { credit }) });
   } else {
     const list = (m.buildings[slot] = [].concat(m.buildings[slot] || []).filter((e) => e.file !== rel));
     list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
@@ -264,6 +265,14 @@ export function removeModel(kind, slot, variant) {
 
 // kit-inbox/cars/<slot>.glb|.zip and kit-inbox/buildings/<slot>[-variant].glb|.zip
 // optional settings in the file name: sedan@yaw180.glb, house-2@yaw90@fp12.zip
+// reds-m-1 and reds-f-1 tag the pool (men and women spawn from their own models). Untagged names serve both.
+function inferGender(stem) {
+  const s = String(stem || '');
+  if (/(^|-)(f|female)(-|$)/i.test(s)) return 'f';
+  if (/(^|-)(m|male)(-|$)/i.test(s)) return 'm';
+  return undefined;
+}
+
 function parseInboxName(base) {
   const [stem, ...tags] = base.replace(/\.(glb|gltf|zip)$/i, '').split('@');
   const opts = {};
@@ -273,6 +282,8 @@ function parseInboxName(base) {
     else if ((r = /^len(\d+(\.\d+)?)$/i.exec(t))) opts.length = +r[1];
     else if ((r = /^fp(\d+(\.\d+)?)$/i.exec(t))) opts.footprint = +r[1];
     else if ((r = /^h(\d+(\.\d+)?)$/i.exec(t))) opts.height = +r[1];
+    else if (/^(f|female)$/i.test(t)) opts.gender = 'f';
+    else if (/^(m|male)$/i.test(t)) opts.gender = 'm';
     else if (/^nopaint$/i.test(t)) opts.paint = false;
     else if (/^keep$/i.test(t)) opts.keep = true;
     else if ((r = /^tex(1024|2048)$/i.exec(t))) opts.tex = +r[1];
@@ -321,6 +332,7 @@ for (let i = 0; i < rest.length; i++) {
   const a = rest[i];
   if (a === '--no-paint') flags.paint = false;
   else if (a === '--keep') flags.keep = true;
+  else if (a === '--gender') flags.gender = rest[++i];
   else if (a.startsWith('--')) flags[a.slice(2)] = isNaN(+rest[i + 1]) ? rest[i + 1] : +rest[i + 1], i++;
   else pos.push(a);
 }

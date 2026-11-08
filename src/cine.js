@@ -141,6 +141,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
       } else {
         const k = seg(t, 0.4, 0.85); // duck in and sit
         pg.position.lerpVectors(P1, P2, k); pg.position.y = P1.y + (P2.y - P1.y) * k + Math.sin(k * Math.PI) * 0.05 - Math.sin(k * Math.PI) * 0.25;
+        if (pg.userData.kit) pg.position.y -= 0.34 * k; // the realistic torso sits higher than the painted body; keep the head in the window
         pg.rotation.y = carRy + Math.PI / 2 * (1 - k);
         pg.rotation.x = Math.sin(k * Math.PI) * 0.35; // duck the head under the roof line
         pg.userData.cineAnim = k > 0.5 ? 'Driving_Loop' : 'Idle_Loop';
@@ -152,7 +153,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
       if (door) { door.visible = true; door.rotation.y = 1.1 * (seg(c.t, 0, 0.25) - seg(c.t, 0.7, 0.95)); }
       if (c.t < 0.5) {
         const k = seg(c.t, 0.1, 0.5);
-        pg.position.lerpVectors(P0, P1, k); pg.position.y = 0.39 - 0.15 * k;
+        pg.position.lerpVectors(P0, P1, k); pg.position.y = 0.39 - 0.15 * k - (pg.userData.kit ? 0.34 * (1 - k) : 0);
         pg.rotation.y = carRy + Math.PI / 2 * k; pg.rotation.x = Math.sin(k * Math.PI) * 0.35;
         pg.userData.cineAnim = k < 0.4 ? 'Driving_Loop' : 'Idle_Loop';
       } else {

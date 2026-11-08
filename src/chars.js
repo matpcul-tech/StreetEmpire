@@ -10,6 +10,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { kitCharacter } from './kit.js';
 import { retarget } from './retarget.js';
+import { measureGrip, applyGrip, gripAmount, gripForFile } from './grip.js';
 
 let tmpl = null, potatoPeople = false;
 const clips = {};
@@ -79,7 +80,7 @@ export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'gi
 export function lookFor(e, CREWS) {
   const L = paintedLook(e, CREWS);
   if (!tmpl || potatoPeople) return L;
-  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v);
+  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v, L.female ? 'f' : 'm');
   if (!T || !prepKit(T)) return L;
   return { ...L, model: `kit:${slot}:${T.spec.file}`, kitT: T };
 }
@@ -467,7 +468,9 @@ const kitPrep = new WeakMap();
 const kitMats = new Map();
 function kitMat(m) {
   if (!m || kitMats.has(m)) return kitMats.get(m) || m;
-  const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45);
+  // keep the authored albedo, normal and packed maps. The paint shader is only for the shared Quaternius body.
+  // fill 0.35: textured kit models keep their shading instead of the full painted-body night glow
+  const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45); k.color.set(0xffffff);
   k.onBeforeCompile = (sh) => nightPatch(sh, 0.35); k.customProgramCacheKey = () => 'kitchar';
   kitMats.set(m, k); return k;
 }
@@ -479,11 +482,20 @@ export function prepKit(T) {
     T.root.position.set(0, 0, 0); T.root.scale.setScalar(1);
     const r = retarget(src, Object.values(clips), T.root);
     if (r.missing.length) console.warn('kit character', T.spec.file, 'missing bones:', r.missing.join(', '));
+    if (!r.bones.get('middle_01_r')) console.warn('kit character', T.spec.file, 'has no named finger bones; the hand mesh curls for a grip');
     if (!r.clips.Idle_Loop) throw new Error('no idle clip');
-    const box = new THREE.Box3().setFromObject(T.root, true), k = (T.spec.height || 1.8) / Math.max(1e-6, box.max.y - box.min.y);
+    const wantH = T.spec.height || (T.spec.gender === 'f' ? 1.68 : 1.8);
+    const box = new THREE.Box3().setFromObject(T.root, true), k = wantH / Math.max(1e-6, box.max.y - box.min.y);
     T.root.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(kitMat) : kitMat(o.material); });
     const hs = r.hand ? r.hand.bone.getWorldScale(new THREE.Vector3()).x : 1;
-    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: 1 / (hs * k) }, hips: r.bones.get('pelvis')?.name, k, lo: box.min.y, missing: r.missing };
+    const handScale = 1 / (hs * k);
+    const frame = (h) => h && { bone: h.bone, quat: h.quat, scale: handScale };
+    // blues-m-2 has only a right middle-finger chain. Measuring a grip would
+    // fall through to a hand-mesh bend. Leave that mesh alone.
+    const partial = String(T.spec.file || '').endsWith('blues-m-2.glb');
+    const measured = partial ? null : measureGrip(T.root, { r: frame(r.hand), l: frame(r.handL) }, GRIP);
+    const grip = gripForFile(T.spec.file, measured, T.root);
+    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: handScale }, hips: r.bones.get('pelvis')?.name, head: r.bones.get('Head')?.name, neck: r.bones.get('neck_01')?.name, grip, k, lo: box.min.y, missing: r.missing };
   } catch (e) { console.warn('kit character', T.spec.file, 'cannot use the game animations, keeping the painted body:', e.message); }
   kitPrep.set(T, P); return P;
 }
@@ -493,10 +505,14 @@ function makeKitCharacter(T, shadow) {
   model.traverse((o) => { if (o.isMesh) { o.castShadow = !!shadow; o.frustumCulled = false; } });
   const W = weapons();
   const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat), shotgun = new THREE.Mesh(W.shotgun, W.gunMat), knux = new THREE.Mesh(W.knux, W.goldMat);
+  // game attachment names on this rig's bones: hand_r, Head, neck_01, pelvis. Weapons use the grip frame, not the alias.
+  const alias = (boneName, name) => { const b = boneName && model.getObjectByName(boneName); if (b && b.name !== name && !b.getObjectByName(name)) { const a = new THREE.Object3D(); a.name = name; b.add(a); } };
   const handBone = P.hand && model.getObjectByName(P.hand.name);
+  alias(P.hand && P.hand.name, 'hand_r'); alias(P.head, 'Head'); alias(P.neck, 'neck_01'); alias(P.hips, 'pelvis');
   if (handBone) {
     // a frame on the new hand that matches the game rig's hand frame, in meters, so the grips line up
-    const grip = new THREE.Object3D(); grip.quaternion.copy(P.hand.quat); grip.scale.setScalar(P.hand.scale); handBone.add(grip);
+    const grip = new THREE.Object3D(); grip.name = 'weapon_grip'; grip.quaternion.copy(P.hand.quat); grip.scale.setScalar(P.hand.scale); handBone.add(grip);
+    const gripPoint = new THREE.Object3D(); gripPoint.name = 'grip_point'; gripPoint.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(gripPoint);
     for (const w of [bat, gun, shotgun, knux]) { w.visible = false; w.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(w); }
     knux.position.set(0, 0.075, 0.03);
   }
@@ -505,7 +521,7 @@ function makeKitCharacter(T, shadow) {
   for (const n in P.clips) { act[n] = mixer.clipAction(P.clips[n]); if (once.has(n)) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; } }
   if (!act.Punch_Enter && act.Punch_Jab) act.Punch_Enter = act.Punch_Jab;
   act.Idle_Loop.play();
-  g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips: P.hips && model.getObjectByName(P.hips), punchN: 0, kit: true };
+  g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips: P.hips && model.getObjectByName(P.hips), punchN: 0, kit: true, grip: P.grip };
   return g;
 }
 
@@ -543,4 +559,5 @@ export function animate(g, e, dt, sitting) {
   if (want === 'Jog_Fwd_Loop' || want === 'Sprint_Loop' || want === 'Walk_Loop') u.act[want].timeScale = speed;
   u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol'; u.shotgun.visible = e.weapon === 'shotgun'; u.knux.visible = e.weapon === 'knuckles';
   u.mixer.update(dt);
+  if (u.grip) applyGrip(u.root, u.grip, gripAmount(u.cur, e.weapon));
 }
