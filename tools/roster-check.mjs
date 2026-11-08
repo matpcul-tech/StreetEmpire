@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 9],
-  ['remainingNames', n((f) => f.status !== 'installed'), 15],
+  ['installed', n((f) => f.status === 'installed'), 10],
+  ['remainingNames', n((f) => f.status !== 'installed'), 14],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 10],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 9],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -27,6 +27,10 @@ const reds2 = files.find((f) => f.file === 'characters/reds-m-2.glb');
 if (!reds2 || reds2.status !== 'installed' || reds2.gender !== 'm' || reds2.jersey !== 27) fail.push('reds-m-2 must be installed as a man with jersey 27');
 if (reds2.joints !== 66 || reds2.fingerBones !== 40 || reds2.jointIndexDiffFromPlayer !== 12 || reds2.jointIndexDiffFromBlue !== 28) fail.push('reds-m-2 rig record');
 if (reds2.measuredHeightM !== 1.76 || reds2.fittedHeightM !== 1.76) fail.push('reds-m-2 height record');
+const redsF = files.find((f) => f.file === 'characters/reds-f-1.glb');
+if (!redsF || redsF.status !== 'installed' || redsF.gender !== 'f' || redsF.jersey !== 8) fail.push('reds-f-1 must be installed as a woman with jersey 08');
+if (redsF.joints !== 40 || redsF.fingerBones !== 8 || redsF.helperBones !== 6) fail.push('reds-f-1 rig record');
+if (redsF.measuredHeightM !== 1.7 || redsF.fittedHeightM !== 1.7) fail.push('reds-f-1 height record');
 const blues = files.find((f) => f.file === 'characters/blues-m-1.glb');
 if (!blues || blues.status !== 'installed' || blues.gender !== 'm') fail.push('blues-m-1 must be installed as a man');
 if (blues.joints !== 66 || blues.fingerBones !== 40 || blues.jointIndexDiffFromPlayer !== 16) fail.push('blues-m-1 rig record');

@@ -74,6 +74,13 @@
         "height": 1.76,
         "gender": "m",
         "credit": "Original Street Empire Red Kings, older lean man. Meshy humanoid, local 1024 texture prep. Not a recolor of reds-m-1."
+      },
+      {
+        "file": "characters/reds-f-1.glb",
+        "yaw": 0,
+        "height": 1.7,
+        "gender": "f",
+        "credit": "Original Street Empire Red Kings, woman. Meshy humanoid, middle-finger chains only, local 1024 texture prep. Not a recolor of the men."
       }
     ],
     "blues": [

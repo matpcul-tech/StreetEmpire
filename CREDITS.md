@@ -36,6 +36,7 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: player (player) | Original Street Empire player. Meshy humanoid, local 1024 texture prep, shoe logos painted off. |
 | character: reds (reds-m-1) | Original Street Empire Red Kings, young lean man, plain white jersey number 12. Meshy humanoid, local 1024 texture prep. |
 | character: reds (reds-m-2) | Original Street Empire Red Kings, older lean man. Meshy humanoid, local 1024 texture prep. Not a recolor of reds-m-1. |
+| character: reds (reds-f-1) | Original Street Empire Red Kings, woman. Meshy humanoid, middle-finger chains only, local 1024 texture prep. Not a recolor of the men. |
 | character: blues (blues-m-1) | Original Street Empire Blue Hand, young heavy man. Meshy humanoid, local 1024 texture prep. |
 | character: golds (golds-m-1) | Original Street Empire Gold Line, young tall wiry man. Meshy humanoid, local 1024 texture prep. |
 | character: unc (unc) | Original Street Empire Unc, older man in a worn suit. Meshy humanoid, local 1024 texture prep. |

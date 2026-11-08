@@ -490,7 +490,7 @@ export function prepKit(T) {
     const hs = r.hand ? r.hand.bone.getWorldScale(new THREE.Vector3()).x : 1;
     const handScale = 1 / (hs * k);
     const frame = (h) => h && { bone: h.bone, quat: h.quat, scale: handScale };
-    const grip = gripForFile(T.spec.file, measureGrip(T.root, { r: frame(r.hand), l: frame(r.handL) }, GRIP));
+    const grip = gripForFile(T.spec.file, measureGrip(T.root, { r: frame(r.hand), l: frame(r.handL) }, GRIP), T.root);
     P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: handScale }, hips: r.bones.get('pelvis')?.name, head: r.bones.get('Head')?.name, neck: r.bones.get('neck_01')?.name, grip, k, lo: box.min.y, missing: r.missing };
   } catch (e) { console.warn('kit character', T.spec.file, 'cannot use the game animations, keeping the painted body:', e.message); }
   kitPrep.set(T, P); return P;

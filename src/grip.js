@@ -318,11 +318,23 @@ export function holdImportedHand(grip) {
   return { kind: 'unsolved', bones };
 }
 
-// These meshes tear when the finger curl is applied. Everyone else keeps the
-// measured curl. The filename is the whole policy. reds-m-1 has no finger
-// bones, so it never reaches this list.
-export function gripForFile(file, measured) {
+// Capture the current local rotation of matching bones and hold it. Call this
+// from the bind pose. Used when a partial finger chain must not be curled.
+export function holdMatchingBones(root, re) {
+  const bones = [];
+  if (root) root.traverse((o) => {
+    if (!o.isBone || !re.test(o.name)) return;
+    bones.push({ name: o.name, rest: o.quaternion.clone(), side: /Left/.test(o.name) ? 'l' : 'r' });
+  });
+  return { kind: 'unsolved', bones };
+}
+
+// These meshes tear, or they only have a middle-finger chain, when a curl is
+// applied. Everyone else keeps the measured curl. reds-m-1 has no finger bones,
+// so it never reaches this list. The six Bone_* on reds-f-1 are not fingers.
+export function gripForFile(file, measured, root) {
   const name = String(file || '');
+  if (name.endsWith('reds-f-1.glb')) return holdMatchingBones(root, /HandMiddle/);
   if (name.endsWith('crew-m-2.glb') || name.endsWith('crew-f-1.glb') || name.endsWith('reds-m-2.glb')) return holdImportedHand(measured);
   return measured;
 }
