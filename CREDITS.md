@@ -42,6 +42,7 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: blues (blues-f-1) | Original Street Empire Blue Hand, woman. Meshy humanoid, local 1024 texture prep. Not a recolor of the men. |
 | character: golds (golds-m-1) | Original Street Empire Gold Line, young tall wiry man. Meshy humanoid, local 1024 texture prep. |
 | character: golds (golds-m-2) | Original Street Empire Gold Line, older man. Meshy humanoid, local 1024 texture prep. Not a recolor of golds-m-1. |
+| character: golds (golds-f-1) | Original Street Empire Gold Line woman. Meshy humanoid, local 1024 texture prep. Not a recolor of the Gold Line men. |
 | character: unc (unc) | Original Street Empire Unc, older man in a worn suit. Meshy humanoid, local 1024 texture prep. |
 | character: crew (crew-m-1) | Original Street Empire crew, young man in a faded orange hoodie. Meshy humanoid, local 1024 texture prep. |
 | character: crew (crew-m-2) | Original Street Empire crew, shorter older man in a worn orange hoodie. Meshy humanoid, local 1024 texture prep. |

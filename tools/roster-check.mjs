@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 13],
-  ['remainingNames', n((f) => f.status !== 'installed'), 11],
+  ['installed', n((f) => f.status === 'installed'), 14],
+  ['remainingNames', n((f) => f.status !== 'installed'), 10],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 6],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 5],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -51,6 +51,10 @@ const golds2 = files.find((f) => f.file === 'characters/golds-m-2.glb');
 if (!golds2 || golds2.status !== 'installed' || golds2.gender !== 'm') fail.push('golds-m-2 must be installed as a man');
 if (golds2.joints !== 66 || golds2.fingerBones !== 40 || golds2.jointIndexDiffFromPlayer !== 0) fail.push('golds-m-2 rig record');
 if (golds2.measuredHeightM !== 1.86 || golds2.fittedHeightM !== 1.86) fail.push('golds-m-2 height record');
+const goldsf = files.find((f) => f.file === 'characters/golds-f-1.glb');
+if (!goldsf || goldsf.status !== 'installed' || goldsf.gender !== 'f') fail.push('golds-f-1 must be installed as a woman');
+if (goldsf.joints !== 66 || goldsf.fingerBones !== 40 || goldsf.jointIndexDiffFromPlayer !== 0) fail.push('golds-f-1 rig record');
+if (goldsf.measuredHeightM !== 1.78 || goldsf.fittedHeightM !== 1.78) fail.push('golds-f-1 height record');
 const unc = files.find((f) => f.file === 'characters/unc.glb');
 if (!unc || unc.status !== 'installed' || unc.gender !== 'm') fail.push('unc must be installed as a man');
 if (unc.joints !== 66 || unc.fingerBones !== 40 || unc.jointIndexDiffFromPlayer !== 0 || unc.jointIndexDiffFromBlue !== 16) fail.push('unc rig record');

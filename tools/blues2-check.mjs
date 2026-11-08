@@ -120,6 +120,11 @@ const goldPool = [
 ];
 const goldMen = [0, 1].map((s) => pickCharacter(goldPool, s, 'm').spec.file);
 if (goldMen.join(',') !== 'characters/golds-m-1.glb,characters/golds-m-2.glb') fail('gold men must alternate the two real meshes');
-if (pickCharacter(goldPool, 3, 'f')) fail('a Gold Line woman must keep the painted body');
+const goldWithWoman = goldPool.concat([{ spec: { file: 'characters/golds-f-1.glb', gender: 'f' } }]);
+const goldWoman = pickCharacter(goldWithWoman, 3, 'f');
+if (!goldWoman || goldWoman.spec.file !== 'characters/golds-f-1.glb') fail('a Gold Line woman must load golds-f-1');
+if (pickCharacter(goldWithWoman, 0, 'm').spec.file !== 'characters/golds-m-1.glb') fail('adding the woman changed the first Gold Line man');
+if (pickCharacter(goldWithWoman, 1, 'm').spec.file !== 'characters/golds-m-2.glb') fail('adding the woman changed the second Gold Line man');
 if (gripForFile('characters/golds-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-m-2 curl must not be kept');
+if (gripForFile('characters/golds-f-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-f-1 curl must not be kept');
 if (!process.exitCode) console.log('blues-m-2 check ok');
