@@ -318,6 +318,14 @@ export function holdImportedHand(grip) {
   return { kind: 'unsolved', bones };
 }
 
+// These two meshes tear when the finger curl is applied. Everyone else keeps
+// the measured curl. The filename is the whole policy.
+export function gripForFile(file, measured) {
+  const name = String(file || '');
+  if (name.endsWith('crew-m-2.glb') || name.endsWith('crew-f-1.glb')) return holdImportedHand(measured);
+  return measured;
+}
+
 export function measureGrip(root, frames, offset) {
   const mesh = bodyMesh(root);
   if (!mesh || !frames) return null;

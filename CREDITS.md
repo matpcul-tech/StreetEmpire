@@ -40,4 +40,5 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: unc (unc) | Original Street Empire Unc, older man in a worn suit. Meshy humanoid, local 1024 texture prep. |
 | character: crew (crew-m-1) | Original Street Empire crew, young man in a faded orange hoodie. Meshy humanoid, local 1024 texture prep. |
 | character: crew (crew-m-2) | Original Street Empire crew, shorter older man in a worn orange hoodie. Meshy humanoid, local 1024 texture prep. |
+| character: crew (crew-f-1) | Original Street Empire crew, woman in a faded orange hoodie. Meshy humanoid with 20 extra helper bones, local 1024 texture prep. |
 <!-- kit-credits:end -->

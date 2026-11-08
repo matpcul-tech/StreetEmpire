@@ -26,9 +26,10 @@ const PAINTED = {
 const params = new URLSearchParams(location.search);
 const slot = params.get('slot') || 'player';
 const seed = +(params.get('seed') || 0);
+const gender = params.get('gender') || 'm';
 
 await Promise.all([loadPeople(import.meta.env.BASE_URL), loadKit(import.meta.env.BASE_URL)]);
-const kit = kitCharacter(slot, seed, 'm');
+const kit = kitCharacter(slot, seed, gender);
 if (!prepKit(kit)) throw new Error(slot + ' did not retarget');
 const neu = makeCharacter({ kitT: kit }, false);
 const old = makeCharacter(PAINTED[slot] || PAINTED.player, false);
@@ -77,7 +78,7 @@ const mat = body && [].concat(body.material)[0];
 window.__board = {
   slot, clips: CLIPS,
   info: { file: kit.spec.file, height: +box.getSize(new THREE.Vector3()).y.toFixed(3), bones: body ? body.skeleton.bones.length : 0, map: !!(mat && mat.map), normal: !!(mat && mat.normalMap), rough: !!(mat && mat.roughnessMap), key: mat && mat.customProgramCacheKey ? mat.customProgramCacheKey() : '' },
-  neu,
+  neu, cam: camera,
   show(name, t = 0.4, mode = 'both', weapon = null) { spin = null; frameBoth(name, t, weapon); view[mode](); renderer.render(scene, camera); },
   play(name, weapon = null) {
     spin = [name, weapon];

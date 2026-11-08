@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 7],
-  ['remainingNames', n((f) => f.status !== 'installed'), 17],
+  ['installed', n((f) => f.status === 'installed'), 8],
+  ['remainingNames', n((f) => f.status !== 'installed'), 16],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 12],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 11],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -43,6 +43,10 @@ const crew2 = files.find((f) => f.file === 'characters/crew-m-2.glb');
 if (!crew2 || crew2.status !== 'installed' || crew2.gender !== 'm') fail.push('crew-m-2 must be installed as a man');
 if (crew2.joints !== 66 || crew2.fingerBones !== 40 || crew2.jointIndexDiffFromPlayer !== 16 || crew2.jointIndexDiffFromBlue !== 32) fail.push('crew-m-2 rig record');
 if (crew2.measuredHeightM !== 1.74 || crew2.fittedHeightM !== 1.74) fail.push('crew-m-2 height record');
+const crewF = files.find((f) => f.file === 'characters/crew-f-1.glb');
+if (!crewF || crewF.status !== 'installed' || crewF.gender !== 'f') fail.push('crew-f-1 must be installed as a woman');
+if (crewF.joints !== 86 || crewF.helperBones !== 20 || crewF.fingerBones !== 40) fail.push('crew-f-1 rig record');
+if (crewF.measuredHeightM !== 1.68 || crewF.fittedHeightM !== 1.68) fail.push('crew-f-1 height record');
 for (const slot of ['crew', 'reds', 'blues', 'golds']) {
   const rows = files.filter((f) => f.slot === slot && f.countsAsDistinctBuild);
   const women = rows.filter((f) => f.gender === 'f').length;

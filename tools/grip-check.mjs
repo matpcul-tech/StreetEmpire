@@ -7,7 +7,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { retarget, mapBones, restPose } from '../src/retarget.js';
-import { measureGrip, applyGrip, holdImportedHand } from '../src/grip.js';
+import { measureGrip, applyGrip, gripForFile } from '../src/grip.js';
 import { GRIP } from '../src/chars.js';
 import { pickCharacter } from '../src/kit.js';
 
@@ -235,7 +235,7 @@ const crew2 = await prep('public/models/kit/characters/crew-m-2.glb');
 console.log('crew2 measured', crew2.grip && crew2.grip.kind);
 if (crew2.r.missing.length) fail('crew-m-2 missing bones ' + crew2.r.missing.join(','));
 for (const n of CLIPS) if (!crew2.r.clips[n]) fail('crew-m-2 missing clip ' + n);
-const held = holdImportedHand(crew2.grip);
+const held = gripForFile('characters/crew-m-2.glb', crew2.grip);
 console.log('crew2 grip', held.kind);
 if (held.kind !== 'unsolved' || !held.bones.length) fail('crew-m-2 grip is unsolved: the curl shears the hand, so the imported rest is kept');
 if (orange.grip.kind !== 'bones') fail('the orange curl must stay in place');

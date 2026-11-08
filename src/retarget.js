@@ -178,7 +178,14 @@ export function retarget(srcRoot, clips, tgtRoot) {
           D.multiplyQuaternions(wq(m.s), sRestQ.get(m.s).clone().invert());
           W.copy(tRestQ.get(b)); const a = align.get(b); if (a) W.premultiply(a); W.premultiply(D);
           L.copy(pw).invert().multiply(W);
-        } else { L.copy(tRestLocal.get(b)); W.copy(pw).multiply(L); }
+        } else {
+          // A helper with no game-rig name stays at its imported bind. crew-f-1
+          // has 20 of these, including bones between the thigh and the knee and
+          // between the knee and the foot. They get no track. The named child
+          // is solved against this parent's real world rotation, not against a
+          // 66-joint parent it does not have.
+          L.copy(tRestLocal.get(b)); W.copy(pw).multiply(L);
+        }
         world.set(b, W.clone());
         const arr = qv.get(b);
         if (arr) {
