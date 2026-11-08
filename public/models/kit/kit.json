@@ -103,6 +103,13 @@
         "height": 1.8,
         "gender": "m",
         "credit": "Original Street Empire crew, young man in a faded orange hoodie. Meshy humanoid, local 1024 texture prep."
+      },
+      {
+        "file": "characters/crew-m-2.glb",
+        "yaw": 0,
+        "height": 1.74,
+        "gender": "m",
+        "credit": "Original Street Empire crew, shorter older man in a worn orange hoodie. Meshy humanoid, local 1024 texture prep."
       }
     ]
   }

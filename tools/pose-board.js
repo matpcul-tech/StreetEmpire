@@ -23,10 +23,12 @@ const PAINTED = {
   blues: { model: 'ual', female: false, top: 1, topC: 0x2850a8, trim: 0xe8e8f0, pants: 0, legs: 0x3a4a66, shoes: 0x1a1a1a, hair: 0, hairC: 0x111111, grit: 0.35, num: -1, beard: 1, skin: 0x8d5a3b, acc: { cap: 0x1a1a1a, neck: 0x2850a8 } },
   golds: { model: 'ual', female: false, top: 6, topC: 0x8a5a2a, trim: 0x1a1a1a, pants: 0, legs: 0x3a3028, shoes: 0x9a7438, hair: 0, hairC: 0x111111, grit: 0.3, num: -1, beard: 0, skin: 0x8d5a3b, acc: { cap: 0x8a5a2a } },
 };
-const slot = new URLSearchParams(location.search).get('slot') || 'player';
+const params = new URLSearchParams(location.search);
+const slot = params.get('slot') || 'player';
+const seed = +(params.get('seed') || 0);
 
 await Promise.all([loadPeople(import.meta.env.BASE_URL), loadKit(import.meta.env.BASE_URL)]);
-const kit = kitCharacter(slot, 0, 'm');
+const kit = kitCharacter(slot, seed, 'm');
 if (!prepKit(kit)) throw new Error(slot + ' did not retarget');
 const neu = makeCharacter({ kitT: kit }, false);
 const old = makeCharacter(PAINTED[slot] || PAINTED.player, false);
@@ -74,7 +76,7 @@ let body = null; neu.traverse((o) => { if (o.isSkinnedMesh) body = o; });
 const mat = body && [].concat(body.material)[0];
 window.__board = {
   slot, clips: CLIPS,
-  info: { height: +box.getSize(new THREE.Vector3()).y.toFixed(3), bones: body ? body.skeleton.bones.length : 0, map: !!(mat && mat.map), normal: !!(mat && mat.normalMap), rough: !!(mat && mat.roughnessMap), key: mat && mat.customProgramCacheKey ? mat.customProgramCacheKey() : '' },
+  info: { file: kit.spec.file, height: +box.getSize(new THREE.Vector3()).y.toFixed(3), bones: body ? body.skeleton.bones.length : 0, map: !!(mat && mat.map), normal: !!(mat && mat.normalMap), rough: !!(mat && mat.roughnessMap), key: mat && mat.customProgramCacheKey ? mat.customProgramCacheKey() : '' },
   neu,
   show(name, t = 0.4, mode = 'both', weapon = null) { spin = null; frameBoth(name, t, weapon); view[mode](); renderer.render(scene, camera); },
   play(name, weapon = null) {
