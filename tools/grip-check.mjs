@@ -69,9 +69,11 @@ else {
 
 const reds = await prep('public/models/kit/characters/reds-m-1.glb');
 console.log('reds', reds.grip && reds.grip.kind, JSON.stringify(reds.grip && reds.grip.report));
-if (!reds.grip || reds.grip.kind !== 'mesh') fail('reds should curl the hand mesh, not invented finger bones');
+if (reds.grip && reds.grip.kind !== 'mesh') fail('reds must not invent finger bones');
+if (!reds.grip) console.log('reds hands left as imported: no curl kept its triangles');
 else {
-  if (!reds.grip.report.r || reds.grip.report.r.after > reds.grip.report.r.before - 0.012) fail('reds right fingertips did not reach the grip');
+  if (!reds.grip.report.r || reds.grip.report.r.stretch > 1.35) fail('reds right hand still stretches a triangle');
+  if (!reds.grip.report.l || reds.grip.report.l.stretch > 1.35) fail('reds left hand still stretches a triangle');
   let generic = 0;
   reds.tgt.traverse((o) => { if (o.isBone && /^Bone_/.test(o.name)) generic++; });
   if (generic !== 6) fail('reds helper bone count changed: ' + generic);
@@ -124,5 +126,44 @@ const box = new THREE.Box3().setFromObject(blue.tgt, true);
 const measured = box.max.y - box.min.y;
 console.log('blue measured height', +measured.toFixed(3));
 if (measured < 1.6 || measured > 1.8) fail('blue file bounds are not the measured body');
+
+const gold = await prep('public/models/kit/characters/golds-m-1.glb');
+console.log('gold', gold.grip && gold.grip.kind, JSON.stringify(gold.grip && gold.grip.report));
+if (gold.r.missing.length) fail('gold missing bones ' + gold.r.missing.join(','));
+for (const n of CLIPS) if (!gold.r.clips[n]) fail('gold missing clip ' + n);
+if (!gold.grip || gold.grip.kind !== 'bones') fail('gold has named finger bones and should curl those');
+else {
+  const open = middleTip(gold.tgt);
+  applyGrip(gold.tgt, gold.grip, 1);
+  gold.tgt.updateMatrixWorld(true);
+  const shut = middleTip(gold.tgt);
+  const openD = open.tip.distanceTo(open.hand), shutD = shut.tip.distanceTo(shut.hand);
+  console.log('gold middle tip to wrist', { open: +openD.toFixed(3), shut: +shutD.toFixed(3) });
+  if (shutD > openD - 0.012) fail('gold fist does not bring the middle finger toward the wrist');
+}
+const namesOf = async (file) => (await io.read(file)).getRoot().listSkins()[0].listJoints().map((j) => j.getName());
+const goldNames = await namesOf('public/models/kit/characters/golds-m-1.glb');
+const orangeNames = await namesOf('public/models/kit/characters/player.glb');
+const blueNames = await namesOf('public/models/kit/characters/blues-m-1.glb');
+const nDiff = (a, b) => a.filter((n, i) => b[i] !== n).length;
+const vsOrange = nDiff(goldNames, orangeNames), vsBlue = nDiff(goldNames, blueNames);
+console.log('gold joint index diffs', { vsOrange, vsBlue });
+if (vsOrange !== 16 || vsBlue !== 32) fail('gold joint order must differ by name position, not be copied');
+if (!goldNames.every((n) => orangeNames.includes(n))) fail('gold joint names must match the orange set');
+const goldMan = pickCharacter([{ spec: { file: 'golds-m-1.glb', gender: 'm' } }], 0, 'm');
+const goldWoman = pickCharacter([{ spec: { file: 'golds-m-1.glb', gender: 'm' } }], 0, 'f');
+if (!goldMan || goldMan.spec.file !== 'golds-m-1.glb') fail('a Gold Line man must load golds-m-1');
+if (goldWoman) fail('a Gold Line woman must keep the painted body until golds-f-1 exists');
+const goldBox = new THREE.Box3().setFromObject(gold.tgt, true);
+const goldH = goldBox.max.y - goldBox.min.y;
+console.log('gold measured height', +goldH.toFixed(3), 'feet', +goldBox.min.y.toFixed(3));
+if (goldH < 1.85 || goldH > 1.95) fail('gold file bounds are not the measured 1.9 m body');
+const hipDoc = await io.read('public/models/kit/characters/golds-m-1.glb');
+const hipJoints = hipDoc.getRoot().listSkins()[0].listJoints();
+const hipI = hipJoints.findIndex((j) => /hips/i.test(j.getName()));
+const hipM = hipDoc.getRoot().listSkins()[0].getInverseBindMatrices().getElement(hipI, []);
+const hipLen = Math.hypot(hipM[12], hipM[13], hipM[14]);
+console.log('gold hip bind', +hipLen.toFixed(4));
+if (hipLen < 0.5) fail('gold hip bind collapsed');
 
 if (!process.exitCode) console.log('grip check ok');

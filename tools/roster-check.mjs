@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 3],
-  ['remainingNames', n((f) => f.status !== 'installed'), 21],
+  ['installed', n((f) => f.status === 'installed'), 4],
+  ['remainingNames', n((f) => f.status !== 'installed'), 20],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 16],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 15],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -27,6 +27,10 @@ const blues = files.find((f) => f.file === 'characters/blues-m-1.glb');
 if (!blues || blues.status !== 'installed' || blues.gender !== 'm') fail.push('blues-m-1 must be installed as a man');
 if (blues.joints !== 66 || blues.fingerBones !== 40 || blues.jointIndexDiffFromPlayer !== 16) fail.push('blues-m-1 rig record');
 if (blues.measuredHeightM !== 1.7 || blues.fittedHeightM !== 1.84) fail.push('blues-m-1 height record');
+const golds = files.find((f) => f.file === 'characters/golds-m-1.glb');
+if (!golds || golds.status !== 'installed' || golds.gender !== 'm') fail.push('golds-m-1 must be installed as a man');
+if (golds.joints !== 66 || golds.fingerBones !== 40 || golds.jointIndexDiffFromPlayer !== 16 || golds.jointIndexDiffFromBlue !== 32) fail.push('golds-m-1 rig record');
+if (golds.measuredHeightM !== 1.9 || golds.fittedHeightM !== 1.9) fail.push('golds-m-1 height record');
 for (const slot of ['crew', 'reds', 'blues', 'golds']) {
   const rows = files.filter((f) => f.slot === slot && f.countsAsDistinctBuild);
   const women = rows.filter((f) => f.gender === 'f').length;

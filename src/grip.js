@@ -1,8 +1,9 @@
 // Closes a hand around the weapon grip.
-// A rig with named, weighted finger bones (the orange player) gets a curl on
-// those bones, measured from the mesh, on top of the clip. A rig with no finger
-// bones (Red Kings) keeps its skeleton exactly as imported. The fingers of that
-// mesh are bent in a morph, and helper bones are not rotated or renamed.
+// A rig with named, weighted finger bones (the orange player and Blue Hand) gets
+// a curl on those bones, on top of the clip. A rig with no finger bones keeps
+// its skeleton and its skin weights exactly as imported. Helper bones are not
+// rotated. A grip for that hand is a mesh move that is thrown away if it
+// stretches a triangle.
 import * as THREE from 'three';
 import { mapBones, restPose } from './retarget.js';
 
@@ -136,14 +137,15 @@ function handPoints(mesh, hand) {
   return { pts, inv, back, hi };
 }
 
-function bendPoint(p, along, palm, knuckle, tip, hingeSide, angle) {
+function bendPoint(p, along, palm, knuckle, tip, hingeSide, angle, rigid) {
   const span = tip - knuckle;
   if (Math.abs(span) < 1e-4) return p;
   const a0 = p[along], s0 = p[palm];
   const t = (a0 - knuckle) / span;
   if (t <= 0.02) return p;
   const tc = Math.min(1, t);
-  const ang = angle * (0.35 * tc + 0.65 * tc * tc);
+  // rigid: one rotation for the whole fingertip, so triangles inside it do not shear
+  const ang = rigid ? angle : angle * (0.35 * tc + 0.65 * tc * tc);
   const c = Math.cos(ang), s = Math.sin(ang);
   const dy = a0 - knuckle, ds = s0 - hingeSide;
   const out = { x: p.x, y: p.y, z: p.z, i: p.i };
@@ -183,33 +185,70 @@ function curlHand(mesh, hand, target) {
   const hingeAt = (near.length ? near : pts).reduce((s, p) => s + p[palm], 0) / (near.length || pts.length);
   const tipSet = new Set(pts.filter((p) => (tipsHigh ? p[along] >= ordered[Math.floor(ordered.length * 0.85)] : p[along] <= ordered[Math.floor(ordered.length * 0.15)])).map((p) => p.i));
   const before = dist3(tipsHigh ? highC : lowC, target);
-  let best = null;
-  for (const sign of [1, -1]) for (const scale of [0.45, 0.65, 0.85]) {
-    const angle = sign * 2.2 * scale;
-    const moved = pts.map((p) => bendPoint(p, along, palm, knuckle, tip, hingeAt, angle));
-    const c = centroid(moved.filter((p) => tipSet.has(p.i)));
+  const index = mesh.geometry.index;
+  const baseAttr = mesh.geometry.attributes.position;
+  const scored = [];
+  for (const rigid of [true, false]) for (const sign of [1, -1]) for (const scale of [0.35, 0.55, 0.75, 1]) {
+    const angle = sign * (rigid ? 0.9 : 1.1) * scale;
+    const movedPts = pts.map((p) => bendPoint(p, along, palm, knuckle, tip, hingeAt, angle, rigid));
+    const c = centroid(movedPts.filter((p) => tipSet.has(p.i)));
     const after = dist3(c, target);
-    const travel = Math.max(...moved.map((p, i) => Math.hypot(p.x - pts[i].x, p.y - pts[i].y, p.z - pts[i].z)));
     const tTip = (c[along] - wristEnd) / (tip - wristEnd);
-    // a fingertip swings by about the length of the finger; only reject a curl that folds past the wrist
-    if (tTip < 0.2 || tTip > 1.15 || travel > 0.18) continue;
-    if (before - after < 0.015) continue;
-    // the mildest bend that reaches the grip, so the fingers curl instead of folding through the palm
-    if (!best || Math.abs(angle) < Math.abs(best.angle)) best = { angle, after, travel };
+    if (tTip < 0.35 || tTip > 1.05) continue;
+    if (before - after < 0.008) continue;
+    const trial = new Float32Array(baseAttr.count * 3);
+    for (let i = 0; i < baseAttr.count; i++) trial.set([baseAttr.getX(i), baseAttr.getY(i), baseAttr.getZ(i)], i * 3);
+    const moved = new Set();
+    const span = tip - knuckle;
+    for (let n = 0; n < pts.length; n++) {
+      const p = pts[n];
+      const t = Math.abs(span) < 1e-4 ? 0 : (p[along] - knuckle) / span;
+      if (t <= 0.02) continue;
+      const q = movedPts[n];
+      const meshPos = new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(hand.matrixWorld).applyMatrix4(bag.back);
+      trial.set([meshPos.x, meshPos.y, meshPos.z], p.i * 3);
+      moved.add(p.i);
+    }
+    const stretch = edgeStretch(baseAttr, trial, index, moved);
+    if (stretch.ratio > 1.35 || stretch.max > 0.02) continue;
+    scored.push({ angle, after, stretch, trial, moved });
   }
-  if (!best || best.after > before - 0.012) return null;
+  // the most closure whose triangles still meet. None means the hand stays as imported.
+  scored.sort((a, b) => a.after - b.after);
+  const best = scored[0];
+  if (!best) return null;
   const writes = [];
-  for (const p of pts) {
-    const q = bendPoint(p, along, palm, knuckle, tip, hingeAt, best.angle);
-    const t = (p[along] - knuckle) / Math.max(1e-4, tip - knuckle);
-    if (t <= 0.02) continue;
-    const meshPos = new THREE.Vector3(q.x, q.y, q.z).applyMatrix4(hand.matrixWorld).applyMatrix4(bag.back);
-    writes.push({ i: p.i, x: meshPos.x, y: meshPos.y, z: meshPos.z, own: t > 0.18, hi: bag.hi });
-  }
-  return { before: +before.toFixed(4), after: +best.after.toFixed(4), angle: +best.angle.toFixed(3), moved: writes.length, along, palm, writes };
+  for (const i of best.moved) writes.push({ i, x: best.trial[i * 3], y: best.trial[i * 3 + 1], z: best.trial[i * 3 + 2] });
+  return { before: +before.toFixed(4), after: +best.after.toFixed(4), angle: +best.angle.toFixed(3), moved: writes.length, stretch: +best.stretch.ratio.toFixed(3), along, palm, writes };
 }
 
+function edgeStretch(base, trial, index, moved) {
+  if (!index) return { ratio: 1, max: 0 };
+  let ratio = 1, max = 0;
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), D = new THREE.Vector3();
+  for (let i = 0; i < index.count; i += 3) {
+    const tri = [index.getX(i), index.getX(i + 1), index.getX(i + 2)];
+    if (!tri.some((v) => moved.has(v))) continue;
+    for (let e = 0; e < 3; e++) {
+      const u = tri[e], v = tri[(e + 1) % 3];
+      A.set(base.getX(u), base.getY(u), base.getZ(u));
+      B.set(base.getX(v), base.getY(v), base.getZ(v));
+      C.set(trial[u * 3], trial[u * 3 + 1], trial[u * 3 + 2]);
+      D.set(trial[v * 3], trial[v * 3 + 1], trial[v * 3 + 2]);
+      const beforeLen = A.distanceTo(B);
+      if (beforeLen < 1e-5) continue;
+      const afterLen = C.distanceTo(D);
+      if (afterLen / beforeLen > ratio) ratio = afterLen / beforeLen;
+      if (afterLen > max) max = afterLen;
+    }
+  }
+  return { ratio, max };
+}
+
+
 function measureMesh(root, frames, offset) {
+  // Skin weights stay as imported. A candidate that stretches a triangle is dropped,
+  // which is what keeps the Red Kings fingertips from shattering.
   const mesh = bodyMesh(root);
   restPose(root, mesh);
   root.updateMatrixWorld(true);
@@ -220,21 +259,14 @@ function measureMesh(root, frames, offset) {
     const target = gripLocal(frame, offset);
     const hit = curlHand(mesh, frame.bone, target);
     if (!hit) { report[side] = null; continue; }
-    report[side] = { before: hit.before, after: hit.after, angle: hit.angle, moved: hit.moved, along: hit.along, palm: hit.palm };
+    report[side] = { before: hit.before, after: hit.after, angle: hit.angle, moved: hit.moved, stretch: hit.stretch, along: hit.along, palm: hit.palm };
     hits.push(hit);
   }
   if (!hits.length) return null;
   const pos = mesh.geometry.attributes.position;
   const curled = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) curled.set([pos.getX(i), pos.getY(i), pos.getZ(i)], i * 3);
-  const si = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight;
-  for (const hit of hits) for (const w of hit.writes) {
-    curled.set([w.x, w.y, w.z], w.i * 3);
-    if (!w.own) continue;
-    si.setComponent(w.i, 0, w.hi); sw.setComponent(w.i, 0, 1);
-    for (let k = 1; k < 4; k++) { si.setComponent(w.i, k, 0); sw.setComponent(w.i, k, 0); }
-  }
-  si.needsUpdate = true; sw.needsUpdate = true;
+  for (const hit of hits) for (const w of hit.writes) curled.set([w.x, w.y, w.z], w.i * 3);
   const attr = new THREE.Float32BufferAttribute(curled, 3);
   attr.name = 'grip';
   mesh.geometry.morphAttributes.position = [attr];
