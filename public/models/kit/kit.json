@@ -90,6 +90,13 @@
         "height": 1.84,
         "gender": "m",
         "credit": "Original Street Empire Blue Hand, young heavy man. Meshy humanoid, local 1024 texture prep."
+      },
+      {
+        "file": "characters/blues-m-2.glb",
+        "yaw": 0,
+        "height": 1.78,
+        "gender": "m",
+        "credit": "Original Street Empire Blue Hand, older heavy man. Meshy humanoid, right middle-finger chain only, local 1024 texture prep. Not a recolor of blues-m-1."
       }
     ],
     "golds": [

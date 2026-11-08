@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 10],
-  ['remainingNames', n((f) => f.status !== 'installed'), 14],
+  ['installed', n((f) => f.status === 'installed'), 11],
+  ['remainingNames', n((f) => f.status !== 'installed'), 13],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 9],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 8],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -35,6 +35,10 @@ const blues = files.find((f) => f.file === 'characters/blues-m-1.glb');
 if (!blues || blues.status !== 'installed' || blues.gender !== 'm') fail.push('blues-m-1 must be installed as a man');
 if (blues.joints !== 66 || blues.fingerBones !== 40 || blues.jointIndexDiffFromPlayer !== 16) fail.push('blues-m-1 rig record');
 if (blues.measuredHeightM !== 1.7 || blues.fittedHeightM !== 1.84) fail.push('blues-m-1 height record');
+const blues2 = files.find((f) => f.file === 'characters/blues-m-2.glb');
+if (!blues2 || blues2.status !== 'installed' || blues2.gender !== 'm') fail.push('blues-m-2 must be installed as a man');
+if (blues2.joints !== 37 || blues2.fingerBones !== 4 || blues2.helperBones !== 7) fail.push('blues-m-2 rig record');
+if (blues2.measuredHeightM !== 1.78 || blues2.fittedHeightM !== 1.78) fail.push('blues-m-2 height record');
 const golds = files.find((f) => f.file === 'characters/golds-m-1.glb');
 if (!golds || golds.status !== 'installed' || golds.gender !== 'm') fail.push('golds-m-1 must be installed as a man');
 if (golds.joints !== 66 || golds.fingerBones !== 40 || golds.jointIndexDiffFromPlayer !== 16 || golds.jointIndexDiffFromBlue !== 32) fail.push('golds-m-1 rig record');
