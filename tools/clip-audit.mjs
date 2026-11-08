@@ -12,6 +12,7 @@ import { retarget, mapBones } from '../src/retarget.js';
 
 globalThis.self = globalThis;
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const modelPath = path.resolve(root, process.argv[2] || 'public/models/kit/characters/player.glb');
 const CLIPS = ['Idle_Loop', 'Idle_Talking_Loop', 'Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Punch_Jab', 'Punch_Cross', 'Sword_Attack', 'Pistol_Idle_Loop', 'Pistol_Shoot', 'Death01', 'Hit_Chest', 'Hit_Head', 'Roll', 'Jump_Start', 'Jump_Loop', 'Driving_Loop', 'Sitting_Idle_Loop'];
 const LOOPS = new Set(['Idle_Loop', 'Idle_Talking_Loop', 'Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Pistol_Idle_Loop', 'Jump_Loop', 'Driving_Loop', 'Sitting_Idle_Loop']);
 const LINKS = [['clavicle_r', 'upperarm_r'], ['upperarm_r', 'lowerarm_r'], ['lowerarm_r', 'hand_r'], ['hand_r', 'middle_01_r'], ['thigh_r', 'calf_r'], ['calf_r', 'foot_r'], ['clavicle_l', 'upperarm_l'], ['upperarm_l', 'lowerarm_l'], ['lowerarm_l', 'hand_l'], ['thigh_l', 'calf_l'], ['calf_l', 'foot_l']];
@@ -23,7 +24,7 @@ for (const c of people.animations) {
   c.tracks = c.tracks.filter((t) => !t.name.endsWith('.scale') && (!t.name.endsWith('.position') || t.name.startsWith('pelvis.')));
   clips[c.name] = c;
 }
-const player = await load(path.join(root, 'public/models/kit/characters/player.glb'));
+const player = await load(modelPath);
 const tgt = new THREE.Group(); tgt.add(player.scene);
 const ret = retarget(skeletonClone(people.scene), Object.values(clips), tgt);
 const fail = [];
@@ -81,11 +82,13 @@ for (const name of CLIPS) {
       const d = ang(td, sd);
       if (d > maxDir) { maxDir = d; worstBone = bone; }
     }
-    const fore = T.p('hand_r').clone().sub(T.p('lowerarm_r')).normalize();
-    const fing = T.p('middle_01_r').clone().sub(T.p('hand_r')).normalize();
-    const sfore = sp('hand_r').clone().sub(sp('lowerarm_r')).normalize();
-    const sfing = sp('middle_01_r').clone().sub(sp('hand_r')).normalize();
-    if (sfore.dot(sfing) > 0.4 && fore.dot(fing) < 0) wristFlip++;
+    if (T.map.get('middle_01_r') && srcMap.middle_01_r) {
+      const fore = T.p('hand_r').clone().sub(T.p('lowerarm_r')).normalize();
+      const fing = T.p('middle_01_r').clone().sub(T.p('hand_r')).normalize();
+      const sfore = sp('hand_r').clone().sub(sp('lowerarm_r')).normalize();
+      const sfing = sp('middle_01_r').clone().sub(sp('hand_r')).normalize();
+      if (sfore.dot(sfing) > 0.4 && fore.dot(fing) < 0) wristFlip++;
+    }
     const foot = T.p('foot_r').y, head = T.p('Head').y;
     footMin = Math.min(footMin, foot); footMax = Math.max(footMax, foot);
     headMin = Math.min(headMin, head); headMax = Math.max(headMax, head);
@@ -109,9 +112,10 @@ for (const name of CLIPS) {
     }
   }
 }
-const out = { hipK: +ret.hipK.toFixed(3), clips: CLIPS.length, fail, report };
+const mapped = [...ret.bones.keys()].filter((k) => k !== '_spine');
+const out = { file: path.relative(root, modelPath), hipK: +ret.hipK.toFixed(3), joints: ret.bones.get('_spine') ? mapped.length + ret.bones.get('_spine').length : mapped.length, fingers: mapped.filter((k) => /^(index|middle|ring|pinky|thumb)_/.test(k)).length, missingRequired: ret.missing, clips: CLIPS.length, fail, report };
 console.log(JSON.stringify(out, null, 2));
-const dest = '/opt/cursor/artifacts/orange-player/clip-audit.json';
+const dest = process.argv[3] || '/opt/cursor/artifacts/orange-player/clip-audit.json';
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, JSON.stringify(out, null, 2));
 process.exitCode = fail.length ? 1 : 0;

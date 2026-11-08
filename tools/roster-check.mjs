@@ -9,9 +9,9 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 1],
-  ['remainingNames', n((f) => f.status !== 'installed'), 23],
-  ['inProgress', n((f) => f.status === 'in_progress'), 1],
+  ['installed', n((f) => f.status === 'installed'), 2],
+  ['remainingNames', n((f) => f.status !== 'installed'), 22],
+  ['inProgress', n((f) => f.status === 'in_progress'), 0],
   ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 17],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
@@ -20,7 +20,9 @@ for (const [key, got, want] of expect) {
   if (roster.counts[key] !== got || got !== want) fail.push(`${key}: json ${roster.counts[key]}, list ${got}, want ${want}`);
 }
 const reds = files.find((f) => f.file === 'characters/reds-m-1.glb');
-if (!reds || reds.jersey !== 12 || reds.status !== 'in_progress' || !/number 12/.test(reds.prompt)) fail.push('reds-m-1 must be in progress with jersey 12');
+if (!reds || reds.jersey !== 12 || reds.status !== 'installed' || !/number 12/.test(reds.prompt)) fail.push('reds-m-1 must be installed with jersey 12');
+if (reds.joints !== 32 || reds.fingerBones !== 0) fail.push('reds-m-1 joint count');
+if (reds.measuredHeightM !== 1.7 || reds.fittedHeightM !== 1.82) fail.push('reds-m-1 height record');
 for (const slot of ['crew', 'reds', 'blues', 'golds']) {
   const rows = files.filter((f) => f.slot === slot && f.countsAsDistinctBuild);
   const women = rows.filter((f) => f.gender === 'f').length;

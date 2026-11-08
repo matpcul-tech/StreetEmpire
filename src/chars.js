@@ -478,6 +478,7 @@ export function prepKit(T) {
     T.root.position.set(0, 0, 0); T.root.scale.setScalar(1);
     const r = retarget(src, Object.values(clips), T.root);
     if (r.missing.length) console.warn('kit character', T.spec.file, 'missing bones:', r.missing.join(', '));
+    if (!r.bones.get('middle_01_r')) console.warn('kit character', T.spec.file, 'has no finger bones; the hands stay in the bind pose');
     if (!r.clips.Idle_Loop) throw new Error('no idle clip');
     const wantH = T.spec.height || (T.spec.gender === 'f' ? 1.68 : 1.8);
     const box = new THREE.Box3().setFromObject(T.root, true), k = wantH / Math.max(1e-6, box.max.y - box.min.y);

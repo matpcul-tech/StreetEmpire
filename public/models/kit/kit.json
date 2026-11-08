@@ -59,6 +59,15 @@
         "gender": "m",
         "credit": "Original Street Empire player. Meshy humanoid, local 1024 texture prep, shoe logos painted off."
       }
+    ],
+    "reds": [
+      {
+        "file": "characters/reds-m-1.glb",
+        "yaw": 0,
+        "height": 1.82,
+        "gender": "m",
+        "credit": "Original Street Empire Red Kings, young lean man, plain white jersey number 12. Meshy humanoid, local 1024 texture prep."
+      }
     ]
   }
 }

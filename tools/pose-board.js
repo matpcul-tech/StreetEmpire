@@ -14,13 +14,17 @@ scene.add(new THREE.HemisphereLight(0xc8d0e0, 0x2a2018, 1.1));
 const sun = new THREE.DirectionalLight(0xfff0dd, 2.4); sun.position.set(3, 6, 4); scene.add(sun);
 const grid = new THREE.GridHelper(8, 16, 0x1c2c48, 0x12203a); scene.add(grid);
 const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.05, 40);
-const PAINTED = { model: 'ual', female: false, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.2, num: -1, beard: 1, skin: 0x7a4a30, pants: 0, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } };
+const PAINTED = {
+  player: { model: 'ual', female: false, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.2, num: -1, beard: 1, skin: 0x7a4a30, pants: 0, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } },
+  reds: { model: 'ual', female: false, top: 2, topC: 0xa82222, trim: 0xf0f0f0, pants: 0, legs: 0x1a1a1a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.35, num: 12, beard: 1, skin: 0x8d5a3b, acc: { rag: 0xa82222 } },
+};
+const slot = new URLSearchParams(location.search).get('slot') || 'player';
 
 await Promise.all([loadPeople(import.meta.env.BASE_URL), loadKit(import.meta.env.BASE_URL)]);
-const kit = kitCharacter('player', 0, 'm');
-if (!prepKit(kit)) throw new Error('orange player did not retarget');
+const kit = kitCharacter(slot, 0, 'm');
+if (!prepKit(kit)) throw new Error(slot + ' did not retarget');
 const neu = makeCharacter({ kitT: kit }, false);
-const old = makeCharacter(PAINTED, false);
+const old = makeCharacter(PAINTED[slot] || PAINTED.player, false);
 old.position.x = -1.15; neu.position.x = 1.15;
 scene.add(old, neu);
 const label = document.createElement('div');
@@ -35,7 +39,7 @@ function pose(g, name, t, weapon) {
   u.mixer.setTime(Math.min(t, act.getClip().duration * 0.98));
   u.gun.visible = weapon === 'pistol'; u.bat.visible = weapon === 'bat'; u.shotgun.visible = false; u.knux.visible = false;
 }
-function frameBoth(name, t, weapon) { pose(old, name, t, weapon); pose(neu, name, t, weapon); label.textContent = name + '  ' + t.toFixed(2) + 's    left: old painted body    right: orange player'; }
+function frameBoth(name, t, weapon) { pose(old, name, t, weapon); pose(neu, name, t, weapon); label.textContent = name + '  ' + t.toFixed(2) + 's    left: painted ' + slot + '    right: kit ' + slot; }
 
 const view = {
   both() { camera.position.set(0, 1.15, 4.4); camera.lookAt(0, 0.9, 0); },
@@ -56,8 +60,13 @@ function render() {
   renderer.render(scene, camera); requestAnimationFrame(render);
 }
 render();
+const box = new THREE.Box3().setFromObject(neu);
+let body = null; neu.traverse((o) => { if (o.isSkinnedMesh) body = o; });
+const mat = body && [].concat(body.material)[0];
 window.__board = {
-  clips: CLIPS,
+  slot, clips: CLIPS,
+  info: { height: +box.getSize(new THREE.Vector3()).y.toFixed(3), bones: body ? body.skeleton.bones.length : 0, map: !!(mat && mat.map), normal: !!(mat && mat.normalMap), rough: !!(mat && mat.roughnessMap), key: mat && mat.customProgramCacheKey ? mat.customProgramCacheKey() : '' },
+  neu,
   show(name, t = 0.4, mode = 'both', weapon = null) { spin = null; frameBoth(name, t, weapon); view[mode](); renderer.render(scene, camera); },
   play(name, weapon = null) {
     spin = [name, weapon];
