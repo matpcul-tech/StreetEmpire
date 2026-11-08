@@ -103,7 +103,12 @@ const pool = [
 const men = [0, 1, 2].map((s) => pickCharacter(pool, s, 'm').spec.file);
 console.log('men', men.join(','));
 if (men[0] !== 'characters/blues-m-1.glb' || men[1] !== 'characters/blues-m-2.glb') fail('blue men must alternate the two real meshes');
-if (pickCharacter(pool, 3, 'f')) fail('a Blue Hand woman must keep the painted body');
+const withWoman = pool.concat([{ spec: { file: 'characters/blues-f-1.glb', gender: 'f' } }]);
+const woman = pickCharacter(withWoman, 3, 'f');
+if (!woman || woman.spec.file !== 'characters/blues-f-1.glb') fail('a Blue Hand woman must load blues-f-1');
+if (pickCharacter(withWoman, 0, 'm').spec.file !== 'characters/blues-m-1.glb') fail('adding the woman changed the first man');
+if (pickCharacter(withWoman, 1, 'm').spec.file !== 'characters/blues-m-2.glb') fail('adding the woman changed the second man');
+if (gripForFile('characters/blues-f-1.glb', { kind: 'bones', bones: [{ name: 'mixamorigRightHandMiddle1', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('blues-f-1 curl must not be kept');
 const hs = r.hand.bone.getWorldScale(new THREE.Vector3()).x;
 const scale = 1 / (hs * (1.78 / h));
 const frame = (hand) => hand && { bone: hand.bone, quat: hand.quat, scale };
