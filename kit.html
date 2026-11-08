@@ -43,6 +43,10 @@ h2{font:600 17px 'Playfair Display',serif;margin:0 0 8px;color:var(--text)}
 .how ol{margin:6px 0 0;padding-left:18px;color:var(--mute);font-size:13.5px}
 .how code{background:#0a1528;border:1px solid var(--line);padding:1px 5px;border-radius:5px;color:var(--text);font-size:12.5px}
 a{color:var(--teal)}
+#anims{display:none;flex-wrap:wrap;gap:6px;margin-top:10px}
+#anims.show{display:flex}
+#anims button{padding:7px 11px;border-radius:99px;border:1px solid var(--line);background:#0a1528;color:var(--text);font:500 13px Outfit;cursor:pointer}
+#anims button.on{border-color:var(--gold);color:var(--gold)}
 </style>
 </head>
 <body>
@@ -51,19 +55,22 @@ a{color:var(--teal)}
   <section>
     <div class="card"><h2>Cars</h2><div class="slots" id="cars"></div></div>
     <div class="card" style="margin-top:14px"><h2>Buildings</h2><div class="slots" id="buildings"></div></div>
+    <div class="card" style="margin-top:14px"><h2>Characters</h2><div class="slots" id="characters"></div></div>
     <div class="card how" style="margin-top:14px">
       <h2>Add a model</h2>
       <ol>
         <li>Download a <code>.glb</code> or a glTF <code>.zip</code> (Sketchfab: Download 3D Model, glTF).</li>
         <li>Rename it to the slot: <code>sedan.glb</code>, <code>house-2.zip</code>.</li>
-        <li>On GitHub open <code>kit-inbox/cars</code> or <code>kit-inbox/buildings</code>, then Add file, Upload files, Commit.</li>
+        <li>On GitHub open <code>kit-inbox/cars</code>, <code>kit-inbox/buildings</code> or <code>kit-inbox/characters</code>, then Add file, Upload files, Commit.</li>
         <li>In about 3 minutes it shows here and in the game.</li>
       </ol>
       <p style="color:var(--mute);font-size:13px;margin:8px 0 0">Facing the wrong way? Add <code>@yaw180</code> (or 90, -90) before the extension and upload again. Credit file: same name with <code>.txt</code>.</p>
+      <p style="color:var(--mute);font-size:13px;margin:8px 0 0">Characters must be rigged (Meshy: Rigging, Humanoid). Slots: <code>player</code>, <code>unc</code>, <code>crew</code>, <code>reds</code>, <code>blues</code>, <code>golds</code>, <code>locals</code>, <code>cop</code>, <code>ped</code>; variants <code>reds-2.glb</code>. Height: <code>@h1.9</code>.</p>
     </div>
   </section>
   <section>
     <div id="view"><div id="hint">Pick an installed model to preview it.<br/>Gold arrow points to the front. The outline is the space it gets in game.</div></div>
+    <div id="anims"></div>
     <div id="stats"></div>
     <ul id="notes"></ul>
   </section>

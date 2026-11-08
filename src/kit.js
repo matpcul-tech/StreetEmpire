@@ -11,6 +11,9 @@
 // }
 // Car slots: sedan, muscle, suv, van, taxi, police, lowrider, pickup.
 // Building slots: house, store, apt, tower, shed (a slot can hold variants).
+// Character slots: player, unc, crew, reds, blues, golds, locals, cop, ped
+// ("characters": { "player": [ { "file": "characters/player.glb", "yaw": 0, "height": 1.8 } ] }).
+// Characters are rigged models; src/retarget.js plays the game's clips on them.
 // Models face +z (the glTF convention); yaw (degrees) turns one that does not.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -20,15 +23,18 @@ export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lo
 // real-world lengths in meters per slot, used when kit.json gives none
 export const CAR_LENGTH = {'sedan': 4.9, 'muscle': 4.8, 'suv': 4.8, 'van': 5.1, 'taxi': 4.9, 'police': 5.2, 'lowrider': 5.4, 'pickup': 5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
+// who wears each character slot: player, Unc, your crew, the three rival crews, the Locals crew, police, people on the street
+export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
 
-const kit = { cars: {}, buildings: {} };
+const kit = { cars: {}, buildings: {}, characters: {} };
 let done = false;
 export const kitReady = () => done;
 export const kitCar = (type) => kit.cars[type] || null;
 export function kitBuilding(kind, seed) { const v = kit.buildings[kind]; return v && v.length ? v[seed % v.length] : null; }
 export const kitInfo = () => kit;
+export function kitCharacter(slot, seed = 0) { const v = kit.characters[slot]; return v && v.length ? v[Math.abs(seed | 0) % v.length] : null; }
 
 // Loads every kit model. Resolves even when nothing is installed.
 export async function loadKit(base, { low = false } = {}) {
@@ -49,7 +55,14 @@ export async function loadKit(base, { low = false } = {}) {
       jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { kit.buildings[slot].push(prepBuilding(g.scene, spec, low)); }).catch((e) => console.warn('kit building', slot, e)));
     }
   }
+  for (const [slot, list] of Object.entries(manifest.characters || {})) {
+    if (!CHAR_SLOTS.includes(slot)) continue;
+    const got = [], specs = [].concat(list).filter((x) => x && x.file);
+    specs.forEach((spec, i) => jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { got[i] = prepCharacter(g.scene, spec, low); }).catch((e) => console.warn('kit character', slot, e))));
+    kit.characters[slot] = got; // variants keep the manifest order; empty entries are dropped below
+  }
   await Promise.all(jobs);
+  for (const slot in kit.characters) kit.characters[slot] = kit.characters[slot].filter(Boolean);
   done = true;
   return kit;
 }
@@ -213,3 +226,13 @@ function finishMaterial(m, key, paintHex) {
 }
 
 export function placeKitBuilding(T) { return T.root.clone(true); }
+
+// A character template: the file's scene under a yaw turn. Scaling, the feet on the ground and
+// the retargeted clips are done in src/chars.js, which has the game rig to retarget from.
+function prepCharacter(scene, spec, low) {
+  let skinned = 0; scene.traverse((o) => { if (o.isSkinnedMesh) skinned++; });
+  if (!skinned) { console.warn('kit character has no skeleton, skipped:', spec.file); return null; }
+  const root = new THREE.Group(); root.name = 'kit-character'; root.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); root.add(scene);
+  root.traverse((o) => { if (o.isMesh) { o.frustumCulled = false; if (low) for (const m of [].concat(o.material)) { m.normalMap = null; m.needsUpdate = true; } } });
+  return { root, spec };
+}

@@ -8,11 +8,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { kitCharacter } from './kit.js';
+import { retarget } from './retarget.js';
 
-let tmpl = null;
+let tmpl = null, potatoPeople = false;
 const clips = {};
 
 export async function loadPeople(base, onFirst, potato = false) {
+  potatoPeople = potato;
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   const g = await loader.loadAsync(`${base}models/se-pack/${potato ? 'people_lod' : 'people'}.glb`);
   // bone scales set in code (female build) must survive the clips, so drop
@@ -69,7 +72,18 @@ const SHOES = [0xe8e8e0, 0x1a1a1a, 0xe8e8e0, 0x8a5a30, 0xb03030, 0xe8e8e0];
 // pants 0 jeans, 1 slacks; hair 0 short, 1 long, 2 bald
 function look(o) { return { model: 'ual', female: false, top: 0, trim: 0xffffff, pants: 0, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.28, num: -1, beard: 0, acc: {}, ...o }; }
 
+// Build kit characters (kit.json "characters"): a rigged model in the entity's slot replaces the
+// painted body. Potato quality keeps the light painted people.
+export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'giver' ? 'unc' : e.kind === 'cop' ? 'cop' : e.kind === 'ped' ? 'ped'
+  : e.crew === 'player' ? 'crew' : e.crew === 'neutral' ? 'locals' : e.crew;
 export function lookFor(e, CREWS) {
+  const L = paintedLook(e, CREWS);
+  if (!tmpl || potatoPeople) return L;
+  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v);
+  if (!T || !prepKit(T)) return L;
+  return { ...L, model: `kit:${slot}:${T.spec.file}`, kitT: T };
+}
+function paintedLook(e, CREWS) {
   const v = e.look ?? (e.id * 7);
   const skin = SKINS[v % SKINS.length], hairC = HAIR[(v >> 1) % HAIR.length];
   if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } });
@@ -271,18 +285,24 @@ function clothMat(L, merged = false) {
   u.uTexSkin = { value: 0.25 };
   if (merged) { m.side = THREE.DoubleSide; Object.assign(u, { uEyeMap: { value: PARTMAT[L.female ? 'f_eyes' : 'm_eyes']?.map }, uHair1: { value: PARTMAT.hair_short?.map }, uHair2: { value: PARTMAT.hair_long?.map }, uHairTint: { value: col(L.hairC).multiplyScalar(2.0) } }); }
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, u, NIGHT);
+    Object.assign(sh.uniforms, u);
     sh.fragmentShader = sh.fragmentShader.replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + 0.04 * sin(vB.x * 21.0 + vB.y * 17.0) * sin(vB.z * 19.0 - vB.y * 13.0), 0.7, 1.0); // soft fabric break up, less plastic');
     sh.vertexShader = (merged ? 'attribute float aPart; varying float vPart;\n' : '') + 'attribute vec3 bpos; attribute vec3 bnrm; varying vec3 vB; varying vec3 vBN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvB = bpos; vBN = bnrm;' + (merged ? ' vPart = aPart;' : ''));
     // merged parts: eyes and hair sample their own maps (hair tinted like the old hair material) and skip the outfit paint
     const partColor = merged ? 'if (vPart > 0.5) { if (vPart < 1.5) diffuseColor.rgb = texture2D(uEyeMap, vMapUv).rgb; else diffuseColor.rgb = (vPart < 2.5 ? texture2D(uHair1, vMapUv).rgb : texture2D(uHair2, vMapUv).rgb) * uHairTint; } else diffuseColor.rgb = paint(diffuseColor.rgb);' : 'diffuseColor.rgb = paint(diffuseColor.rgb);';
     if (merged) sh.fragmentShader = 'varying float vPart;\nuniform sampler2D uEyeMap, uHair1, uHair2;\nuniform vec3 uHairTint;\n' + sh.fragmentShader;
-    sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + partColor)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34)); // slightly stronger cool rim so navy uniforms still read at night')
-      .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
+    sh.fragmentShader = PAINT + sh.fragmentShader.replace('#include <color_fragment>', '#include <color_fragment>\n' + partColor);
+    nightPatch(sh);
   };
   m.customProgramCacheKey = () => merged ? 'ualcloth-merged' : 'ualcloth';
   matCache.set(key, m); return m;
+}
+// night readability on any character material: tinted rim and warm fill, plus the no-post exposure and saturation fix
+function nightPatch(sh) {
+  Object.assign(sh.uniforms, NIGHT);
+  sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + sh.fragmentShader
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34)); // slightly stronger cool rim so navy uniforms still read at night')
+      .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
 }
 
 // ---- head and neck accessories, in head bone space (meters, +y up the bone) ----
@@ -385,6 +405,7 @@ let fit = null;
 const once = new Set(['Punch_Jab', 'Punch_Cross', 'Punch_Enter', 'Sword_Attack', 'Pistol_Shoot', 'Death01', 'Hit_Chest', 'Hit_Head', 'Roll', 'Jump_Start']);
 
 export function makeCharacter(L, shadow) {
+  if (L.kitT) return makeKitCharacter(L.kitT, shadow);
   const root = skeletonClone(tmpl);
   const mat = clothMat(L);
   let hand = null, head = null, neckB = null, hips = null;
@@ -434,6 +455,55 @@ export function makeCharacter(L, shadow) {
   for (const n in clips) { act[n] = mixer.clipAction(clips[n]); if (once.has(n)) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; } }
   act.Idle_Loop.play();
   g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips, punchN: 0 };
+  return g;
+}
+
+// ---- build kit characters (rigged models from kit-inbox/characters) ----
+// Prepared once per model: the game's clips retargeted onto its skeleton, its height scaled to
+// the slot (1.8 m unless kit.json says otherwise), feet on the ground, night shading on its materials.
+const kitPrep = new WeakMap();
+const kitMats = new Map();
+function kitMat(m) {
+  if (!m || kitMats.has(m)) return kitMats.get(m) || m;
+  const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45);
+  k.onBeforeCompile = (sh) => nightPatch(sh); k.customProgramCacheKey = () => 'kitchar';
+  kitMats.set(m, k); return k;
+}
+export function prepKit(T) {
+  if (kitPrep.has(T)) return kitPrep.get(T);
+  let P = null;
+  try {
+    const src = skeletonClone(tmpl); src.scale.setScalar(1); src.position.set(0, 0, 0);
+    T.root.position.set(0, 0, 0); T.root.scale.setScalar(1);
+    const r = retarget(src, Object.values(clips), T.root);
+    if (r.missing.length) console.warn('kit character', T.spec.file, 'missing bones:', r.missing.join(', '));
+    if (!r.clips.Idle_Loop) throw new Error('no idle clip');
+    const box = new THREE.Box3().setFromObject(T.root, true), k = (T.spec.height || 1.8) / Math.max(1e-6, box.max.y - box.min.y);
+    T.root.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(kitMat) : kitMat(o.material); });
+    const hs = r.hand ? r.hand.bone.getWorldScale(new THREE.Vector3()).x : 1;
+    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: 1 / (hs * k) }, hips: r.bones.get('pelvis')?.name, k, lo: box.min.y, missing: r.missing };
+  } catch (e) { console.warn('kit character', T.spec.file, 'cannot use the game animations, keeping the painted body:', e.message); }
+  kitPrep.set(T, P); return P;
+}
+function makeKitCharacter(T, shadow) {
+  const P = prepKit(T), model = skeletonClone(T.root);
+  const root = new THREE.Group(); root.add(model); root.scale.setScalar(P.k); root.position.y = -P.lo * P.k;
+  model.traverse((o) => { if (o.isMesh) { o.castShadow = !!shadow; o.frustumCulled = false; } });
+  const W = weapons();
+  const bat = new THREE.Mesh(W.bat, W.batMat), gun = new THREE.Mesh(W.pistol, W.gunMat), shotgun = new THREE.Mesh(W.shotgun, W.gunMat), knux = new THREE.Mesh(W.knux, W.goldMat);
+  const handBone = P.hand && model.getObjectByName(P.hand.name);
+  if (handBone) {
+    // a frame on the new hand that matches the game rig's hand frame, in meters, so the grips line up
+    const grip = new THREE.Object3D(); grip.quaternion.copy(P.hand.quat); grip.scale.setScalar(P.hand.scale); handBone.add(grip);
+    for (const w of [bat, gun, shotgun, knux]) { w.visible = false; w.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(w); }
+    knux.position.set(0, 0.075, 0.03);
+  }
+  const g = new THREE.Group(); g.add(root);
+  const mixer = new THREE.AnimationMixer(model), act = {};
+  for (const n in P.clips) { act[n] = mixer.clipAction(P.clips[n]); if (once.has(n)) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; } }
+  if (!act.Punch_Enter && act.Punch_Jab) act.Punch_Enter = act.Punch_Jab;
+  act.Idle_Loop.play();
+  g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips: P.hips && model.getObjectByName(P.hips), punchN: 0, kit: true };
   return g;
 }
 

@@ -1,12 +1,13 @@
-# Build kit: realistic cars and buildings
+# Build kit: realistic cars, buildings and characters
 
-The build kit swaps the built-in cars and buildings for downloaded models, slot by slot. Anything not installed keeps the built-in look, and a model that fails to load falls back too, so a bad upload never breaks the game.
+The build kit swaps the built-in cars, buildings and people for downloaded models, slot by slot. Anything not installed keeps the built-in look, and a model that fails to load falls back too, so a bad upload never breaks the game.
 
 - Viewer: https://matpcul-tech.github.io/StreetEmpire/kit.html (preview every installed model the way the game sees it: front arrow, space in game, triangles, draw calls, spinning wheels, credit)
 - Manifest: `public/models/kit/kit.json`
 - Runtime: `src/kit.js` (used by `src/vehicles.js` and `src/city.js`)
 - Importer: `tools/kit-import.mjs`
 - Phone upload: `kit-inbox/` plus `.github/workflows/kit.yml`
+- Characters: `src/retarget.js` plays the game's clips on any humanoid rig (see Characters below)
 
 ## Slots
 
@@ -91,4 +92,50 @@ On Sketchfab, search for the vehicle or building, then filter Downloadable, Lice
 
 ## Characters
 
-Not in the kit yet. The people share one rig and 18 animation clips (Quaternius Universal Animation Library), and their clothes are painted in a shader from that rig's rest pose. A realistic character has to be rigged to the same skeleton or every animation breaks, so it needs its own import step (retargeting) rather than a drop-in slot. That is the next kit slice.
+A rigged character in a slot replaces the painted people for whoever wears that slot. The game's own 18 animation clips (idle, walk, jog, sprint, punches, bat, pistol, driving, hits, roll, jump, knockout, talking) are retargeted onto the character's skeleton when the game loads, so the art team never has to animate anything.
+
+| Slot | Who wears it |
+| --- | --- |
+| player | you |
+| unc | Unc, the man in the suit |
+| crew | your crew members and followers |
+| reds, blues, golds | Red Kings, Blue Hand and Gold Line members |
+| locals | the Locals crew |
+| cop | police on foot and in cars |
+| ped | people on the street and drivers |
+
+A slot can hold variants (`reds.glb`, `reds-2.glb`, `reds-3.glb`); the game mixes them across the crew. Potato quality keeps the light painted people.
+
+### From Meshy
+
+1. Generate with the A-pose or T-pose option on.
+2. Remesh: Fixed, Custom 12000, Triangle.
+3. AI Texture the remeshed model.
+4. Rigging: Humanoid. Any skeleton template works (Mixamo is the default).
+5. Download the rigged GLB (no animations needed, the game brings its own; any in the file are dropped).
+6. Rename it to the slot (`player.glb`, `reds-2.glb`) and upload it to `kit-inbox/characters`.
+
+Mixamo, Unreal, Unity, Blender Rigify and 3ds Max Biped style rigs work too: bones are matched by name (left and right arm, forearm, hand, fingers, thigh, calf, foot, toes, neck, head) and the spine by its chain from the hips. A pose and T pose are both fine; each limb is lined up with the game rig's rest pose before the clips are copied.
+
+### Settings in the file name
+
+| Tag | Meaning | Example |
+| --- | --- | --- |
+| `@yaw180` | the model faces away from the gold arrow in kit.html | `cop@yaw180.glb` |
+| `@h1.9` | height in meters (default 1.8; a boss can stand taller) | `reds@h1.92.glb` |
+
+### What the importer does
+
+`node tools/kit-import.mjs add character player path/to/rigged.glb [--yaw 180] [--height 1.9]`
+
+1. Refuses a model with no skeleton, or one missing bones the game animates, with the reason.
+2. Drops animations in the file.
+3. Simplifies to 15k triangles (texture seams kept). A crew can put ten of these on screen at once.
+4. Textures to WebP, 1024 px or less. Quantize and meshopt. Parts and skeleton stay as rigged.
+5. Writes `public/models/kit/characters/...` and updates kit.json and the credits.
+
+In game (`src/chars.js`, `src/retarget.js`): weapons go in the right hand in the same grip as the painted people, and the night rim light is added to the character's materials. A model the retargeter cannot use keeps the painted body for that slot, and the browser console says why.
+
+Check it in kit.html: Characters, pick the slot, then tap Idle, Walk, Run, Punch, Bat, Pistol, Drive, Talk, Hit and KO.
+
+`node tools/retarget-test.mjs` checks the bone name matching against Meshy, Mixamo, Unreal, Rigify and Biped names.
