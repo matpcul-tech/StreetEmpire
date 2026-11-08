@@ -18,6 +18,7 @@ const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.05, 4
 const PAINTED = {
   player: { model: 'ual', female: false, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.2, num: -1, beard: 1, skin: 0x7a4a30, pants: 0, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } },
   unc: { model: 'ual', female: false, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hair: 0, hairC: 0x8a8a8a, grit: 0.08, num: -1, beard: 2, skin: 0x5a3825, acc: { hat: 0x1a1a1e } },
+  crew: { model: 'ual', female: false, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.25, num: -1, beard: 0, skin: 0x7a4a30, pants: 0, acc: {} },
   reds: { model: 'ual', female: false, top: 2, topC: 0xa82222, trim: 0xf0f0f0, pants: 0, legs: 0x1a1a1a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.35, num: 12, beard: 1, skin: 0x8d5a3b, acc: { rag: 0xa82222 } },
   blues: { model: 'ual', female: false, top: 1, topC: 0x2850a8, trim: 0xe8e8f0, pants: 0, legs: 0x3a4a66, shoes: 0x1a1a1a, hair: 0, hairC: 0x111111, grit: 0.35, num: -1, beard: 1, skin: 0x8d5a3b, acc: { cap: 0x1a1a1a, neck: 0x2850a8 } },
   golds: { model: 'ual', female: false, top: 6, topC: 0x8a5a2a, trim: 0x1a1a1a, pants: 0, legs: 0x3a3028, shoes: 0x9a7438, hair: 0, hairC: 0x111111, grit: 0.3, num: -1, beard: 0, skin: 0x8d5a3b, acc: { cap: 0x8a5a2a } },

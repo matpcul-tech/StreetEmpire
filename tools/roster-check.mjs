@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 5],
-  ['remainingNames', n((f) => f.status !== 'installed'), 19],
+  ['installed', n((f) => f.status === 'installed'), 6],
+  ['remainingNames', n((f) => f.status !== 'installed'), 18],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 14],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 13],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -35,6 +35,10 @@ const unc = files.find((f) => f.file === 'characters/unc.glb');
 if (!unc || unc.status !== 'installed' || unc.gender !== 'm') fail.push('unc must be installed as a man');
 if (unc.joints !== 66 || unc.fingerBones !== 40 || unc.jointIndexDiffFromPlayer !== 0 || unc.jointIndexDiffFromBlue !== 16) fail.push('unc rig record');
 if (unc.measuredHeightM !== 1.76 || unc.fittedHeightM !== 1.76) fail.push('unc height record');
+const crew = files.find((f) => f.file === 'characters/crew-m-1.glb');
+if (!crew || crew.status !== 'installed' || crew.gender !== 'm') fail.push('crew-m-1 must be installed as a man');
+if (crew.joints !== 66 || crew.fingerBones !== 40 || crew.jointIndexDiffFromPlayer !== 0 || crew.jointIndexDiffFromBlue !== 16) fail.push('crew-m-1 rig record');
+if (crew.measuredHeightM !== 1.8 || crew.fittedHeightM !== 1.8) fail.push('crew-m-1 height record');
 for (const slot of ['crew', 'reds', 'blues', 'golds']) {
   const rows = files.filter((f) => f.slot === slot && f.countsAsDistinctBuild);
   const women = rows.filter((f) => f.gender === 'f').length;

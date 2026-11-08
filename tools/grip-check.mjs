@@ -197,4 +197,38 @@ console.log('unc hip bind', +uncHipLen.toFixed(4));
 if (uncHipLen < 0.5) fail('unc hip bind collapsed');
 if (!reds.grip) console.log('reds grip still unused');
 
+const crew = await prep('public/models/kit/characters/crew-m-1.glb');
+console.log('crew', crew.grip && crew.grip.kind);
+if (crew.r.missing.length) fail('crew missing bones ' + crew.r.missing.join(','));
+for (const n of CLIPS) if (!crew.r.clips[n]) fail('crew missing clip ' + n);
+if (!crew.grip || crew.grip.kind !== 'bones') fail('crew has named finger bones and should curl those');
+else {
+  const open = middleTip(crew.tgt);
+  applyGrip(crew.tgt, crew.grip, 1);
+  crew.tgt.updateMatrixWorld(true);
+  const shut = middleTip(crew.tgt);
+  const openD = open.tip.distanceTo(open.hand), shutD = shut.tip.distanceTo(shut.hand);
+  console.log('crew middle tip to wrist', { open: +openD.toFixed(3), shut: +shutD.toFixed(3) });
+  if (shutD > openD - 0.012) fail('crew fist does not bring the middle finger toward the wrist');
+}
+const crewNames = await namesOf('public/models/kit/characters/crew-m-1.glb');
+const crewVsOrange = nDiff(crewNames, orangeNames), crewVsBlue = nDiff(crewNames, blueNames);
+console.log('crew joint index diffs', { vsOrange: crewVsOrange, vsBlue: crewVsBlue });
+if (crewVsOrange !== 0 || crewVsBlue !== 16) fail('crew joint order should match orange and differ from blue');
+const crewMan = pickCharacter([{ spec: { file: 'crew-m-1.glb', gender: 'm' } }, { spec: { file: 'crew-f-1.glb', gender: 'f' } }], 0, 'm');
+const crewWoman = pickCharacter([{ spec: { file: 'crew-m-1.glb', gender: 'm' } }], 0, 'f');
+if (!crewMan || crewMan.spec.file !== 'crew-m-1.glb') fail('a crew man must load crew-m-1');
+if (crewWoman) fail('a crew woman must keep the painted body until crew-f-1 exists');
+const crewBox = new THREE.Box3().setFromObject(crew.tgt, true);
+const crewH = crewBox.max.y - crewBox.min.y;
+console.log('crew measured height', +crewH.toFixed(3), 'feet', +crewBox.min.y.toFixed(3));
+if (crewH < 1.76 || crewH > 1.84 || crewBox.min.y > 0.02) fail('crew world bounds are not the measured 1.8 m body with feet at 0');
+const crewHipDoc = await io.read('public/models/kit/characters/crew-m-1.glb');
+const crewJoints = crewHipDoc.getRoot().listSkins()[0].listJoints();
+const crewI = crewJoints.findIndex((j) => /hips/i.test(j.getName()));
+const crewM = crewHipDoc.getRoot().listSkins()[0].getInverseBindMatrices().getElement(crewI, []);
+const crewHip = Math.hypot(crewM[12], crewM[13], crewM[14]);
+console.log('crew hip bind', +crewHip.toFixed(4));
+if (crewHip < 0.5) fail('crew hip bind collapsed');
+
 if (!process.exitCode) console.log('grip check ok');

@@ -95,6 +95,15 @@
         "gender": "m",
         "credit": "Original Street Empire Unc, older man in a worn suit. Meshy humanoid, local 1024 texture prep."
       }
+    ],
+    "crew": [
+      {
+        "file": "characters/crew-m-1.glb",
+        "yaw": 0,
+        "height": 1.8,
+        "gender": "m",
+        "credit": "Original Street Empire crew, young man in a faded orange hoodie. Meshy humanoid, local 1024 texture prep."
+      }
     ]
   }
 }
