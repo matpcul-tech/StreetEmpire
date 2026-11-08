@@ -318,11 +318,12 @@ export function holdImportedHand(grip) {
   return { kind: 'unsolved', bones };
 }
 
-// These two meshes tear when the finger curl is applied. Everyone else keeps
-// the measured curl. The filename is the whole policy.
+// These meshes tear when the finger curl is applied. Everyone else keeps the
+// measured curl. The filename is the whole policy. reds-m-1 has no finger
+// bones, so it never reaches this list.
 export function gripForFile(file, measured) {
   const name = String(file || '');
-  if (name.endsWith('crew-m-2.glb') || name.endsWith('crew-f-1.glb')) return holdImportedHand(measured);
+  if (name.endsWith('crew-m-2.glb') || name.endsWith('crew-f-1.glb') || name.endsWith('reds-m-2.glb')) return holdImportedHand(measured);
   return measured;
 }
 

@@ -67,6 +67,13 @@
         "height": 1.82,
         "gender": "m",
         "credit": "Original Street Empire Red Kings, young lean man, plain white jersey number 12. Meshy humanoid, local 1024 texture prep."
+      },
+      {
+        "file": "characters/reds-m-2.glb",
+        "yaw": 0,
+        "height": 1.76,
+        "gender": "m",
+        "credit": "Original Street Empire Red Kings, older lean man. Meshy humanoid, local 1024 texture prep. Not a recolor of reds-m-1."
       }
     ],
     "blues": [

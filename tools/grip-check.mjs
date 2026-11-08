@@ -264,6 +264,16 @@ console.log('crew male picks', picked.join(','));
 if (both.size !== 2 || picked[0] === picked[1]) fail('crew men must alternate crew-m-1 and crew-m-2, not always the first file');
 const womanOnly = pickCharacter(menPool, 3, 'f');
 if (womanOnly) fail('a crew woman must keep the painted body until crew-f-1 exists');
+const redsPool = [
+  { spec: { file: 'characters/reds-m-1.glb', gender: 'm' } },
+  { spec: { file: 'characters/reds-m-2.glb', gender: 'm' } },
+];
+const redsMen = [0, 1, 2, 4].map((s) => pickCharacter(redsPool, s, 'm').spec.file);
+console.log('reds male picks', redsMen.join(','));
+if (new Set(redsMen).size !== 2 || redsMen[0] === redsMen[1]) fail('reds men must alternate reds-m-1 and reds-m-2');
+if (pickCharacter(redsPool, 3, 'f')) fail('a Red Kings woman must keep the painted body until reds-f-1 exists');
+if (gripForFile('characters/reds-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('reds-m-2 grip must stay unsolved');
+if (gripForFile('characters/reds-m-1.glb', null) !== null) fail('reds-m-1 must not be switched onto the finger-curl policy');
 restPose(crew2.tgt, (() => { let m = null; crew2.tgt.traverse((o) => { if (o.isSkinnedMesh && (!m || o.geometry.attributes.position.count > m.geometry.attributes.position.count)) m = o; }); return m; })());
 const c2Box = new THREE.Box3().setFromObject(crew2.tgt, true);
 const c2H = c2Box.max.y - c2Box.min.y;
