@@ -62,6 +62,11 @@
         "file": "characters/blues-m-1.glb",
         "yaw": 0,
         "height": 1.84
+      },
+      {
+        "file": "characters/blues-m-2.glb",
+        "yaw": 0,
+        "height": 1.78
       }
     ],
     "crew": [
