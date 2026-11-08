@@ -2,6 +2,7 @@
 // Served by the dev server: /tools/pose-board.html
 import * as THREE from 'three';
 import { loadPeople, makeCharacter, prepKit } from '../src/chars.js';
+import { applyGrip, gripAmount } from '../src/grip.js';
 import { loadKit, kitCharacter } from '../src/kit.js';
 
 const CLIPS = ['Idle_Loop', 'Idle_Talking_Loop', 'Walk_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Punch_Jab', 'Punch_Cross', 'Sword_Attack', 'Pistol_Idle_Loop', 'Pistol_Shoot', 'Death01', 'Hit_Chest', 'Hit_Head', 'Roll', 'Jump_Start', 'Jump_Loop', 'Driving_Loop', 'Sitting_Idle_Loop'];
@@ -17,6 +18,7 @@ const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.05, 4
 const PAINTED = {
   player: { model: 'ual', female: false, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.2, num: -1, beard: 1, skin: 0x7a4a30, pants: 0, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } },
   reds: { model: 'ual', female: false, top: 2, topC: 0xa82222, trim: 0xf0f0f0, pants: 0, legs: 0x1a1a1a, shoes: 0xe8e8e0, hair: 0, hairC: 0x111111, grit: 0.35, num: 12, beard: 1, skin: 0x8d5a3b, acc: { rag: 0xa82222 } },
+  blues: { model: 'ual', female: false, top: 1, topC: 0x2850a8, trim: 0xe8e8f0, pants: 0, legs: 0x3a4a66, shoes: 0x1a1a1a, hair: 0, hairC: 0x111111, grit: 0.35, num: -1, beard: 1, skin: 0x8d5a3b, acc: { cap: 0x1a1a1a, neck: 0x2850a8 } },
 };
 const slot = new URLSearchParams(location.search).get('slot') || 'player';
 
@@ -37,6 +39,7 @@ function pose(g, name, t, weapon) {
   const act = u.act[name];
   act.setLoop(THREE.LoopOnce, 1); act.clampWhenFinished = true; act.play();
   u.mixer.setTime(Math.min(t, act.getClip().duration * 0.98));
+  if (u.grip) applyGrip(g, u.grip, gripAmount(name, weapon));
   u.gun.visible = weapon === 'pistol'; u.bat.visible = weapon === 'bat'; u.shotgun.visible = false; u.knux.visible = false;
 }
 function frameBoth(name, t, weapon) { pose(old, name, t, weapon); pose(neu, name, t, weapon); label.textContent = name + '  ' + t.toFixed(2) + 's    left: painted ' + slot + '    right: kit ' + slot; }
@@ -56,7 +59,10 @@ view.both();
 let spin = null, last = performance.now();
 function render() {
   const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (spin) { old.userData.mixer.update(dt); neu.userData.mixer.update(dt); }
+  if (spin) {
+    old.userData.mixer.update(dt); neu.userData.mixer.update(dt);
+    if (neu.userData.grip) applyGrip(neu, neu.userData.grip, gripAmount(spin[0], spin[1]));
+  }
   renderer.render(scene, camera); requestAnimationFrame(render);
 }
 render();

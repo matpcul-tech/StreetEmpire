@@ -35,4 +35,5 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: pickup | no credit given (add a .txt next to the upload) |
 | character: player (player) | Original Street Empire player. Meshy humanoid, local 1024 texture prep, shoe logos painted off. |
 | character: reds (reds-m-1) | Original Street Empire Red Kings, young lean man, plain white jersey number 12. Meshy humanoid, local 1024 texture prep. |
+| character: blues (blues-m-1) | Original Street Empire Blue Hand, young heavy man. Meshy humanoid, local 1024 texture prep. |
 <!-- kit-credits:end -->

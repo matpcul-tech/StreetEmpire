@@ -3,14 +3,14 @@
   "rules": "1990s West Coast, worn and dusty, realistic proportions. Humanoid rig, arms down or A-pose, under 15000 triangles, one material. No animation purchase: the game retargets its own clips. No logos, no readable brand text, no real city or department names, no gang signs, no tattoos, no flags, no sport team marks. Do not mention a real person's likeness. Do not describe race or skin tone as an ethnicity. Do not use green, purple, yellow, or teal as a crew color. Jersey numbers are plain white digits with no team name. Jersey number for the first Red Kings man is 12.",
   "counts": {
     "rosterFiles": 24,
-    "installed": 2,
-    "remainingNames": 22,
+    "installed": 3,
+    "remainingNames": 21,
     "inProgress": 0,
-    "paidDistinctStillToCommission": 17,
+    "paidDistinctStillToCommission": 16,
     "noNewGeneration": 5,
     "distinctBuilds": 19,
     "earlierWrongRemaining": 26,
-    "whyNot26": "24 names. Installed now: player and reds-m-1. 22 names are still absent. The earlier 26 did not match the file list.",
+    "whyNot26": "24 names. Installed now: player, reds-m-1, and blues-m-1. 21 names are still absent. The earlier 26 did not match the file list.",
     "bySlot": {
       "player": {
         "files": 1,
@@ -59,9 +59,9 @@
       "blues": {
         "files": 3,
         "distinctBuilds": 3,
-        "installed": 0,
+        "installed": 1,
         "inProgress": 0,
-        "paidStillToCommission": 3,
+        "paidStillToCommission": 2,
         "alias": 0,
         "localTexture": 0,
         "women": 1,
@@ -236,10 +236,15 @@
       "inbox": "blues-m-1@h1.84.glb",
       "file": "characters/blues-m-1.glb",
       "height": 1.84,
-      "status": "needed",
-      "who": "Blue Hand, young heavy man.",
+      "status": "installed",
+      "who": "Blue Hand, young heavy man. Installed. Source bounds were 1.70 m tall with feet at 0; the game scales that measured height to 1.84 m. 66 joints and 40 named finger bones. The joint names match the orange player, but 16 joint indices differ, so clips are retargeted by name.",
       "prompt": "Young adult man, heavy build, broad shoulders, short hair. Royal blue hoodie, black baseball cap, blue cloth tied at the neck, blue-gray jeans, black boots. 1990s West Coast, dusty, realistic. Arms down. No logos, no tattoos, no team marks.",
-      "generation": "paid_distinct",
+      "generation": "installed",
+      "measuredHeightM": 1.7,
+      "fittedHeightM": 1.84,
+      "joints": 66,
+      "fingerBones": 40,
+      "jointIndexDiffFromPlayer": 16,
       "countsAsDistinctBuild": true,
       "reuse": "none",
       "upload": true
@@ -484,13 +489,13 @@
       "player": "1 installed man",
       "unc": "1 paid man, a role, not a 3-build crew",
       "crew": "3 paid distinct: two male builds and one woman",
-      "reds": "3 paid distinct: reds-m-1 (in progress, number 12), reds-m-2, reds-f-1",
-      "blues": "3 paid distinct: two heavy male builds and one woman",
+      "reds": "3 paid distinct: reds-m-1 (installed, number 12), reds-m-2, reds-f-1",
+      "blues": "3 paid distinct: blues-m-1 (installed), blues-m-2, blues-f-1",
       "golds": "3 paid distinct: two tall male builds and one woman",
       "locals": "4 paid distinct: two men and two women, because about half of Locals are women",
       "cop": "1 paid build. cop-m-2 is a texture of that build",
       "ped": "0 paid. Four aliases of the Locals files, including both women"
     }
   },
-  "animation": "Every file uses the game 18 clips through src/retarget.js. Do not buy animation clips. The orange player rig is not a donor body for other outfits."
+  "animation": "Every file uses the game 18 clips through src/retarget.js, matched by bone name. Blue Hand uses the same joint names as the orange player and a different joint order, so an index copied from the orange rig would skin the wrong finger. Do not buy animation clips. The orange player rig is not a donor body for other outfits."
 }

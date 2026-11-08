@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { loadKit, kitInfo, CAR_SLOTS, BUILDING_SLOTS, CHAR_SLOTS, cloneKitCar, placeKitBuilding } from './kit.js';
 import { loadPeople, makeCharacter, prepKit } from './chars.js';
+import { applyGrip, gripAmount } from './grip.js';
 
 const BASE = import.meta.env.BASE_URL;
 const $ = (id) => document.getElementById(id);
@@ -20,7 +21,7 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 1.2;
 const grid = new THREE.GridHelper(40, 40, 0x1c2c48, 0x12203a); scene.add(grid);
 const holder = new THREE.Group(); scene.add(holder);
-let current = null, wheels = [], mixer = null;
+let current = null, wheels = [], mixer = null, shown = null;
 // characters play the game's own clips, retargeted, so the preview is what the game shows
 const ANIMS = [['Idle', 'Idle_Loop'], ['Walk', 'Walk_Loop'], ['Run', 'Sprint_Loop'], ['Punch', 'Punch_Cross'], ['Bat', 'Sword_Attack'], ['Pistol', 'Pistol_Idle_Loop'], ['Drive', 'Driving_Loop'], ['Talk', 'Idle_Talking_Loop'], ['Hit', 'Hit_Head'], ['KO', 'Death01']];
 const peopleLoad = loadPeople(BASE, null).catch((e) => console.warn('people', e));
@@ -43,7 +44,7 @@ function guides(kind, len) {
 function stat(label, value) { return `<div class="stat"><b>${value}</b><span>${label}</span></div>`; }
 
 async function show(kind, slot, entry) {
-  holder.clear(); wheels = []; mixer = null; $('anims').classList.remove('show');
+  holder.clear(); wheels = []; mixer = null; shown = null; $('anims').classList.remove('show');
   if (kind === 'character') return showCharacter(slot, entry);
   document.querySelectorAll('.slot').forEach((b) => b.classList.toggle('on', b.dataset.key === kind + slot + (entry?.spec.file || '')));
   $('hint').style.display = 'none';
@@ -73,7 +74,7 @@ async function showCharacter(slot, entry) {
   await peopleLoad;
   const P = prepKit(entry), notes = [];
   if (!P) { $('stats').innerHTML = ''; $('notes').innerHTML = `<li class="bad">This model cannot play the game animations (see the browser console). The game keeps the painted body for ${slot}.</li>`; return; }
-  const g = makeCharacter({ kitT: entry }, false), u = g.userData; mixer = u.mixer;
+  const g = makeCharacter({ kitT: entry }, false), u = g.userData; mixer = u.mixer; shown = g;
   holder.add(g, guides('character', 1));
   const box = new THREE.Box3().setFromObject(g, true), size = box.getSize(new THREE.Vector3());
   camera.position.set(1.6, 1.4, 3.4); controls.target.set(0, 0.95, 0); controls.update();
@@ -81,7 +82,7 @@ async function showCharacter(slot, entry) {
   for (const [label, clip] of ANIMS) {
     if (!u.act[clip]) continue;
     const b = document.createElement('button'); b.textContent = label;
-    b.onclick = () => { bar.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); for (const a of Object.values(u.act)) a.stop(); u.bat.visible = clip === 'Sword_Attack'; u.gun.visible = clip.startsWith('Pistol'); const a = u.act[clip]; a.reset(); a.setLoop(THREE.LoopRepeat, Infinity); a.clampWhenFinished = false; a.play(); };
+    b.onclick = () => { bar.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b)); for (const a of Object.values(u.act)) a.stop(); u.boardClip = clip; u.boardWeapon = clip === 'Sword_Attack' ? 'bat' : clip.startsWith('Pistol') ? 'pistol' : null; u.bat.visible = u.boardWeapon === 'bat'; u.gun.visible = u.boardWeapon === 'pistol'; const a = u.act[clip]; a.reset(); a.setLoop(THREE.LoopRepeat, Infinity); a.clampWhenFinished = false; a.play(); };
     bar.append(b);
   }
   bar.querySelector('button')?.click();
@@ -120,5 +121,6 @@ renderer.setAnimationLoop((now) => {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; spin += dt * 4;
   for (const w of wheels) w.node.rotation.x = spin;
   if (mixer) mixer.update(dt);
+  if (shown && shown.userData.grip) applyGrip(shown.userData.root, shown.userData.grip, gripAmount(shown.userData.boardClip, shown.userData.boardWeapon));
   controls.update(); renderer.render(scene, camera);
 });

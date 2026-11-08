@@ -10,6 +10,7 @@ import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { kitCharacter } from './kit.js';
 import { retarget } from './retarget.js';
+import { measureGrip, applyGrip, gripAmount } from './grip.js';
 
 let tmpl = null, potatoPeople = false;
 const clips = {};
@@ -298,10 +299,12 @@ function clothMat(L, merged = false) {
   matCache.set(key, m); return m;
 }
 // night readability on any character material: tinted rim and warm fill, plus the no-post exposure and saturation fix
-function nightPatch(sh) {
+// fill: the warm self light (share of the albedo). Painted people need it all; textured kit models get a
+// little so they keep their own shading and sit in the scene instead of glowing
+function nightPatch(sh, fill = 1) {
   Object.assign(sh.uniforms, NIGHT);
   sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + sh.fragmentShader
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34)); // slightly stronger cool rim so navy uniforms still read at night')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34) * ' + fill.toFixed(2) + '); // slightly stronger cool rim so navy uniforms still read at night')
       .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
 }
 
@@ -466,8 +469,9 @@ const kitMats = new Map();
 function kitMat(m) {
   if (!m || kitMats.has(m)) return kitMats.get(m) || m;
   // keep the authored albedo, normal and packed maps. The paint shader is only for the shared Quaternius body.
+  // fill 0.35: textured kit models keep their shading instead of the full painted-body night glow
   const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45); k.color.set(0xffffff);
-  k.onBeforeCompile = (sh) => nightPatch(sh); k.customProgramCacheKey = () => 'kitchar';
+  k.onBeforeCompile = (sh) => nightPatch(sh, 0.35); k.customProgramCacheKey = () => 'kitchar';
   kitMats.set(m, k); return k;
 }
 export function prepKit(T) {
@@ -478,13 +482,16 @@ export function prepKit(T) {
     T.root.position.set(0, 0, 0); T.root.scale.setScalar(1);
     const r = retarget(src, Object.values(clips), T.root);
     if (r.missing.length) console.warn('kit character', T.spec.file, 'missing bones:', r.missing.join(', '));
-    if (!r.bones.get('middle_01_r')) console.warn('kit character', T.spec.file, 'has no finger bones; the hands stay in the bind pose');
+    if (!r.bones.get('middle_01_r')) console.warn('kit character', T.spec.file, 'has no named finger bones; the hand mesh curls for a grip');
     if (!r.clips.Idle_Loop) throw new Error('no idle clip');
     const wantH = T.spec.height || (T.spec.gender === 'f' ? 1.68 : 1.8);
     const box = new THREE.Box3().setFromObject(T.root, true), k = wantH / Math.max(1e-6, box.max.y - box.min.y);
     T.root.traverse((o) => { if (o.isMesh) o.material = Array.isArray(o.material) ? o.material.map(kitMat) : kitMat(o.material); });
     const hs = r.hand ? r.hand.bone.getWorldScale(new THREE.Vector3()).x : 1;
-    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: 1 / (hs * k) }, hips: r.bones.get('pelvis')?.name, head: r.bones.get('Head')?.name, neck: r.bones.get('neck_01')?.name, k, lo: box.min.y, missing: r.missing };
+    const handScale = 1 / (hs * k);
+    const frame = (h) => h && { bone: h.bone, quat: h.quat, scale: handScale };
+    const grip = measureGrip(T.root, { r: frame(r.hand), l: frame(r.handL) }, GRIP);
+    P = { clips: r.clips, hand: r.hand && { name: r.hand.bone.name, quat: r.hand.quat, scale: handScale }, hips: r.bones.get('pelvis')?.name, head: r.bones.get('Head')?.name, neck: r.bones.get('neck_01')?.name, grip, k, lo: box.min.y, missing: r.missing };
   } catch (e) { console.warn('kit character', T.spec.file, 'cannot use the game animations, keeping the painted body:', e.message); }
   kitPrep.set(T, P); return P;
 }
@@ -500,7 +507,8 @@ function makeKitCharacter(T, shadow) {
   alias(P.hand && P.hand.name, 'hand_r'); alias(P.head, 'Head'); alias(P.neck, 'neck_01'); alias(P.hips, 'pelvis');
   if (handBone) {
     // a frame on the new hand that matches the game rig's hand frame, in meters, so the grips line up
-    const grip = new THREE.Object3D(); grip.quaternion.copy(P.hand.quat); grip.scale.setScalar(P.hand.scale); handBone.add(grip);
+    const grip = new THREE.Object3D(); grip.name = 'weapon_grip'; grip.quaternion.copy(P.hand.quat); grip.scale.setScalar(P.hand.scale); handBone.add(grip);
+    const gripPoint = new THREE.Object3D(); gripPoint.name = 'grip_point'; gripPoint.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(gripPoint);
     for (const w of [bat, gun, shotgun, knux]) { w.visible = false; w.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(w); }
     knux.position.set(0, 0.075, 0.03);
   }
@@ -509,7 +517,7 @@ function makeKitCharacter(T, shadow) {
   for (const n in P.clips) { act[n] = mixer.clipAction(P.clips[n]); if (once.has(n)) { act[n].setLoop(THREE.LoopOnce, 1); act[n].clampWhenFinished = true; } }
   if (!act.Punch_Enter && act.Punch_Jab) act.Punch_Enter = act.Punch_Jab;
   act.Idle_Loop.play();
-  g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips: P.hips && model.getObjectByName(P.hips), punchN: 0, kit: true };
+  g.userData = { mixer, act, cur: 'Idle_Loop', root, bat, gun, shotgun, knux, hips: P.hips && model.getObjectByName(P.hips), punchN: 0, kit: true, grip: P.grip };
   return g;
 }
 
@@ -547,4 +555,5 @@ export function animate(g, e, dt, sitting) {
   if (want === 'Jog_Fwd_Loop' || want === 'Sprint_Loop' || want === 'Walk_Loop') u.act[want].timeScale = speed;
   u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol'; u.shotgun.visible = e.weapon === 'shotgun'; u.knux.visible = e.weapon === 'knuckles';
   u.mixer.update(dt);
+  if (u.grip) applyGrip(u.root, u.grip, gripAmount(u.cur, e.weapon));
 }

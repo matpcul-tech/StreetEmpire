@@ -196,12 +196,12 @@ export function retarget(srcRoot, clips, tgtRoot) {
   }
   restPose(srcRoot, sMesh); restPose(tgtRoot, tMesh, tPre);
 
-  // weapons are placed in the game rig's right hand frame; this rotation gives the same frame on the new hand
-  const sHand = sMap.get('hand_r'), tHand = tMap.get('hand_r');
-  let hand = null;
-  if (sHand && tHand) {
+  // weapons are placed in the game rig's hand frame; this rotation gives the same frame on the new hand
+  const handFrame = (side) => {
+    const sHand = sMap.get('hand_' + side), tHand = tMap.get('hand_' + side);
+    if (!sHand || !tHand) return null;
     const a = align.get(tHand) || new THREE.Quaternion();
-    hand = { bone: tHand, quat: a.clone().multiply(tRestQ.get(tHand)).invert().multiply(sRestQ.get(sHand)) };
-  }
-  return { clips: outClips, hand, bones: tMap, missing, hipK };
+    return { bone: tHand, quat: a.clone().multiply(tRestQ.get(tHand)).invert().multiply(sRestQ.get(sHand)) };
+  };
+  return { clips: outClips, hand: handFrame('r'), handL: handFrame('l'), bones: tMap, missing, hipK };
 }
