@@ -8,7 +8,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { kitCar, cloneKitCar } from './kit.js';
 
 // lowrider: Street Empire pack kitbash (tools/build-se-cars.mjs)
-const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police', lowrider: '../se-pack/cars/lowrider' };
+const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police', lowrider: '../se-pack/cars/lowrider', pickup: 'suv' }; // pickup falls back to the SUV body when no kit model loads
 const templates = {};
 // quality: low and potato skip reflective glass and use cheaper decals; no extra lights or shadows anywhere
 const Q = { low: false, potato: false };

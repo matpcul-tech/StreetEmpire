@@ -26,7 +26,7 @@ for (const q of (process.env.QUALS ?? ',low,potato').split(',')) for (const [nam
     await page.evaluate(({ t, phone, shot }) => {
       clearInterval(window.__hold);
       const s = window.__game.state, pl = s.ents.find((e) => e.kind === 'player');
-      const types = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'], pick = [];
+      const types = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'], pick = [];
       for (const ty of types) { const c = s.cars.find((c) => c.type === ty && !c.wrecked && !pick.includes(c)); if (c) pick.push(c); }
       const cars = shot === 'lowrider' ? pick.filter((c) => c.type === 'lowrider').slice(0, 1) : phone ? pick.slice(4, 7) : pick;
       // line the cars up along a real street: anchor on a traffic car, spread along its heading, camera off to the side

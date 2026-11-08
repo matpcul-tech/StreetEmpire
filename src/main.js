@@ -628,7 +628,7 @@ function guideTarget(s, p) {
 }
 
 const DRIVER_DROP = 0.55; // seat height minus the hips of the Driving_Loop pose
-function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' ? 0.8 : 0.55; }
+function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' || type === 'pickup' ? 0.8 : 0.55; }
 // a seated driver's head tops out about 1.64 m above his seat position (measured, caps included);
 // kit cars seat him from their own roof so his head stays inside, built-in cars keep the per-type seat
 const DRIVER_HEAD = 1.72;

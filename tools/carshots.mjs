@@ -13,7 +13,7 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
     await page.evaluate(({ t, phone }) => {
       clearInterval(window.__hold);
       const s = window.__game.state, pl = s.ents.find((e) => e.kind === 'player');
-      const types = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'], pick = [];
+      const types = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'], pick = [];
       for (const ty of types) { const c = s.cars.find((c) => c.type === ty && !c.wrecked && !pick.includes(c)); if (c) pick.push(c); }
       const n = phone ? 3 : pick.length, sp = 3.0;
       const cars = phone ? pick.slice(0, 3) : pick;
