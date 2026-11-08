@@ -6,6 +6,9 @@
 //     --keep: finished model, skip simplifying and merging (wheel rig, parts and pivots stay exactly as built)
 //     --tex 2048: keep textures up to 2048 px instead of 1024
 //   node tools/kit-import.mjs add building house ~/Downloads/bungalow.glb [--yaw 90] [--footprint 12]
+//   node tools/kit-import.mjs add character player ~/Downloads/meshy-rigged.glb [--yaw 180] [--height 1.85]
+//     characters must be rigged (Meshy Rigging, Mixamo and most humanoid rigs work); the game's own
+//     animations are retargeted onto the skeleton in game (src/retarget.js), so animations in the file are dropped
 //   node tools/kit-import.mjs inbox          process everything in kit-inbox/ (used by the GitHub workflow)
 //   node tools/kit-import.mjs list
 //   node tools/kit-import.mjs remove car sedan
@@ -25,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { canonical } from '../src/retarget.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const KIT = path.join(ROOT, 'public/models/kit');
@@ -34,8 +38,13 @@ export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lo
 // real-world lengths in meters, so kit cars match the people (a 4.4 m lowrider put the driver's head through the roof)
 export const CAR_LENGTH = {'sedan':  4.9, 'muscle':  4.8, 'suv':  4.8, 'van':  5.1, 'taxi':  4.9, 'police':  5.2, 'lowrider':  5.4, 'pickup':  5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
-// phone budgets: triangles per model and texture size
-const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 } };
+export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
+const SLOTS = { car: CAR_SLOTS, building: BUILDING_SLOTS, character: CHAR_SLOTS };
+const DIRS = { car: 'cars', building: 'buildings', character: 'characters' };
+// phone budgets: triangles per model and texture size (a character is on screen many times at once)
+const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 }, character: { tris: 15000, tex: 1024 } };
+// bones the game needs to play its animations on a character, by the game rig's names
+const NEED_BONES = ['pelvis', 'spine', 'neck_01', 'Head', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 
 await MeshoptEncoder.ready; await MeshoptSimplifier.ready;
@@ -55,6 +64,7 @@ function writeCredits(m) {
   const rows = [];
   for (const [slot, e] of Object.entries(m.cars || {})) rows.push(`| car: ${slot} | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
   for (const [slot, list] of Object.entries(m.buildings || {})) for (const e of [].concat(list)) rows.push(`| building: ${slot} (${path.basename(e.file, '.glb')}) | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
+  for (const [slot, list] of Object.entries(m.characters || {})) for (const e of [].concat(list)) rows.push(`| character: ${slot} (${path.basename(e.file, '.glb')}) | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
   const block = `${START}\n## Build kit models\n\nInstalled through tools/kit-import.mjs (generated from public/models/kit/kit.json).\n\n${rows.length ? '| Slot | Credit and license |\n|---|---|\n' + rows.join('\n') : 'None installed.'}\n${END}`;
   let text = fs.readFileSync(f, 'utf8');
   text = text.includes(START) ? text.replace(new RegExp(START + '[\\s\\S]*?' + END), block) : text.trimEnd() + '\n\n' + block + '\n';
@@ -149,12 +159,26 @@ async function mergeForPhones(doc, kind, notes) {
   await doc.transform(join({ keepNamed: true }), prune());
 }
 
+// A character needs a skeleton with arms, legs, spine and head the retargeter can name.
+function checkCharacter(doc, notes) {
+  const skins = doc.getRoot().listSkins();
+  if (!skins.length) throw new Error('no skeleton in this model. In Meshy run Rigging (Humanoid) on the model, then download the rigged GLB');
+  const names = new Set(skins.flatMap((s) => s.listJoints().map((j) => canonical(j.getName()))));
+  const missing = NEED_BONES.filter((n) => !names.has(n));
+  if (missing.length) throw new Error(`the skeleton is missing bones the game animates: ${missing.join(', ')}. Use a humanoid rig (Meshy Humanoid or Mixamo)`);
+  if (![...names].some((n) => /^index_0/.test(n || ''))) notes.push('no finger bones: hands stay open in punches');
+  const anims = doc.getRoot().listAnimations();
+  if (anims.length) { for (const a of anims) a.dispose(); notes.push(`dropped ${anims.length} animation(s) in the file; the game plays its own clips on this skeleton`); }
+}
+
 export async function importModel(kind, slot, file, opts = {}) {
-  const slots = kind === 'car' ? CAR_SLOTS : BUILDING_SLOTS;
+  const slots = SLOTS[kind];
+  if (!slots) throw new Error(`unknown kind "${kind}". Use car, building or character`);
   if (!slots.includes(slot)) throw new Error(`unknown ${kind} slot "${slot}". Use one of: ${slots.join(', ')}`);
   const src = resolveSource(file);
   const doc = await io.read(src);
   const B = BUDGET[kind], before = triCount(doc), notes = [];
+  if (kind === 'character') checkCharacter(doc, notes);
   for (const e of doc.getRoot().listExtensionsUsed()) if (e.extensionName === 'KHR_draco_mesh_compression') e.dispose();
   await doc.transform(dedup(), prune(), resample(), weld(), unpartition());
   // cars: guess which way the model faces from its lamps (tail or brake lights at the back)
@@ -189,7 +213,7 @@ export async function importModel(kind, slot, file, opts = {}) {
     notes.push(`simplified ${before} to ${triCount(doc)} triangles (budget ${B.tris}${textured ? ', texture seams kept' : ''})`);
     if (textured && triCount(doc) > B.tris * 1.5) notes.push(`still ${triCount(doc)} triangles after keeping the texture seams; this model is heavy for phones, a lower poly download will look and run better`);
   }
-  if (!opts.keep) await mergeForPhones(doc, kind, notes);
+  if (!opts.keep && kind !== 'character') await mergeForPhones(doc, kind, notes); // characters keep their parts and skeleton as rigged
   else if (kind === 'car') { const rigs = findWheelRigs(doc); for (const n of rigs) n.setExtras({ ...n.getExtras(), kitWheel: true }); if (rigs.length) notes.push(`kept the model's own wheel rig (${rigs.length} wheels, pivots unchanged)`); }
   await doc.transform(
     // 1024 px by default: a 2048 texture takes four times the phone's video memory per car. @tex2048 keeps fine detail on hero cars.
@@ -203,7 +227,7 @@ export async function importModel(kind, slot, file, opts = {}) {
   if (kind === 'car' && opts.paint !== false && !mats.some((n) => /paint|body|carpaint|exterior|shell/i.test(n))) notes.push('no paint material found (name it paint or body to get per-car colors); the model keeps its own color');
 
   const variant = opts.name || slot;
-  const rel = `${kind === 'car' ? 'cars' : 'buildings'}/${variant}.glb`;
+  const rel = `${DIRS[kind]}/${variant}.glb`;
   fs.mkdirSync(path.join(KIT, path.dirname(rel)), { recursive: true });
   await io.write(path.join(KIT, rel), doc);
   const bytes = fs.statSync(path.join(KIT, rel)).size;
@@ -213,6 +237,10 @@ export async function importModel(kind, slot, file, opts = {}) {
   const credit = opts.credit || null;
   if (kind === 'car') {
     m.cars[slot] = { file: rel, yaw: opts.yaw || 0, length: opts.length || CAR_LENGTH[slot] || 4.8, paint: opts.paint !== false, ...(credit && { credit }) };
+  } else if (kind === 'character') {
+    m.characters ||= {};
+    const list = (m.characters[slot] = [].concat(m.characters[slot] || []).filter((e) => e.file !== rel));
+    list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(credit && { credit }) });
   } else {
     const list = (m.buildings[slot] = [].concat(m.buildings[slot] || []).filter((e) => e.file !== rel));
     list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
@@ -225,10 +253,11 @@ export function removeModel(kind, slot, variant) {
   const m = readManifest();
   const drop = (rel) => { const f = path.join(KIT, rel); if (fs.existsSync(f)) fs.rmSync(f); };
   if (kind === 'car' && m.cars?.[slot]) { drop(m.cars[slot].file); delete m.cars[slot]; }
-  if (kind === 'building' && m.buildings?.[slot]) {
+  for (const [k, group] of [['building', 'buildings'], ['character', 'characters']]) {
+    if (kind !== k || !m[group]?.[slot]) continue;
     const keep = [];
-    for (const e of [].concat(m.buildings[slot])) { if (!variant || path.basename(e.file, '.glb') === variant) drop(e.file); else keep.push(e); }
-    if (keep.length) m.buildings[slot] = keep; else delete m.buildings[slot];
+    for (const e of [].concat(m[group][slot])) { if (!variant || path.basename(e.file, '.glb') === variant) drop(e.file); else keep.push(e); }
+    if (keep.length) m[group][slot] = keep; else delete m[group][slot];
   }
   writeManifest(m);
 }
@@ -243,6 +272,7 @@ function parseInboxName(base) {
     if ((r = /^yaw(-?\d+(\.\d+)?)$/i.exec(t))) opts.yaw = +r[1];
     else if ((r = /^len(\d+(\.\d+)?)$/i.exec(t))) opts.length = +r[1];
     else if ((r = /^fp(\d+(\.\d+)?)$/i.exec(t))) opts.footprint = +r[1];
+    else if ((r = /^h(\d+(\.\d+)?)$/i.exec(t))) opts.height = +r[1];
     else if (/^nopaint$/i.test(t)) opts.paint = false;
     else if (/^keep$/i.test(t)) opts.keep = true;
     else if ((r = /^tex(1024|2048)$/i.exec(t))) opts.tex = +r[1];
@@ -252,7 +282,7 @@ function parseInboxName(base) {
 
 async function processInbox() {
   const results = [];
-  for (const [dir, kind, slots] of [['cars', 'car', CAR_SLOTS], ['buildings', 'building', BUILDING_SLOTS]]) {
+  for (const [dir, kind, slots] of [['cars', 'car', CAR_SLOTS], ['buildings', 'building', BUILDING_SLOTS], ['characters', 'character', CHAR_SLOTS]]) {
     const d = path.join(INBOX, dir); if (!fs.existsSync(d)) continue;
     for (const f of fs.readdirSync(d)) {
       if (!/\.(glb|gltf|zip)$/i.test(f)) continue;
@@ -275,7 +305,7 @@ function report(results) {
   const lines = ['## Build kit import', ''];
   for (const r of results) {
     if (!r.ok) { lines.push(`- FAILED ${r.src}: ${r.error}`); continue; }
-    lines.push(`- ${r.src} to ${r.kind} slot **${r.slot}** (${r.file}): ${r.tris.toLocaleString()} triangles, ${(r.bytes / 1e6).toFixed(2)} MB, ${r.wheels} wheel parts, ${r.materials} materials`);
+    lines.push(`- ${r.src} to ${r.kind} slot **${r.slot}** (${r.file}): ${r.tris.toLocaleString()} triangles, ${(r.bytes / 1e6).toFixed(2)} MB, ${r.kind === 'car' ? `${r.wheels} wheel parts, ` : ''}${r.materials} materials`);
     for (const n of r.notes) lines.push(`  - ${n}`);
   }
   if (!results.length) lines.push('- nothing to import');
@@ -296,7 +326,7 @@ for (let i = 0; i < rest.length; i++) {
 }
 if (cmd === 'add') {
   const [kind, slot, file] = pos;
-  if (!kind || !slot || !file) { console.error('usage: kit-import.mjs add <car|building> <slot> <file>'); process.exit(1); }
+  if (!kind || !slot || !file) { console.error('usage: kit-import.mjs add <car|building|character> <slot> <file>'); process.exit(1); }
   report([{ ok: true, src: path.basename(file), ...(await importModel(kind, slot, file, flags)) }]);
 } else if (cmd === 'inbox') {
   const r = report(await processInbox());
