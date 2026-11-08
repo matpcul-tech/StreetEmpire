@@ -24,10 +24,11 @@ export function districtOf(b) { const d = b.gx + b.gz; return d <= 2 ? 0 : d <= 
 
 export const CREWS = {
   neutral: { name: 'Locals', color: 0x9a9a9a, css: '#aaa', model: 'Casual_Female', shirt: 0x6b6458, pants: 0x3a3a40 },
-  player: { name: 'You', color: 0x33cc66, css: '#3c6', model: 'Casual_Male', shirt: 0x2f8f4a, pants: 0x2a3550 },
+  // crew colors stay clear of the San Andreas gang colors (green, purple, yellow, teal)
+  player: { name: 'You', color: 0xff8a1a, css: '#ff8a1a', model: 'Casual_Male', shirt: 0xd9741c, pants: 0x2a3550 },
   reds: { name: 'Red Kings', color: 0xdd3333, css: '#e33', model: 'Casual2_Male', shirt: 0xa82222, pants: 0x1a1a1a },
   blues: { name: 'Blue Hand', color: 0x3377ee, css: '#48f', model: 'Casual3_Male', shirt: 0x2850a8, pants: 0x3a4a66 },
-  golds: { name: 'Gold Line', color: 0xe0b020, css: '#eb2', model: 'Casual2_Male', shirt: 0xc89a18, pants: 0x4a3a28 },
+  golds: { name: 'Gold Line', color: 0xb8925a, css: '#b8925a', model: 'Casual2_Male', shirt: 0x9a7438, pants: 0x3a3028 },
   police: { name: 'Police', color: 0x2244aa, css: '#24a', model: 'BlueSoldier_Male', shirt: 0x1a2a55, pants: 0x14182a },
   civ: { name: 'Citizens', color: 0xcccccc, css: '#ccc', model: 'Casual_Female', shirt: 0x777777, pants: 0x333333 },
 };

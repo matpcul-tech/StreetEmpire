@@ -72,7 +72,7 @@ function look(o) { return { model: 'ual', female: false, top: 0, trim: 0xffffff,
 export function lookFor(e, CREWS) {
   const v = e.look ?? (e.id * 7);
   const skin = SKINS[v % SKINS.length], hairC = HAIR[(v >> 1) % HAIR.length];
-  if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0x2f8f4a, trim: 0x1e6a34, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1e6a34, back: true, neck: 0x2f8f4a } });
+  if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } });
   if (e.kind === 'giver') return look({ skin: 0x5a3825, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hairC: 0x8a8a8a, hair: 0, beard: 2, grit: 0.08, acc: { hat: 0x1a1a1e } });
   if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x2c4a7a, trim: 0xe0c050, pants: 1, legs: 0x1a2438, shoes: 0x101018, hairC, grit: 0.08, acc: { police: 0xffffff } }); // white so peaked cap vertex colors (navy + gold badge) show
   if (e.kind === 'ped') {
@@ -86,7 +86,7 @@ export function lookFor(e, CREWS) {
   const base = { skin, female, topC: c.shirt, legs: c.pants, hair: female ? 1 : (v >> 3) % 4 === 0 ? 2 : 0, hairC, beard: female ? 0 : (v >> 2) % 2, grit: 0.35 };
   if (e.crew === 'reds') return look({ ...base, top: v % 2 ? 2 : 5, trim: 0xf0f0f0, num: v % 100, legs: 0x1a1a1a, shoes: 0xe8e8e0, acc: female ? {} : { rag: c.shirt } });
   if (e.crew === 'blues') return look({ ...base, top: v % 2 ? 1 : 2, trim: 0xe8e8f0, num: v % 100, legs: 0x3a4a66, shoes: 0x1a1a1a, acc: { neck: c.shirt, ...(female ? {} : { cap: 0x1a1a1a }) } });
-  if (e.crew === 'golds') return look({ ...base, top: v % 2 ? 2 : 6, trim: 0x1a1a1a, num: v % 100, legs: 0x4a3a28, shoes: 0xc89a18, acc: female ? {} : { cap: c.shirt } });
+  if (e.crew === 'golds') return look({ ...base, top: v % 2 ? 2 : 6, trim: 0x1a1a1a, num: v % 100, legs: 0x3a3028, shoes: 0x9a7438, acc: female ? {} : { cap: c.shirt } });
   return look({ ...base, top: [0, 1, 6][v % 3], legs: PANTS[v % PANTS.length], grit: 0.22, acc: !female && v % 3 === 0 ? { cap: 0x3a3a3a } : {} });
 }
 
