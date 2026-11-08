@@ -35,7 +35,7 @@ export const CREWS = {
 export const CAR_TYPES = {
   sedan: { max: 28, acc: 16, hp: 100 }, muscle: { max: 36, acc: 21, hp: 100 }, suv: { max: 26, acc: 15, hp: 140 },
   van: { max: 22, acc: 12, hp: 160 }, taxi: { max: 28, acc: 16, hp: 100 }, police: { max: 34, acc: 20, hp: 150 },
-  lowrider: { max: 26, acc: 15, hp: 110 },
+  lowrider: { max: 26, acc: 15, hp: 110 }, pickup: { max: 27, acc: 15, hp: 135 },
 };
 // kb: knockback speed on hit. Ranged weapons spend ammo (pistol) or shells (shotgun).
 // The five weapons stay as they are. Timing, arc and stun are what separate them:
@@ -81,7 +81,7 @@ export function createState(seed = 1, cfg = {}) {
   s.ents.push(newEnt(s, { kind: 'player', crew: 'player', x: c.x + BLOCK / 2 + 3, z: c.z, hp: 100, weapon: 'fists', ammo: 0, hasBat: false, hasKnux: false, shells: 0, block: false, dodgeT: 0, dodgeCd: 0, heat: 0, calmT: 0, busted: 0 }));
   s.ents.push(newEnt(s, { kind: 'giver', crew: 'player', name: 'Unc', x: c.x + 6, z: c.z + 6, ry: Math.PI, hp: 999 }));
   // parked cars along the curbs, one or two per block
-  const types = ['sedan', 'muscle', 'suv', 'lowrider', 'van', 'taxi', 'sedan', 'lowrider'];
+  const types = ['sedan', 'muscle', 'suv', 'lowrider', 'van', 'taxi', 'sedan', 'pickup', 'lowrider'];
   s.blocks.forEach((b, i) => {
     const bc = blockCenter(b);
     s.cars.push(makeCar(s, bc.x + PITCH / 2 - 5.6, bc.z - 10 + (i % 3) * 6, 0, types[i % types.length], false));
@@ -107,7 +107,7 @@ function spawnTraffic(s, anywhere) {
     const along = lineCoord(j) + PITCH / 2;
     const x = d % 2 === 0 ? lineCoord(i) : along, z = d % 2 === 0 ? along : lineCoord(i);
     if (p && !anywhere) { const dd = Math.hypot(x - p.x, z - p.z); if (dd < 70 || dd > 160) continue; }
-    const ty = ['sedan', 'sedan', 'suv', 'van', 'taxi', 'muscle', 'lowrider'][Math.floor(R(s) * 7)];
+    const ty = ['sedan', 'sedan', 'suv', 'van', 'taxi', 'muscle', 'lowrider', 'pickup'][Math.floor(R(s) * 8)];
     const car = makeCar(s, x, z, Math.atan2(DIRS[d][0], DIRS[d][1]), ty, true); laneSnap(car); s.cars.push(car);
     return car;
   }

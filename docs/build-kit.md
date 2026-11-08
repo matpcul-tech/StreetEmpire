@@ -12,7 +12,7 @@ The build kit swaps the built-in cars and buildings for downloaded models, slot 
 
 | Kind | Slots | In game |
 | --- | --- | --- |
-| car | sedan, muscle, suv, van, taxi, police, lowrider | scaled to 4.4 m long (set `len`), sits on the road, wheels spin and steer, paint changes per car, police get the light bar, headlight beams and brake glow are added |
+| car | sedan, muscle, suv, van, taxi, police, lowrider, pickup | scaled to 4.4 m long (set `len`), sits on the road, wheels spin and steer, paint changes per car, police get the light bar, headlight beams and brake glow are added |
 | building | house, store, apt, tower, shed | fitted into the 13 m corner lot, turned to face a street, the hustle sign is added; a slot can hold variants (`house`, `house-2`, `house-3`) and the city mixes them |
 
 Which buildings each district uses: Eastside is store, house and apt. Downtown is tower and apt. Harbor is shed.

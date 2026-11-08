@@ -9,14 +9,14 @@
 //   "cars": { "sedan": { "file": "cars/sedan.glb", "yaw": 0, "length": 4.4, "paint": true } },
 //   "buildings": { "house": [ { "file": "buildings/house.glb", "yaw": 0 } ] }
 // }
-// Car slots: sedan, muscle, suv, van, taxi, police, lowrider.
+// Car slots: sedan, muscle, suv, van, taxi, police, lowrider, pickup.
 // Building slots: house, store, apt, tower, shed (a slot can hold variants).
 // Models face +z (the glTF convention); yaw (degrees) turns one that does not.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'];
+export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'];
 // real-world lengths in meters per slot, used when kit.json gives none
 export const CAR_LENGTH = {'sedan': 4.9, 'muscle': 4.8, 'suv': 4.8, 'van': 5.1, 'taxi': 4.9, 'police': 5.2, 'lowrider': 5.4, 'pickup': 5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];

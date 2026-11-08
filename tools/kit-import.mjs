@@ -30,7 +30,7 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const KIT = path.join(ROOT, 'public/models/kit');
 const MANIFEST = path.join(KIT, 'kit.json');
 const INBOX = path.join(ROOT, 'kit-inbox');
-export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider'];
+export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'];
 // real-world lengths in meters, so kit cars match the people (a 4.4 m lowrider put the driver's head through the roof)
 export const CAR_LENGTH = {'sedan':  4.9, 'muscle':  4.8, 'suv':  4.8, 'van':  5.1, 'taxi':  4.9, 'police':  5.2, 'lowrider':  5.4, 'pickup':  5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
