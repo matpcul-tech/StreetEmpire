@@ -298,10 +298,12 @@ function clothMat(L, merged = false) {
   matCache.set(key, m); return m;
 }
 // night readability on any character material: tinted rim and warm fill, plus the no-post exposure and saturation fix
-function nightPatch(sh) {
+// fill: the warm self light (share of the albedo). Painted people need it all; textured kit models get a
+// little so they keep their own shading and sit in the scene instead of glowing
+function nightPatch(sh, fill = 1) {
   Object.assign(sh.uniforms, NIGHT);
   sh.fragmentShader = 'uniform float uRim;\nuniform float uRimK;\nuniform float uExpC;\nuniform float uSat;\n' + sh.fragmentShader
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34)); // slightly stronger cool rim so navy uniforms still read at night')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\nfloat fr = pow(1.0 - abs(dot(normal, normalize(vViewPosition))), 2.2);\nvec3 alb = diffuseColor.rgb; float am = max(max(alb.r, alb.g), max(alb.b, 0.04));\nvec3 rimC = mix(vec3(0.4, 0.5, 0.9), alb / am * 0.75, 0.55); // rim tinted by the character own color, not flat blue\ntotalEmissiveRadiance += uRim * uRimK * (rimC * fr * 0.28 + alb * vec3(0.42, 0.38, 0.34) * ' + fill.toFixed(2) + '); // slightly stronger cool rim so navy uniforms still read at night')
       .replace('#include <tonemapping_fragment>', '// no post pass: undo the scene night exposure bump on characters and restore saturation lost to tone mapping\ngl_FragColor.rgb *= uExpC;\n{ float cl = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722)); gl_FragColor.rgb = max(mix(vec3(cl), gl_FragColor.rgb, 1.0 + uSat), 0.0); }\n#include <tonemapping_fragment>');
 }
 
@@ -466,7 +468,7 @@ const kitMats = new Map();
 function kitMat(m) {
   if (!m || kitMats.has(m)) return kitMats.get(m) || m;
   const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45);
-  k.onBeforeCompile = (sh) => nightPatch(sh); k.customProgramCacheKey = () => 'kitchar';
+  k.onBeforeCompile = (sh) => nightPatch(sh, 0.35); k.customProgramCacheKey = () => 'kitchar';
   kitMats.set(m, k); return k;
 }
 export function prepKit(T) {
