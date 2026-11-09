@@ -992,7 +992,7 @@ function missionStep(s, p, dt) {
 }
 function passMission(s) {
   const m = s.mission; s.crews.player.cash += m.reward; s.crews.player.rep += m.rep;
-  log(s, `MISSION PASSED: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep });
+  log(s, `Job done: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep });
   s.mission = null; s.missionIdx++;
   if (m.gift === 'follower') grantFollower(s);
 }
