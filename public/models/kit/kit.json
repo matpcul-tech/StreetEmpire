@@ -150,6 +150,12 @@
         "yaw": 0,
         "height": 1.78,
         "gender": "m"
+      },
+      {
+        "file": "characters/locals-f-1.glb",
+        "yaw": 0,
+        "height": 1.66,
+        "gender": "f"
       }
     ]
   }

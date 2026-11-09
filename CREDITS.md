@@ -48,4 +48,5 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: unc (unc) | no credit given (add a .txt next to the upload) |
 | character: locals (locals-m-2) | no credit given (add a .txt next to the upload) |
 | character: locals (locals-m-1) | no credit given (add a .txt next to the upload) |
+| character: locals (locals-f-1) | no credit given (add a .txt next to the upload) |
 <!-- kit-credits:end -->
