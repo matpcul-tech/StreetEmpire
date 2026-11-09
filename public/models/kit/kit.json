@@ -69,6 +69,12 @@
         "yaw": 0,
         "height": 1.78,
         "gender": "m"
+      },
+      {
+        "file": "characters/blues-f-1.glb",
+        "yaw": 0,
+        "height": 1.7,
+        "gender": "f"
       }
     ],
     "crew": [
@@ -155,6 +161,12 @@
         "file": "characters/locals-f-1.glb",
         "yaw": 0,
         "height": 1.66,
+        "gender": "f"
+      },
+      {
+        "file": "characters/locals-f-2.glb",
+        "yaw": 0,
+        "height": 1.7,
         "gender": "f"
       }
     ],
