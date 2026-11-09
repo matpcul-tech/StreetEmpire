@@ -33,6 +33,16 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: sedan | no credit given (add a .txt next to the upload) |
 | car: taxi | no credit given (add a .txt next to the upload) |
 | car: pickup | no credit given (add a .txt next to the upload) |
+| building: apt (apt-01-stucco) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: apt (apt-02-brick) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: house (house-01-bungalow) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: house (house-02-two-story) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: house (house-03-duplex) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: shed (shed-01-corrugated) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: shed (shed-02-brick-industrial) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: store (store-liquor-blank) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: tower (tower-01-glass-office) | Original Street Empire town building made for this project. Not a third-party download. |
+| building: tower (tower-02-brick-highrise) | Original Street Empire town building made for this project. Not a third-party download. |
 | character: player (player) | no credit given (add a .txt next to the upload) |
 | character: blues (blues-m-1) | no credit given (add a .txt next to the upload) |
 | character: blues (blues-m-2) | no credit given (add a .txt next to the upload) |
