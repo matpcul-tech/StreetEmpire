@@ -157,6 +157,14 @@
         "height": 1.66,
         "gender": "f"
       }
+    ],
+    "cop": [
+      {
+        "file": "characters/cop-m-1.glb",
+        "yaw": 0,
+        "height": 1.82,
+        "gender": "m"
+      }
     ]
   }
 }
