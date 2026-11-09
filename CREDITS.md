@@ -56,5 +56,5 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: ped (locals-f-1) | Alias of the Locals younger woman. No separate pedestrian mesh. |
 | character: ped (locals-f-2) | Alias of the Locals older woman. No separate pedestrian mesh. |
 | character: cop (cop-m-1) | Original Street Empire police officer. Meshy humanoid, local 1024 texture prep. |
-| character: cop (cop-m-2) | Local texture of cop-m-1. Same mesh, more shirt wear. Not a second build. |
+| character: cop (cop-m-2) | Local texture of cop-m-1. Same mesh, gray side hair, more shirt wear. Not a second build. |
 <!-- kit-credits:end -->
