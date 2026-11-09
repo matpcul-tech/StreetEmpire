@@ -33,4 +33,18 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: sedan | no credit given (add a .txt next to the upload) |
 | car: taxi | no credit given (add a .txt next to the upload) |
 | car: pickup | no credit given (add a .txt next to the upload) |
+| character: player (player) | no credit given (add a .txt next to the upload) |
+| character: blues (blues-m-1) | no credit given (add a .txt next to the upload) |
+| character: blues (blues-m-2) | no credit given (add a .txt next to the upload) |
+| character: crew (crew-f-1) | no credit given (add a .txt next to the upload) |
+| character: crew (crew-m-1) | no credit given (add a .txt next to the upload) |
+| character: crew (crew-m-2) | no credit given (add a .txt next to the upload) |
+| character: golds (golds-m-1) | no credit given (add a .txt next to the upload) |
+| character: golds (golds-m-2) | no credit given (add a .txt next to the upload) |
+| character: golds (golds-f-1) | no credit given (add a .txt next to the upload) |
+| character: reds (reds-m-1) | no credit given (add a .txt next to the upload) |
+| character: reds (reds-f-1) | no credit given (add a .txt next to the upload) |
+| character: reds (reds-m-2) | no credit given (add a .txt next to the upload) |
+| character: unc (unc) | no credit given (add a .txt next to the upload) |
+| character: locals (locals-m-2) | no credit given (add a .txt next to the upload) |
 <!-- kit-credits:end -->
