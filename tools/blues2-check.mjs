@@ -147,6 +147,14 @@ if (gripForFile('characters/locals-m-1.glb', { kind: 'bones', bones: [{ name: 'a
 if (gripForFile('characters/locals-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-m-2 curl must not be kept');
 if (gripForFile('characters/locals-f-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-f-1 curl must not be kept');
 if (gripForFile('characters/locals-f-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-f-2 curl must not be kept');
+if (gripForFile('characters/cop-m-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('cop-m-1 curl must not be kept');
+if (gripForFile('characters/cop-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('cop-m-2 curl must not be kept');
+const copPool = [
+  { spec: { file: 'characters/cop-m-1.glb', gender: 'm' } },
+  { spec: { file: 'characters/cop-m-2.glb', gender: 'm' } },
+];
+if (pickCharacter(copPool, 0, 'm').spec.file !== 'characters/cop-m-1.glb') fail('cop look 0 must be cop-m-1');
+if (pickCharacter(copPool, 1, 'm').spec.file !== 'characters/cop-m-2.glb') fail('cop look 1 must be cop-m-2');
 const loc2 = await load('public/models/kit/characters/locals-m-2.glb');
 const locRoot = new THREE.Group(); locRoot.add(loc2.scene);
 let locMesh = null;

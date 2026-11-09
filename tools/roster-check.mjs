@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 22],
-  ['remainingNames', n((f) => f.status !== 'installed'), 2],
+  ['installed', n((f) => f.status === 'installed'), 24],
+  ['remainingNames', n((f) => f.status !== 'installed'), 0],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 1],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 0],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -81,7 +81,15 @@ if (localsF2.measuredHeightM !== 1.7 || localsF2.fittedHeightM !== 1.7) fail.pus
 const pedF2 = files.find((f) => f.file === 'characters/ped-f-2.glb');
 if (!pedF2 || pedF2.status !== 'installed' || pedF2.generation !== 'alias' || pedF2.reuseOf !== 'characters/locals-f-2.glb' || pedF2.countsAsDistinctBuild) fail.push('ped-f-2 must alias locals-f-2');
 const copLeft = files.filter((f) => f.status !== 'installed').map((f) => f.file);
-if (copLeft.join(',') !== 'characters/cop-m-1.glb,characters/cop-m-2.glb') fail.push('only the two cop names should remain: ' + copLeft.join(','));
+if (copLeft.length) fail.push('names still absent: ' + copLeft.join(','));
+const cop1 = files.find((f) => f.file === 'characters/cop-m-1.glb');
+if (!cop1 || cop1.status !== 'installed' || cop1.gender !== 'm' || cop1.countsAsDistinctBuild !== true) fail.push('cop-m-1 must be the installed police build');
+if (cop1.joints !== 66 || cop1.fingerBones !== 40 || cop1.helperBones !== 0 || cop1.jointIndexDiffFromPlayer !== 0) fail.push('cop-m-1 rig record');
+if (cop1.jointIndexDiffFromBlueM1 !== 16 || cop1.jointIndexDiffFromRedM2 !== 12) fail.push('cop-m-1 index record');
+if (cop1.measuredHeightM !== 1.82 || cop1.fittedHeightM !== 1.82) fail.push('cop-m-1 height record');
+const cop2 = files.find((f) => f.file === 'characters/cop-m-2.glb');
+if (!cop2 || cop2.status !== 'installed' || cop2.generation !== 'local_texture' || cop2.reuseOf !== 'characters/cop-m-1.glb' || cop2.countsAsDistinctBuild) fail.push('cop-m-2 must be a texture of cop-m-1');
+if (cop2.measuredHeightM !== 1.82 || cop2.fittedHeightM !== 1.76) fail.push('cop-m-2 height record');
 const unc = files.find((f) => f.file === 'characters/unc.glb');
 if (!unc || unc.status !== 'installed' || unc.gender !== 'm') fail.push('unc must be installed as a man');
 if (unc.joints !== 66 || unc.fingerBones !== 40 || unc.jointIndexDiffFromPlayer !== 0 || unc.jointIndexDiffFromBlue !== 16) fail.push('unc rig record');
