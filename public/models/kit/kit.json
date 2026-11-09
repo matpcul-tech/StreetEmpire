@@ -160,6 +160,24 @@
         "gender": "f",
         "credit": "Original Street Empire crew, woman in a faded orange hoodie. Meshy humanoid with 20 extra helper bones, local 1024 texture prep."
       }
+    ],
+    "locals": [
+      {
+        "file": "characters/locals-m-1.glb",
+        "yaw": 0,
+        "height": 1.78,
+        "gender": "m",
+        "credit": "Original Street Empire Locals, young man. Meshy humanoid, local 1024 texture prep. Male pedestrians reuse this file. Not a recolor of a crew mesh."
+      }
+    ],
+    "ped": [
+      {
+        "file": "characters/locals-m-1.glb",
+        "yaw": 0,
+        "height": 1.78,
+        "gender": "m",
+        "credit": "Alias of the Locals young man. No separate pedestrian mesh."
+      }
     ]
   }
 }

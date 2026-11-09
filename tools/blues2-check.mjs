@@ -127,4 +127,12 @@ if (pickCharacter(goldWithWoman, 0, 'm').spec.file !== 'characters/golds-m-1.glb
 if (pickCharacter(goldWithWoman, 1, 'm').spec.file !== 'characters/golds-m-2.glb') fail('adding the woman changed the second Gold Line man');
 if (gripForFile('characters/golds-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-m-2 curl must not be kept');
 if (gripForFile('characters/golds-f-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-f-1 curl must not be kept');
+const localPool = [{ spec: { file: 'characters/locals-m-1.glb', gender: 'm' } }];
+if (pickCharacter(localPool, 0, 'm').spec.file !== 'characters/locals-m-1.glb') fail('a Locals man must load locals-m-1');
+if (pickCharacter(localPool, 1, 'f')) fail('a Locals woman must keep the painted body');
+const pedPool = [{ spec: { file: 'characters/locals-m-1.glb', gender: 'm' } }];
+if (pickCharacter(pedPool, 0, 'm').spec.file !== 'characters/locals-m-1.glb') fail('a male pedestrian must reuse locals-m-1');
+if (pickCharacter(pedPool, 2, 'm').spec.file !== 'characters/locals-m-1.glb') fail('every male pedestrian reuses the one installed Locals man');
+if (pickCharacter(pedPool, 1, 'f')) fail('a female pedestrian must keep the painted body');
+if (gripForFile('characters/locals-m-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-m-1 curl must not be kept');
 if (!process.exitCode) console.log('blues-m-2 check ok');
