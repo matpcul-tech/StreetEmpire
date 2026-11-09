@@ -336,7 +336,7 @@ export function gripForFile(file, measured, root) {
   const name = String(file || '');
   if (name.endsWith('reds-f-1.glb')) return holdMatchingBones(root, /HandMiddle/);
   if (name.endsWith('blues-m-2.glb')) return holdMatchingBones(root, /RightHandMiddle/);
-  if (name.endsWith('crew-m-2.glb') || name.endsWith('crew-f-1.glb') || name.endsWith('reds-m-2.glb') || name.endsWith('blues-f-1.glb') || name.endsWith('golds-m-2.glb') || name.endsWith('golds-f-1.glb') || name.endsWith('locals-m-1.glb') || name.endsWith('locals-m-2.glb') || name.endsWith('locals-f-1.glb')) return holdImportedHand(measured);
+  if (name.endsWith('crew-m-2.glb') || name.endsWith('crew-f-1.glb') || name.endsWith('reds-m-2.glb') || name.endsWith('blues-f-1.glb') || name.endsWith('golds-m-2.glb') || name.endsWith('golds-f-1.glb') || name.endsWith('locals-m-1.glb') || name.endsWith('locals-m-2.glb') || name.endsWith('locals-f-1.glb') || name.endsWith('locals-f-2.glb')) return holdImportedHand(measured);
   return measured;
 }
 

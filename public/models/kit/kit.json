@@ -182,6 +182,13 @@
         "height": 1.66,
         "gender": "f",
         "credit": "Original Street Empire Locals, younger woman. Meshy humanoid with 8 forearm helper bones, local 1024 texture prep. Female pedestrians reuse this file. Not a recolor of the Locals men."
+      },
+      {
+        "file": "characters/locals-f-2.glb",
+        "yaw": 0,
+        "height": 1.7,
+        "gender": "f",
+        "credit": "Original Street Empire Locals, older woman. Meshy humanoid, local 1024 texture prep. Female pedestrians reuse this file. Not a recolor of locals-f-1."
       }
     ],
     "ped": [
@@ -205,6 +212,13 @@
         "height": 1.66,
         "gender": "f",
         "credit": "Alias of the Locals younger woman. No separate pedestrian mesh."
+      },
+      {
+        "file": "characters/locals-f-2.glb",
+        "yaw": 0,
+        "height": 1.7,
+        "gender": "f",
+        "credit": "Alias of the Locals older woman. No separate pedestrian mesh."
       }
     ]
   }

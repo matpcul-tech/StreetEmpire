@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 20],
-  ['remainingNames', n((f) => f.status !== 'installed'), 4],
+  ['installed', n((f) => f.status === 'installed'), 22],
+  ['remainingNames', n((f) => f.status !== 'installed'), 2],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 2],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 1],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -73,10 +73,15 @@ if (localsF.joints !== 74 || localsF.fingerBones !== 40 || localsF.helperBones !
 if (localsF.measuredHeightM !== 1.66 || localsF.fittedHeightM !== 1.66) fail.push('locals-f-1 height record');
 const pedF = files.find((f) => f.file === 'characters/ped-f-1.glb');
 if (!pedF || pedF.status !== 'installed' || pedF.generation !== 'alias' || pedF.reuseOf !== 'characters/locals-f-1.glb' || pedF.countsAsDistinctBuild) fail.push('ped-f-1 must alias locals-f-1');
-for (const name of ['characters/ped-f-2.glb', 'characters/locals-f-2.glb']) {
-  const row = files.find((f) => f.file === name);
-  if (!row || row.status === 'installed') fail.push(name + ' must stay absent');
-}
+const localsF2 = files.find((f) => f.file === 'characters/locals-f-2.glb');
+if (!localsF2 || localsF2.status !== 'installed' || localsF2.gender !== 'f') fail.push('locals-f-2 must be installed as a woman');
+if (localsF2.joints !== 66 || localsF2.fingerBones !== 40 || localsF2.helperBones !== 0 || localsF2.jointIndexDiffFromPlayer !== 0) fail.push('locals-f-2 rig record');
+if (localsF2.jointIndexDiffFromBlueM1 !== 16 || localsF2.jointIndexDiffFromRedM2 !== 12) fail.push('locals-f-2 index record');
+if (localsF2.measuredHeightM !== 1.7 || localsF2.fittedHeightM !== 1.7) fail.push('locals-f-2 height record');
+const pedF2 = files.find((f) => f.file === 'characters/ped-f-2.glb');
+if (!pedF2 || pedF2.status !== 'installed' || pedF2.generation !== 'alias' || pedF2.reuseOf !== 'characters/locals-f-2.glb' || pedF2.countsAsDistinctBuild) fail.push('ped-f-2 must alias locals-f-2');
+const copLeft = files.filter((f) => f.status !== 'installed').map((f) => f.file);
+if (copLeft.join(',') !== 'characters/cop-m-1.glb,characters/cop-m-2.glb') fail.push('only the two cop names should remain: ' + copLeft.join(','));
 const unc = files.find((f) => f.file === 'characters/unc.glb');
 if (!unc || unc.status !== 'installed' || unc.gender !== 'm') fail.push('unc must be installed as a man');
 if (unc.joints !== 66 || unc.fingerBones !== 40 || unc.jointIndexDiffFromPlayer !== 0 || unc.jointIndexDiffFromBlue !== 16) fail.push('unc rig record');
