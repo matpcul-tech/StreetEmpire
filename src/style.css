@@ -46,23 +46,40 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 .touch #mission{bottom:auto;top:140px;left:12px;right:12px;font-size:12px;line-height:1.25;background:rgba(0,0,0,.5);border-radius:6px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.touch #mission:has(#mtitle:empty){display:none}
 .touch #big{top:214px;font-size:22px;letter-spacing:2px}
 @media (max-width:500px){#steer button{width:70px;height:70px}#touch button{width:60px;height:60px}#touch button.big{width:80px;height:80px}}
-/* v0.4 title screen and loading */
-#intro{position:fixed;inset:0;z-index:5;background:#120c08 url(../art/title.webp) left center/cover no-repeat;display:flex;align-items:flex-end;justify-content:flex-end;font-family:Arial,sans-serif;line-height:1.4}
-@media (orientation:portrait){#intro{background-image:url(../art/keyart.webp);background-position:center top;align-items:flex-end;justify-content:center}}
-#intro .card{max-width:440px;max-height:62vh;margin:16px;padding:16px 18px;background:linear-gradient(180deg,rgba(20,12,6,.72),rgba(14,8,4,.9));border-left:3px solid #e8914a;color:#eadccb;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden}
+/* v0.11 title screen: the live city at dusk behind a clean logo, one button, rules in HOW TO PLAY */
+body.pre #hud,body.pre #radar,body.pre #touch,body.pre #lcol,body.pre #rstack,body.pre #objArrow,body.pre #prompt,body.pre #bPause,body.pre #dtag,body.pre #msg{visibility:hidden!important}
+#intro{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;justify-content:space-between;font-family:Arial,sans-serif;line-height:1.4;color:#eadccb;padding:calc(var(--st,0px) + 22px) calc(var(--sr,0px) + 22px) calc(var(--sb,0px) + 22px) calc(var(--sl,0px) + 26px);box-sizing:border-box;pointer-events:none}
+#intro>*{pointer-events:auto}
+#intro .ti-shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(10,6,4,.78) 0%,rgba(10,6,4,.15) 34%,rgba(10,6,4,0) 52%,rgba(10,6,4,.25) 70%,rgba(8,5,3,.9) 100%),radial-gradient(ellipse at 50% 55%,rgba(0,0,0,0) 45%,rgba(0,0,0,.45) 100%)}
+body:not(.loaded) #intro .ti-shade{background-color:#120c08}
+#intro .ti-logo{position:relative;display:flex;flex-direction:column;align-items:flex-start;pointer-events:none;animation:tiIn 1.2s ease-out both}
+#intro .ti-street{font:600 clamp(16px,3.4vw,26px)/1 'Oswald',Arial,sans-serif;letter-spacing:.62em;color:#e8914a;margin:0 0 4px 4px;text-shadow:0 2px 10px rgba(0,0,0,.6)}
+#intro .ti-empire{font:400 clamp(64px,13vw,128px)/.86 'Anton',Impact,sans-serif;letter-spacing:.02em;color:#f3e6d0;text-shadow:0 4px 0 rgba(0,0,0,.35),0 10px 40px rgba(0,0,0,.55);padding-bottom:10px;border-bottom:5px solid #e8914a}
+#intro .ti-tag{font:500 clamp(11px,1.6vw,14px)/1.3 'Oswald',Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#d8c0a0;margin:10px 0 0 4px;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+#intro .ti-actions{position:relative;width:min(380px,100%);display:flex;flex-direction:column;gap:10px;animation:tiIn 1.2s .35s ease-out both}
+#intro button{font:400 22px 'Anton',Impact,sans-serif;padding:14px 26px;background:#e8914a;color:#1a0f08;border:0;letter-spacing:.14em;width:100%;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#intro button:disabled{background:#6a4a32;color:#d8c0a0}
+#intro button.ghost{background:rgba(14,9,6,.55);color:#eadccb;border:1px solid rgba(232,145,74,.6);font-size:16px;padding:10px 20px;box-shadow:none;backdrop-filter:blur(4px)}
+#intro .card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(480px,calc(100vw - 28px));max-height:calc(100vh - 40px);padding:18px 20px;background:rgba(18,11,6,.94);border-left:3px solid #e8914a;color:#eadccb;font-size:14px;box-shadow:0 12px 40px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box;z-index:2}
+#intro .card.hidden{display:none}
 #intro .card-copy{overflow:auto;min-height:0;flex:1 1 auto;touch-action:pan-y}
 #intro .card p{margin:6px 0}
+#intro .card button{margin-top:10px}
 #intro .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-#intro button{font:bold 20px Impact,sans-serif;padding:12px 26px;background:#e8914a;color:#1a0f08;border:0;letter-spacing:2px;width:100%;margin-top:8px}
-#intro button:disabled{background:#6a4a32;color:#d8c0a0}
 #intro .opt{display:block;margin:8px 0 4px;font-size:13px;color:#d8c0a0}
-#load{height:5px;background:rgba(255,255,255,.12);margin-top:6px}
-#loadbar{height:100%;width:0;background:#f2c27a;transition:width .2s}
-.loaded #load{opacity:.25}
-#intro .credit{position:fixed;left:10px;bottom:6px;color:rgba(255,230,200,.5);font-size:11px}
+#load{height:3px;background:rgba(255,255,255,.12)}
+#loadbar{height:100%;width:0;background:#e8914a;transition:width .2s}
+.loaded #load{opacity:0;transition:opacity .6s}
+#intro .credit{position:fixed;right:calc(var(--sr,0px) + 10px);bottom:calc(var(--sb,0px) + 6px);color:rgba(255,230,200,.45);font-size:11px}
+#tiFade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .45s ease}
+#tiFade.on{opacity:1}
 #intro.hidden{display:none}
-@media (orientation:portrait){#intro{background-size:100% auto;background-color:#120c08}#intro .card{max-height:max(40vh,calc(100vh - 133vw - 8px));margin:0 10px 10px;font-size:14px}#intro .keys .kd{display:none}}
+#intro.leaving .ti-logo,#intro.leaving .ti-actions,#intro.leaving .credit{opacity:0;transform:translateY(12px);transition:opacity .35s,transform .35s}
+#intro.leaving .ti-shade{opacity:0;transition:opacity .5s}
+@keyframes tiIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@media (orientation:portrait){#intro{align-items:center;text-align:center}#intro .ti-logo{align-items:center;margin-top:6vh}#intro .ti-street{margin-left:.62em}#intro .ti-tag{margin-left:0}#intro .ti-actions{width:100%;max-width:420px}#intro .keys .kd{display:none}}
 @media (orientation:landscape){#intro .keys .kp{display:none}}
+@media (orientation:landscape) and (max-height:500px){#intro .ti-empire{font-size:clamp(48px,11vh + 4vw,92px)}#intro .ti-actions{gap:8px}#intro button{padding:11px 20px;font-size:19px}#intro button.ghost{padding:7px 16px;font-size:14px}}
 /* v0.5 objective arrow and combat buttons */
 #objArrow{position:fixed;display:none;transform:translate(-50%,-50%);z-index:3;pointer-events:none;text-align:center}
 #objArrow .tri{width:0;height:0;margin:0 auto;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:26px solid #ffcc33;filter:drop-shadow(0 0 6px rgba(255,190,60,.9));transform:rotate(var(--rot,0deg))}
@@ -73,7 +90,7 @@ body:not(.touch) #mission{bottom:60px}body:not(.touch) #msg{bottom:30px}
 #cine .bar{position:fixed;left:0;right:0;height:0;background:#000;z-index:40;transition:height .35s ease;pointer-events:none}
 #cine .bar.top{top:0}#cine .bar.bot{bottom:0}
 body.cine-bars #cine .bar{height:12vh}
-body.cine-on #hud,body.cine-on #radar,body.cine-on #touch,body.cine-on #mission,body.cine-on #msg,body.cine-on #objArrow,body.cine-on #big,body.cine-on #capture{visibility:hidden}
+body.cine-on #dtag,body.cine-on #onb,body.cine-on #prompt,body.cine-on #hud,body.cine-on #radar,body.cine-on #touch,body.cine-on #mission,body.cine-on #msg,body.cine-on #objArrow,body.cine-on #big,body.cine-on #capture{visibility:hidden}
 #cineSub{position:fixed;left:50%;bottom:calc(12vh + 14px);transform:translateX(-50%);max-width:min(86vw,640px);z-index:41;background:rgba(10,8,6,.72);border-left:3px solid #ffcc33;padding:8px 14px;font:bold 17px Arial,sans-serif;color:#fff;text-shadow:1px 1px 2px #000;opacity:0;transition:opacity .2s;pointer-events:none}
 #cineSub b{color:#ffcc33;margin-right:8px;text-transform:uppercase;letter-spacing:1px}
 #cineSkip{position:fixed;right:14px;bottom:calc(4vh);z-index:42;font:12px Arial,sans-serif;color:#bbb;display:none;pointer-events:none}
@@ -84,6 +101,18 @@ body.cine-bars #cineSkip{display:block}
 #passCard .pc-k{font-size:30px;letter-spacing:3px;color:#ffcc33;text-shadow:2px 2px 0 #000;font-weight:bold}
 #passCard .pc-t{font-size:16px;color:#eee;margin-top:4px}#passCard .pc-r{font-size:24px;color:#ffb04a;margin-top:8px;font-weight:bold}#passCard .pc-s{font-size:14px;color:#ccc;margin-top:2px}
 .touch #passCard{top:26%}.touch #passCard .pc-k{font-size:22px}
+/* v0.11 cinematics: district lower thirds, typewriter subtitles, job cards in the title type */
+#cineLoc{position:fixed;left:calc(var(--sl,0px) + 6vw);bottom:calc(12vh + 22px);z-index:41;pointer-events:none;opacity:0;transform:translateX(-18px);transition:opacity .45s,transform .6s cubic-bezier(.2,.8,.2,1);border-left:4px solid #e8914a;padding:2px 0 2px 14px}
+#cineLoc.show{opacity:1;transform:none}
+#cineLoc b{display:block;font:400 clamp(34px,7vw,64px)/1 'Anton',Impact,sans-serif;letter-spacing:.06em;color:#f3e6d0;text-shadow:0 4px 18px rgba(0,0,0,.7)}
+#cineLoc span{display:block;font:500 clamp(12px,1.8vw,16px)/1.3 'Oswald',Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#e8914a;margin-top:6px;text-shadow:0 1px 6px #000}
+#cineSub{border-left-color:#e8914a;font-family:'Oswald',Arial,sans-serif;font-weight:500;letter-spacing:.02em}
+#cineSub b{color:#e8914a}
+#passCard{border:0;border-left:4px solid #e8914a;background:linear-gradient(90deg,rgba(12,8,5,.9),rgba(12,8,5,.72));text-align:left;padding:12px 22px 12px 18px}
+#passCard .pc-k{font:400 30px/1 'Anton',Impact,sans-serif;letter-spacing:.08em;color:#e8914a;text-shadow:0 3px 12px rgba(0,0,0,.6)}
+#passCard .pc-t{font:500 16px 'Oswald',Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#f3e6d0;margin-top:6px}
+#passCard .pc-r{font:400 24px 'Anton',Impact,sans-serif;color:#f3e6d0;letter-spacing:.04em}
+#passCard.red{border-left-color:#d23a2a}#passCard.red .pc-k{color:#e0533e}
 #downTint{position:fixed;inset:0;pointer-events:none;z-index:30;opacity:0;transition:opacity .4s}
 #downTint.on{opacity:1}#downTint.wasted{background:radial-gradient(ellipse at center,rgba(60,0,0,.05),rgba(40,0,0,.55))}#downTint.busted{background:radial-gradient(ellipse at center,rgba(0,10,60,.05),rgba(0,20,60,.5))}
 

@@ -15,9 +15,12 @@ import * as sfx from './audio.js';
 import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
+import '@fontsource/anton/400.css';
+import '@fontsource/oswald/500.css';
+import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.10';
+const VERSION = 'v0.11';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -510,7 +513,7 @@ function handleFx(list) {
     }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
     else if (f.type === 'guards') { pop(`${f.n} guard${f.n > 1 ? 's' : ''} hold the block`); }
-    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) { cine.swing(blockCenter(b)); pendingBig = 'BLOCK CLAIMED'; } } }
+    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
     else if (f.type === 'stash' && (!f.stolen || f.crew === 'player')) pop(`+$${f.amt} ${f.hustle}`);
     else if (f.type === 'upgrade') pop(`${f.n} guard${f.n > 1 ? 's' : ''} armed`);
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
@@ -518,9 +521,9 @@ function handleFx(list) {
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'pickup') sfx.chime(true);
     else if (f.type === 'gift') pop('A recruit is with you.');
-    else if (f.type === 'wasted') { showBig('WASTED', true); cine.down(false); }
-    else if (f.type === 'busted') { showBig('BUSTED', true); cine.down(true); }
-    else if (f.type === 'mission') { if (f.state === 'pass') { cine.passed(f.title, f.reward, f.rep); pop(`+$${f.reward} mission: ${f.title}`); sfx.chime(true); } else if (f.state === 'fail') { showBig('MISSION FAILED', true); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
+    else if (f.type === 'wasted') { showBig('KNOCKED OUT', true); cine.down(false); }
+    else if (f.type === 'busted') { showBig('LOCKED UP', true); cine.down(true); }
+    else if (f.type === 'mission') { if (f.state === 'pass') { const pg = charViz.get(p.id); cine.passed(f.title, f.reward, f.rep, p.car || !pg ? null : pg.position); pop(`+$${f.reward} job: ${f.title}`); sfx.chime(true); } else if (f.state === 'fail') { cine.failed(f.title); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
   }
 }
 
@@ -595,10 +598,52 @@ Promise.all([
 startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
 function startGame() {
   if (started) return;
-  $('intro').classList.add('hidden'); $('bPause').classList.add('show'); started = true; last = performance.now(); sfx.initAudio();
-  showMsg('Welcome to the Eastside.');
-  scuffleT = 2.5; onb.step = onb.done ? -1 : 0; renderOnb();
+  sfx.initAudio();
+  // dip to black, drop the title, then fly in over the city (skippable; ?nointro skips it for tests)
+  $('intro').classList.add('leaving'); $('tiFade').classList.add('on');
+  setTimeout(() => {
+    $('intro').classList.add('hidden'); $('tiFade').classList.remove('on'); clearTitleProps();
+    document.body.classList.remove('pre'); $('bPause').classList.add('show'); started = true; last = performance.now();
+    scuffleT = 2.5; onb.step = onb.done ? -1 : 0; renderOnb();
+    const s = S(), p = player(s), pg = charViz.get(p.id), home = blockCenter(s.blocks[0]), far = blockCenter(s.blocks[s.blocks.length - 1]);
+    const welcome = () => showMsg('Welcome to the Eastside.');
+    if (params.has('nointro') || !pg) { welcome(); return; }
+    cine.opening({ home, far, center: { x: 0, z: 0 }, player: pg.position.clone(), onDone: welcome,
+      locs: [{ at: 0.2, k: DISTRICTS[2].toUpperCase(), t: 'Gold Line runs the docks' }, { at: 2.5, k: DISTRICTS[1].toUpperCase(), t: 'Red Kings. Blue Hand. Nobody shares.' }, { at: 4.6, k: DISTRICTS[0].toUpperCase(), t: 'One block. Yours.' }] });
+  }, 480);
 }
+$('howBtn').onclick = () => $('how').classList.remove('hidden');
+$('howClose').onclick = () => $('how').classList.add('hidden');
+// ---------- v0.11 title: staged props on the live block (not part of the sim) ----------
+const titleProps = [];
+let titleCop = null, titleCopCar = null, titleSiren = null;
+function buildTitleProps() {
+  if (titleProps.length || !carsReady || !peopleReady) return;
+  const s = S(), p = player(s);
+  // a parked cruiser up the curb from the player, and an officer standing at its door
+  let spot = null;
+  for (const dz of [-9, 9, -12, 12, -6, 6]) for (const dx of [2.5, -2.5, 4, -4]) {
+    const x = p.x + dx, z = p.z + dz;
+    if (!spot && [-2.6, 0, 2.6].every((o) => !insideBuilding(x, z + o, 1.1)) && !s.cars.some((c) => Math.hypot(c.x - x, c.z - z) < 5.5)) spot = { x, z };
+  }
+  if (!spot) return;
+  const fake = { id: 'title-cruiser', type: 'police', paint: 0, x: spot.x, z: spot.z, ry: 0, v: 0, steer: 0, siren: true, ai: true };
+  titleCopCar = makeCar(fake); titleCopCar.position.set(spot.x, 0, spot.z); titleCopCar.rotation.y = 0; titleCopCar.userData.fake = fake; scene.add(titleCopCar); titleProps.push(titleCopCar);
+  const ce = { id: 9001, kind: 'cop', crew: 'cops', hp: 100, moving: 0, weapon: 'fists' };
+  const look = lookFor(ce, CREWS);
+  if (modelReady(look.model) || look.kitT) {
+    titleCop = makeCharacter(look, !LOW); const side = spot.x > p.x ? -1.6 : 1.6;
+    titleCop.position.set(spot.x + side, 0.24, spot.z + 0.6); titleCop.rotation.y = Math.atan2(p.x - titleCop.position.x, p.z - titleCop.position.z);
+    titleCop.userData.cineHold = true; titleCop.userData.cineAnim = 'Idle_Loop'; titleCop.userData.fakeEnt = ce; scene.add(titleCop); titleProps.push(titleCop);
+  }
+  if (!LOW) { titleSiren = new THREE.PointLight(0xff2020, 0, 16, 1.6); titleSiren.position.set(spot.x, 2.2, spot.z); scene.add(titleSiren); titleProps.push(titleSiren); }
+}
+function updateTitleProps(rdt, now) {
+  if (titleCopCar) updateCar(titleCopCar, titleCopCar.userData.fake, rdt, night > 0.3, now);
+  if (titleCop) animate(titleCop, titleCop.userData.fakeEnt, rdt, false);
+  if (titleSiren) { const on = Math.floor(now / 180) % 2 === 0; titleSiren.color.setHex(on ? 0xff2020 : 0x2050ff); titleSiren.intensity = 14; }
+}
+function clearTitleProps() { for (const o of titleProps) scene.remove(o); titleProps.length = 0; titleCop = titleCopCar = titleSiren = null; }
 // ---------- v0.10 onboarding: opening scuffle, 3 steps, waypoint to the next thing to do ----------
 let scuffleT = -1, scufflerId = null, onbMission = false;
 const onb = { step: -1, done: localStorage.getItem('se-onb') === '3' };
@@ -756,7 +801,7 @@ function frame(now) {
   // Unc briefing: starts as soon as both characters are drawn
   if (pendingBrief) {
     const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id);
-    if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, (MISSIONS[pendingBrief.idx] || {}).intro); pendingBig = pendingBrief.title.toUpperCase(); pendingBrief = null; }
+    if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, (MISSIONS[pendingBrief.idx] || {}).intro, pendingBrief.title); pendingBrief = null; }
     else if ((pendingBrief.wait -= rdt) <= 0) { showBig(pendingBrief.title.toUpperCase()); pendingBrief = null; }
   }
   if (wasDown && !(p.downT > 0)) cine.up();
@@ -794,7 +839,7 @@ function frame(now) {
     v.prog.visible = !!b.capBy; if (b.capBy) { v.prog.material.color.setHex(CREWS[b.capBy].color); const k = Math.max(0.01, b.capT / CAPTURE_TIME); v.prog.scale.set(k, k, 1); }
   });
   // onboarding progress and the opening scuffle
-  if (started && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A mugger is going for your bag.'); } }
+  if (started && !cine.pausesSim && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A mugger is going for your bag.'); } }
   // Unc stands a short walk from spawn, so Bag Back can start while the mugger group is still up.
   // Advance past the fight and the talk step together, or "1/3 Stop the muggers" stays on screen.
   if ((onb.step === 0 || onb.step === 1) && (s.mission || s.missionIdx > 0)) onbAdvance(2);
@@ -827,12 +872,13 @@ function frame(now) {
   camera.lookAt(look);
   if (shake > 0) { shake = Math.max(0, shake - rdt * 2.2); camera.position.x += (Math.random() - 0.5) * shake * 0.5; camera.position.y += (Math.random() - 0.5) * shake * 0.5; camera.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
   const cineCam = cine.update(rdt); if (cineCam) cine.blendCamera();
+  if (!started && loaded) { buildTitleProps(); updateTitleProps(rdt, now); const pg = charViz.get(p.id); if (pg) cine.titleCam(rdt, { player: pg.position, ry: pg.rotation.y, prop: titleCopCar ? titleCopCar.position : null, center: { x: 0, z: 0 } }); }
   if (!cine.active && pendingBig) { if (!document.getElementById('passCard').classList.contains('show')) showBig(pendingBig); pendingBig = null; }
   if (window.__camOv) { const o = window.__camOv; camera.position.set(o.x, o.y, o.z); camera.lookAt(o.lx, o.ly, o.lz); } // test hook for close-up shots
   if (camKick > 0) { camera.rotateX(camKick * 0.06); camKick = Math.max(0, camKick - rdt * 6); }
   fovKick = Math.max(0, fovKick - rdt * 20);
   const wantFov = 62 + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;
-  if (cine.active !== 'brief') { camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix(); }
+  if (started && !cine.ownsFov) { camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix(); }
   if (!LOW) { sun.position.set(pv.x + sunDir.x * 100, Math.max(15, sunDir.y * 100), pv.z + sunDir.z * 100); sun.target.position.set(pv.x, 0, pv.z); }
   city.update(pv.x, pv.z);
   // HUD
@@ -878,7 +924,7 @@ function frame(now) {
   $('mtitle').textContent = m ? m.title + ':' : '';
   $('mtext').textContent = !m ? '' : m.kind === 'hook' ? (m.stage ? 'Bring the bag back to Unc.' : 'Grab the bag at the yellow marker.') : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
-  if (here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
+  if (started && here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
   let ri = 0;
   const callMark = s.calls && s.calls.active;

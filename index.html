@@ -23,7 +23,7 @@
 <meta name="twitter:image" content="https://matpcul-tech.github.io/StreetEmpire/art/og.jpg" />
 <link rel="stylesheet" href="./src/style.css" />
 </head>
-<body>
+<body class="pre">
 <div id="app"></div>
 <canvas id="radar" width="280" height="280"></canvas>
 <div id="hud">
@@ -59,7 +59,14 @@
   </div>
 </div>
 <div id="intro">
- <div class="card">
+ <div class="ti-shade"></div>
+ <div class="ti-logo" aria-hidden="true"><span class="ti-street">STREET</span><span class="ti-empire">EMPIRE</span><span class="ti-tag">Eastside. Downtown. Harbor. One block at a time.</span></div>
+ <div class="ti-actions">
+  <div id="load"><div id="loadbar"></div></div>
+  <button id="start">HIT THE STREETS</button>
+  <button id="howBtn" class="ghost" type="button">HOW TO PLAY</button>
+ </div>
+ <div id="how" class="card hidden">
   <div class="card-copy">
   <h1 class="sr">STREET EMPIRE</h1>
   <p>You are a youngster on the Eastside with one block to your name. Three crews run the rest of the city, from Eastside through Downtown to the Harbor, and they want yours too.</p>
@@ -68,10 +75,10 @@
   <p class="keys"><span class="kd">Desktop: WASD move, mouse look (click to lock), Shift sprint, Space jump, click or F attack, Q weapon, E car or talk, R recruit, T squad follow or guard, U arm guards ($80), C dodge, hold V block, Y step into a street call, N walk off, Space drift, Esc or P pause.</span><span class="kp">Phone: left thumb moves, drag the right side to look, big red button hits, DODGE rolls, the blue button talks, takes a car, or arms guards. A street call puts STEP IN and WALK OFF on the left. II pauses.</span></p>
   <label class="opt"><input type="checkbox" id="grain" /> Film grain (G)</label>
   </div>
-  <div id="load"><div id="loadbar"></div></div>
-  <button id="start">HIT THE STREETS</button>
+  <button id="howClose" type="button">GOT IT</button>
  </div>
- <div class="credit" id="ver">v0.10</div>
+ <div id="tiFade"></div>
+ <div class="credit" id="ver">v0.11</div>
 </div>
 <div id="end" class="panel hidden"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>
 <script type="module" src="./src/main.js"></script>
