@@ -80,7 +80,10 @@ export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'gi
 export function lookFor(e, CREWS) {
   const L = paintedLook(e, CREWS);
   if (!tmpl || potatoPeople) return L;
-  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v, L.female ? 'f' : 'm');
+  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e);
+  // Locals are half women, so every man has an even look. Divide by 2 so the two men still alternate.
+  const seed = slot === 'locals' ? (v / 2) | 0 : v;
+  const T = kitCharacter(slot, seed, L.female ? 'f' : 'm');
   if (!T || !prepKit(T)) return L;
   return { ...L, model: `kit:${slot}:${T.spec.file}`, kitT: T };
 }

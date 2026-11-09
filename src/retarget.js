@@ -180,10 +180,9 @@ export function retarget(srcRoot, clips, tgtRoot) {
           L.copy(pw).invert().multiply(W);
         } else {
           // A helper with no game-rig name stays at its imported bind. crew-f-1
-          // has 20 of these, including bones between the thigh and the knee and
-          // between the knee and the foot. They get no track. The named child
-          // is solved against this parent's real world rotation, not against a
-          // 66-joint parent it does not have.
+          // has 20 of these in the legs and forearms. locals-m-2 has six under
+          // the head. They get no track. The named child is solved against this
+          // parent's real world rotation, not against a parent it does not have.
           L.copy(tRestLocal.get(b)); W.copy(pw).multiply(L);
         }
         world.set(b, W.clone());

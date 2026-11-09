@@ -127,12 +127,50 @@ if (pickCharacter(goldWithWoman, 0, 'm').spec.file !== 'characters/golds-m-1.glb
 if (pickCharacter(goldWithWoman, 1, 'm').spec.file !== 'characters/golds-m-2.glb') fail('adding the woman changed the second Gold Line man');
 if (gripForFile('characters/golds-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-m-2 curl must not be kept');
 if (gripForFile('characters/golds-f-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('golds-f-1 curl must not be kept');
-const localPool = [{ spec: { file: 'characters/locals-m-1.glb', gender: 'm' } }];
-if (pickCharacter(localPool, 0, 'm').spec.file !== 'characters/locals-m-1.glb') fail('a Locals man must load locals-m-1');
-if (pickCharacter(localPool, 1, 'f')) fail('a Locals woman must keep the painted body');
-const pedPool = [{ spec: { file: 'characters/locals-m-1.glb', gender: 'm' } }];
-if (pickCharacter(pedPool, 0, 'm').spec.file !== 'characters/locals-m-1.glb') fail('a male pedestrian must reuse locals-m-1');
-if (pickCharacter(pedPool, 2, 'm').spec.file !== 'characters/locals-m-1.glb') fail('every male pedestrian reuses the one installed Locals man');
+const localPool = [
+  { spec: { file: 'characters/locals-m-1.glb', gender: 'm' } },
+  { spec: { file: 'characters/locals-m-2.glb', gender: 'm' } },
+];
+const localSeed = (look) => (look / 2) | 0;
+if (pickCharacter(localPool, localSeed(0), 'm').spec.file !== 'characters/locals-m-1.glb') fail('Locals look 0 must be the first man');
+if (pickCharacter(localPool, localSeed(2), 'm').spec.file !== 'characters/locals-m-2.glb') fail('Locals look 2 must be the second man');
+if (pickCharacter(localPool, localSeed(1), 'f')) fail('a Locals woman must keep the painted body');
+const pedPool = localPool;
+if (pickCharacter(pedPool, 0, 'm').spec.file !== 'characters/locals-m-1.glb') fail('ped look 0 must reuse locals-m-1');
+if (pickCharacter(pedPool, 3, 'm').spec.file !== 'characters/locals-m-2.glb') fail('ped look 3 must reuse locals-m-2');
 if (pickCharacter(pedPool, 1, 'f')) fail('a female pedestrian must keep the painted body');
 if (gripForFile('characters/locals-m-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-m-1 curl must not be kept');
+if (gripForFile('characters/locals-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-m-2 curl must not be kept');
+const loc2 = await load('public/models/kit/characters/locals-m-2.glb');
+const locRoot = new THREE.Group(); locRoot.add(loc2.scene);
+let locMesh = null;
+locRoot.traverse((o) => { if (o.isSkinnedMesh && (!locMesh || o.geometry.attributes.position.count > locMesh.geometry.attributes.position.count)) locMesh = o; });
+const locBones = locMesh.skeleton.bones;
+if (locBones.length !== 72) fail('locals-m-2 joints ' + locBones.length);
+const locHelp = locBones.filter((b) => /^Bone_/.test(b.name));
+if (locHelp.length !== 6) fail('locals-m-2 helpers ' + locHelp.length);
+for (const b of locHelp) if (canonical(b.name) != null) fail(b.name + ' was mapped as anatomy');
+const parentOf = (n) => { const b = locRoot.getObjectByName(n); return b && b.parent && b.parent.name; };
+if (!/Head$/.test(parentOf('Bone_030') || '') || !/Head$/.test(parentOf('Bone_032') || '') || !/Head$/.test(parentOf('Bone_034') || '')) fail('head helper parents ' + [parentOf('Bone_030'), parentOf('Bone_032'), parentOf('Bone_034')].join(','));
+if (parentOf('Bone_029') !== 'Bone_030' || parentOf('Bone_031') !== 'Bone_032' || parentOf('Bone_033') !== 'Bone_034') fail('helper chain');
+const locRet = retarget(skeletonClone(people.scene), Object.values(clips), locRoot);
+if (locRet.missing.length) fail('locals-m-2 missing ' + locRet.missing.join(','));
+for (const n of CLIPS) {
+  const clip = locRet.clips[n];
+  if (!clip) { fail('locals-m-2 missing clip ' + n); continue; }
+  if (clip.tracks.some((t) => /^Bone_/.test(t.name))) fail(n + ' animates a Locals helper');
+}
+const helpRest = new Map(locHelp.map((b) => [b.name, b.quaternion.clone()]));
+const locMix = new THREE.AnimationMixer(locRoot);
+let helpDrift = 0;
+for (const n of ['Idle_Loop', 'Sprint_Loop', 'Pistol_Idle_Loop', 'Death01']) {
+  locMix.stopAllAction();
+  restPose(locRoot, locMesh);
+  const act = locMix.clipAction(locRet.clips[n]); act.play();
+  locMix.setTime(locRet.clips[n].duration * 0.5);
+  locRoot.updateMatrixWorld(true);
+  for (const b of locHelp) helpDrift = Math.max(helpDrift, b.quaternion.angleTo(helpRest.get(b.name)));
+}
+console.log('locals-m-2 helper drift deg', +(THREE.MathUtils.radToDeg(helpDrift)).toFixed(3));
+if (helpDrift > 0.01) fail('locals-m-2 helpers left the bind');
 if (!process.exitCode) console.log('blues-m-2 check ok');
