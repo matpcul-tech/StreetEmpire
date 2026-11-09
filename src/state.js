@@ -463,7 +463,7 @@ function damage(s, e, amt, src, heavy, kb, stunO) {
   // the whole roll is the invulnerable window, so a mobile dodge lines up with the tell
   if (e.dodging || e.dodgeT > 0) { s.fx.push({ type: 'evade', x: e.x, z: e.z, to: e.id, by: src ? src.id : 0 }); return; }
   // blocking soaks most of a melee hit from the front
-  if (e.block && src && src.kind && dist2(e, src) < 16) {
+  if (e.block === true && src && src.kind && dist2(e, src) < 16) { // peds' e.block is a block id, not the block button
     const d0 = Math.sqrt(dist2(e, src)) || 1, front = ((src.x - e.x) * Math.sin(e.ry) + (src.z - e.z) * Math.cos(e.ry)) / d0;
     if (front > 0.2) { amt = Math.ceil(amt * 0.2); e.hp -= amt; e.kx = (e.x - src.x) / d0 * 2; e.kz = (e.z - src.z) / d0 * 2; s.fx.push({ type: 'block', x: e.x, z: e.z, to: e.id, by: src.id }); if (e.hp <= 0) e.hp = 1; return; }
   }
