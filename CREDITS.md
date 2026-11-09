@@ -49,5 +49,7 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: crew (crew-f-1) | Original Street Empire crew, woman in a faded orange hoodie. Meshy humanoid with 20 extra helper bones, local 1024 texture prep. |
 | character: locals (locals-m-1) | Original Street Empire Locals, young man. Meshy humanoid, local 1024 texture prep. Male pedestrians reuse this file. Not a recolor of a crew mesh. |
 | character: locals (locals-m-2) | Original Street Empire Locals, older man. Meshy humanoid with 6 head helper bones, local 1024 texture prep. Male pedestrians reuse this file. Not a recolor of locals-m-1. |
+| character: locals (locals-f-1) | Original Street Empire Locals, younger woman. Meshy humanoid with 8 forearm helper bones, local 1024 texture prep. Female pedestrians reuse this file. Not a recolor of the Locals men. |
 | character: ped (locals-m-1) | Alias of the Locals young man. No separate pedestrian mesh. |
+| character: ped (locals-m-2) | Alias of the Locals older man. No separate pedestrian mesh. |
 <!-- kit-credits:end -->

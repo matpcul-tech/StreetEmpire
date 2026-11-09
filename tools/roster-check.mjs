@@ -9,10 +9,10 @@ const files = roster.files || [];
 const n = (pred) => files.filter(pred).length;
 const expect = [
   ['rosterFiles', files.length, 24],
-  ['installed', n((f) => f.status === 'installed'), 18],
-  ['remainingNames', n((f) => f.status !== 'installed'), 6],
+  ['installed', n((f) => f.status === 'installed'), 20],
+  ['remainingNames', n((f) => f.status !== 'installed'), 4],
   ['inProgress', n((f) => f.status === 'in_progress'), 0],
-  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 3],
+  ['paidDistinctStillToCommission', n((f) => f.generation === 'paid_distinct' && f.status === 'needed'), 2],
   ['noNewGeneration', n((f) => f.generation === 'alias' || f.generation === 'local_texture'), 5],
   ['distinctBuilds', n((f) => f.countsAsDistinctBuild), 19],
 ];
@@ -67,7 +67,13 @@ if (localsM2.joints !== 72 || localsM2.fingerBones !== 40 || localsM2.helperBone
 if (localsM2.measuredHeightM !== 1.72 || localsM2.fittedHeightM !== 1.72) fail.push('locals-m-2 height record');
 const pedM2 = files.find((f) => f.file === 'characters/ped-m-2.glb');
 if (!pedM2 || pedM2.status !== 'installed' || pedM2.generation !== 'alias' || pedM2.reuseOf !== 'characters/locals-m-2.glb' || pedM2.countsAsDistinctBuild) fail.push('ped-m-2 must alias locals-m-2');
-for (const name of ['characters/ped-f-1.glb', 'characters/ped-f-2.glb', 'characters/locals-f-1.glb', 'characters/locals-f-2.glb']) {
+const localsF = files.find((f) => f.file === 'characters/locals-f-1.glb');
+if (!localsF || localsF.status !== 'installed' || localsF.gender !== 'f') fail.push('locals-f-1 must be installed as a woman');
+if (localsF.joints !== 74 || localsF.fingerBones !== 40 || localsF.helperBones !== 8 || localsF.jointIndexDiffFromPlayer !== 38) fail.push('locals-f-1 rig record');
+if (localsF.measuredHeightM !== 1.66 || localsF.fittedHeightM !== 1.66) fail.push('locals-f-1 height record');
+const pedF = files.find((f) => f.file === 'characters/ped-f-1.glb');
+if (!pedF || pedF.status !== 'installed' || pedF.generation !== 'alias' || pedF.reuseOf !== 'characters/locals-f-1.glb' || pedF.countsAsDistinctBuild) fail.push('ped-f-1 must alias locals-f-1');
+for (const name of ['characters/ped-f-2.glb', 'characters/locals-f-2.glb']) {
   const row = files.find((f) => f.file === name);
   if (!row || row.status === 'installed') fail.push(name + ' must stay absent');
 }

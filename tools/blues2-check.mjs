@@ -130,17 +130,20 @@ if (gripForFile('characters/golds-f-1.glb', { kind: 'bones', bones: [{ name: 'a'
 const localPool = [
   { spec: { file: 'characters/locals-m-1.glb', gender: 'm' } },
   { spec: { file: 'characters/locals-m-2.glb', gender: 'm' } },
+  { spec: { file: 'characters/locals-f-1.glb', gender: 'f' } },
 ];
 const localSeed = (look) => (look / 2) | 0;
 if (pickCharacter(localPool, localSeed(0), 'm').spec.file !== 'characters/locals-m-1.glb') fail('Locals look 0 must be the first man');
 if (pickCharacter(localPool, localSeed(2), 'm').spec.file !== 'characters/locals-m-2.glb') fail('Locals look 2 must be the second man');
-if (pickCharacter(localPool, localSeed(1), 'f')) fail('a Locals woman must keep the painted body');
+if (pickCharacter(localPool, localSeed(1), 'f').spec.file !== 'characters/locals-f-1.glb') fail('Locals look 1 must be the first woman');
+if (pickCharacter(localPool, localSeed(3), 'f').spec.file !== 'characters/locals-f-1.glb') fail('the second Locals woman must stay on this one file until she exists');
 const pedPool = localPool;
 if (pickCharacter(pedPool, 0, 'm').spec.file !== 'characters/locals-m-1.glb') fail('ped look 0 must reuse locals-m-1');
 if (pickCharacter(pedPool, 3, 'm').spec.file !== 'characters/locals-m-2.glb') fail('ped look 3 must reuse locals-m-2');
-if (pickCharacter(pedPool, 1, 'f')) fail('a female pedestrian must keep the painted body');
+if (pickCharacter(pedPool, 1, 'f').spec.file !== 'characters/locals-f-1.glb') fail('a female pedestrian must reuse locals-f-1');
 if (gripForFile('characters/locals-m-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-m-1 curl must not be kept');
 if (gripForFile('characters/locals-m-2.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-m-2 curl must not be kept');
+if (gripForFile('characters/locals-f-1.glb', { kind: 'bones', bones: [{ name: 'a', rest: null, side: 'r' }] }).kind !== 'unsolved') fail('locals-f-1 curl must not be kept');
 const loc2 = await load('public/models/kit/characters/locals-m-2.glb');
 const locRoot = new THREE.Group(); locRoot.add(loc2.scene);
 let locMesh = null;
@@ -173,4 +176,37 @@ for (const n of ['Idle_Loop', 'Sprint_Loop', 'Pistol_Idle_Loop', 'Death01']) {
 }
 console.log('locals-m-2 helper drift deg', +(THREE.MathUtils.radToDeg(helpDrift)).toFixed(3));
 if (helpDrift > 0.01) fail('locals-m-2 helpers left the bind');
+const locF = await load('public/models/kit/characters/locals-f-1.glb');
+const fRoot = new THREE.Group(); fRoot.add(locF.scene);
+let fMesh = null;
+fRoot.traverse((o) => { if (o.isSkinnedMesh && (!fMesh || o.geometry.attributes.position.count > fMesh.geometry.attributes.position.count)) fMesh = o; });
+const fBones = fMesh.skeleton.bones;
+if (fBones.length !== 74) fail('locals-f-1 joints ' + fBones.length);
+const fHelp = fBones.filter((b) => /^Bone_/.test(b.name));
+if (fHelp.length !== 8) fail('locals-f-1 helpers ' + fHelp.length);
+for (const b of fHelp) if (canonical(b.name) != null) fail(b.name + ' was mapped as anatomy');
+const fParent = (n) => { const b = fRoot.getObjectByName(n); return b && b.parent && b.parent.name; };
+if (!/LeftForeArm$/.test(fParent('Bone_037') || '') || !/LeftForeArm$/.test(fParent('Bone_029') || '')) fail('left forearm helpers');
+if (!/RightForeArm$/.test(fParent('Bone_033') || '') || !/RightForeArm$/.test(fParent('Bone_025') || '')) fail('right forearm helpers');
+if (fParent('Bone_036') !== 'Bone_037' || fParent('Bone_028') !== 'Bone_029' || fParent('Bone_032') !== 'Bone_033' || fParent('Bone_024') !== 'Bone_025') fail('locals-f-1 helper chain');
+const fRet = retarget(skeletonClone(people.scene), Object.values(clips), fRoot);
+if (fRet.missing.length) fail('locals-f-1 missing ' + fRet.missing.join(','));
+for (const n of CLIPS) {
+  const clip = fRet.clips[n];
+  if (!clip) { fail('locals-f-1 missing clip ' + n); continue; }
+  if (clip.tracks.some((t) => /^Bone_/.test(t.name))) fail(n + ' animates a Locals woman helper');
+}
+const fRest = new Map(fHelp.map((b) => [b.name, b.quaternion.clone()]));
+const fMix = new THREE.AnimationMixer(fRoot);
+let fDrift = 0;
+for (const n of ['Idle_Loop', 'Sprint_Loop', 'Pistol_Idle_Loop', 'Death01']) {
+  fMix.stopAllAction();
+  restPose(fRoot, fMesh);
+  const act = fMix.clipAction(fRet.clips[n]); act.play();
+  fMix.setTime(fRet.clips[n].duration * 0.5);
+  fRoot.updateMatrixWorld(true);
+  for (const b of fHelp) fDrift = Math.max(fDrift, b.quaternion.angleTo(fRest.get(b.name)));
+}
+console.log('locals-f-1 helper drift deg', +(THREE.MathUtils.radToDeg(fDrift)).toFixed(3));
+if (fDrift > 0.01) fail('locals-f-1 helpers left the bind');
 if (!process.exitCode) console.log('blues-m-2 check ok');
