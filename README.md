@@ -26,6 +26,8 @@ Play it: https://matpcul-tech.github.io/StreetEmpire/
 | Car, talk to Unc | E | Context button |
 | Recruit ($100) | R | +CREW |
 | Drive | W and S gas and brake, A and D steer | GAS, BRAKE and arrow buttons |
+| Radio (in a car) | M | RADIO |
+| Shop, buy a safehouse | E | SHOP or BUY (context button) |
 
 In a car, forward and back are throttle and left and right steer. Hitting rivals at speed knocks them down.
 
@@ -36,6 +38,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 ## What is new in v0.12
 
 - A 19 job chain across four contacts: Unc (Eastside), Dee (Midtown), Rook (Downtown) and Sal (Harbor). Job types: fetch, pickups, car theft, block takeover, clean delivery, tailing, a lap of the Loop, a car chase, crew fights, block defense, losing the police, and marked targets.
+- Car radio: RADIO on a phone or M on a keyboard steps through the stations. Three built-in stations are made in code; your own tracks go in `public/radio/` (see docs/radio.md).
 - Shops (green markers, $ on the radar): pistol, shotgun, bat, brass knuckles and a patch up, for cash.
 - Safehouses (blue markers, H on the radar): four to buy, one per district. You come back at your nearest one when you go down, you heal and the heat cools while you stand at it, and a car of your own waits at the curb.
 - A 9 by 9 block city (81 blocks, about 520 m across) in four districts: Eastside, Midtown, Downtown and the Harbor. Each rival crew starts with a 2 by 2 corner.

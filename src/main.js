@@ -14,6 +14,7 @@ import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charN
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
+import { createRadio } from './radio.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -281,6 +282,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') session.send({ type: 'squad' });
   if (e.code === 'KeyU') session.send({ type: 'upgrade' });
   if (e.code === 'KeyQ') session.send({ type: 'weapon' });
+  if (e.code === 'KeyM' && player(S()).car) radio.next();
   if (e.code === 'Space') { e.preventDefault(); session.send({ type: 'jump' }); }
   if (e.code === 'KeyH') sfx.honk();
   if (e.code === 'KeyC') doDodge();
@@ -343,6 +345,7 @@ btn('bCtx', doContext);
 btn('bWeapon', () => session.send({ type: 'weapon' }));
 btn('bRecruit', () => session.send({ type: 'recruit' }));
 btn('bSquad', () => session.send({ type: 'squad' }));
+btn('bRadio', () => { sfx.initAudio(); radio.next(); });
 hold('bLeft', 'left'); hold('bRight', 'right'); hold('bGas', 'gas'); hold('bBrake', 'brake'); hold('bDrift', 'drift');
 btn('bDodge', () => doDodge());
 { const el = document.getElementById('bBlock'); el.addEventListener('pointerdown', (e) => { e.preventDefault(); session.send({ type: 'block', on: true }); el.classList.add('on'); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => { session.send({ type: 'block', on: false }); el.classList.remove('on'); }); }
@@ -374,6 +377,9 @@ const $ = (id) => document.getElementById(id);
 const radar = $('radar').getContext('2d');
 let msgT = 0, bigT = 0, dtagT = 0, lastHere = null;
 let incT = 0, starWant = 0, starShown = 0, starHold = 0;
+// ---------- car radio ----------
+const radio = createRadio({ audio: sfx.audio, base: BASE, onTune: (name) => pop('\u266B ' + name) });
+
 // ---------- shops and safehouses ----------
 // The shop is a small panel over the game: the street keeps running behind it, and it closes if you step away.
 let shopOpen = -1;
@@ -908,6 +914,7 @@ function frame(now) {
   wasDown = p.downT > 0;
   smoke.update(rdt);
   sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
+  radio.setOn(started && !!pcar && !paused && !s.over && !pcar.wrecked && !(p.downT > 0));
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
   // headlight throw on the road: an additive ground decal on every platform
   if (pcar && night > 0.3 && carViz.get(pcar.id)) { const g = carViz.get(pcar.id); if (headPool.parent !== g) g.add(headPool); headPool.visible = true; } else headPool.visible = false;
@@ -1079,6 +1086,6 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
+window.__game = session; window.__dbg = { radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
