@@ -122,6 +122,27 @@ Same rules as cars otherwise: faces +z, tires on y=0, one material, 1024 px WebP
 
 If the bike file is missing or fails to load, the game draws a plain block bike instead, so it never breaks.
 
+### A second bike: the cruiser
+
+A parked bike picks its model with `model` on the car (`model: 'cruiser'`; none means the sport bike). Both models share the bike type, stats and rules. The cruiser's kit.json entry carries what differs from the sport bike, all in meters in the model's space (x across, y up, z forward):
+
+| Key | Meaning |
+| --- | --- |
+| `head`, `tail` | `[y, z]` of the headlamp and tail lamp glow |
+| `rider` | overrides for `BIKE_SEAT`: `y`, `z` (where the rider sits), `lean` (0.04 is upright), `thigh`, `calf`, `spread` |
+| `grips` | `[x, y, z]` of the left grip; the right one is mirrored. When set, the rider's hands are put on the grips |
+| `paint` | `false` keeps the model's own color on every copy |
+
+The cruiser has no `steer` node: its fork and front fender are one piece with the frame, so the bars do not turn and the lean carries the turn. `tools/bike-split.mjs` made its two wheel nodes from the one-piece Meshy file without remodeling anything (it finds the tires, fits the axles, and moves each tire with its rim, spokes, hub and brake disc under its own node):
+
+```
+node tools/bike-split.mjs raw.glb split.glb      # add --front +x (or +z, -z) when the bike does not face -x
+```
+
+The split file is then compressed like any kit model (textures to 1024 px WebP, quantize, meshopt) with its wheel nodes tagged `kitWheel`, and committed as `public/models/kit/bikes/cruiser.glb`.
+
+`npm run test:bike` checks the riding rules for both models. `node tools/bike-shots.mjs <url> <dir>` shoots the cruiser parked, ridden, leaning and at night.
+
 In the game: `makeBike` in `src/vehicles.js`, `prepBike` and `cloneKitBike` in `src/kit.js`, the rider pose in `src/main.js` (`BIKE_SEAT`, `bikePose`), stats and parked spots in `src/state.js` (`CAR_TYPES.bike`, `addBikes`).
 
 ## Characters

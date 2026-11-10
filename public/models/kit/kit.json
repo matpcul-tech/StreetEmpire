@@ -61,12 +61,28 @@
       "yaw": 0,
       "length": 2.35,
       "paint": false,
-      "credit": "Original Street Empire cruiser motorcycle made for this project by the art team in Meshy. Not a third-party download.",
-      "seat": {
-        "y": 0.7,
-        "z": -0.3,
-        "lean": 0.1
-      }
+      "head": [
+        0.95,
+        0.72
+      ],
+      "tail": [
+        0.57,
+        -1.2
+      ],
+      "rider": {
+        "y": 0.29,
+        "z": 0.02,
+        "lean": 0.36,
+        "thigh": 0,
+        "calf": 0,
+        "spread": 0.3
+      },
+      "grips": [
+        0.44,
+        1.11,
+        0.265
+      ],
+      "credit": "Original Street Empire cruiser motorcycle made for this project by the art team in Meshy. Not a third-party download."
     },
     "dirtbike": {
       "file": "bikes/dirtbike.glb",
@@ -75,8 +91,8 @@
       "paint": false,
       "axle": "z",
       "credit": "Original Street Empire dirt bike made for this project in Meshy. Not a third-party download.",
-      "seat": {
-        "y": 0.92,
+      "rider": {
+        "y": 0.37,
         "z": -0.2,
         "lean": 0.24
       }

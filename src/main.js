@@ -802,19 +802,46 @@ function turnWorld(bone, axis, angle) {
   bone.parent.updateWorldMatrix(true, false); bone.parent.getWorldQuaternion(_bp); _bw.copy(_bp).multiply(bone.quaternion);
   bone.quaternion.copy(_bp.invert()).multiply(_bq.setFromAxisAngle(axis, angle).multiply(_bw));
 }
-function bikePose(rider) {
+// Arms: when the bike lists its grips (kit.json "grips"), each hand is put on its grip with a two-bone reach:
+// bend the elbow to the right length, then swing the whole arm onto the target. gripL and gripR are world positions.
+const _rs = new THREE.Vector3(), _re = new THREE.Vector3(), _rh = new THREE.Vector3(), _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rx = new THREE.Vector3(), _rq = new THREE.Quaternion(), _rw = new THREE.Quaternion();
+function turnWorldQ(bone, q) { bone.parent.getWorldQuaternion(_bp); bone.getWorldQuaternion(_rw); bone.quaternion.copy(_bp.invert()).multiply(q).multiply(_rw); bone.updateWorldMatrix(false, true); }
+function bikeReach(rider, f, gripL, gripR) {
+  rider.updateWorldMatrix(true, true);
+  for (const [side, T] of [['l', gripL], ['r', gripR]]) {
+    const up = f['upperarm_' + side], lo = f['lowerarm_' + side], hand = f['hand_' + side]; if (!up || !lo || !hand) continue;
+    up.getWorldPosition(_rs); lo.getWorldPosition(_re); hand.getWorldPosition(_rh);
+    const a = _rs.distanceTo(_re), b = _re.distanceTo(_rh), d = Math.max(Math.abs(a - b) + 1e-3, Math.min((a + b) * 0.995, _rs.distanceTo(T)));
+    _ra.subVectors(_rs, _re).normalize(); _rb.subVectors(_rh, _re).normalize();
+    const now = Math.acos(THREE.MathUtils.clamp(_ra.dot(_rb), -1, 1)), want = Math.acos(THREE.MathUtils.clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1));
+    _rx.crossVectors(_ra, _rb); if (_rx.lengthSq() < 1e-8) _rx.set(side === 'l' ? -1 : 1, 0, 0); _rx.normalize();
+    turnWorldQ(lo, _rq.setFromAxisAngle(_rx, want - now));
+    hand.getWorldPosition(_rh);
+    turnWorldQ(up, _rq.setFromUnitVectors(_ra.subVectors(_rh, _rs).normalize(), _rb.subVectors(T, _rs).normalize()));
+  }
+}
+const bikeGripL = new THREE.Vector3(), bikeGripR = new THREE.Vector3();
+const BIKE_BONES = ['thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'upperarm_l', 'upperarm_r', 'lowerarm_l', 'lowerarm_r'];
+function bikePose(rider, S = BIKE_SEAT, bike = null) {
   const u = rider.userData;
   if (u.bikeLegs === undefined) {
     const f = {}; rider.traverse((o) => { if (o.isBone) { const n = canonical(o.name); if (n && !f[n]) f[n] = o; } });
     u.bikeLegs = f.thigh_l && f.thigh_r && f.calf_l && f.calf_r ? f : null;
   }
   const f = u.bikeLegs; if (!f) return;
+  // The animation mixer only rewrites a bone when the clip's value for it changes, and the seated clip holds
+  // the legs still. Without this the turns below would stack on top of last frame's and the legs would spin.
+  // So each posed bone goes back to the clip's own pose first (a bone the mixer did rewrite is taken as the new base).
+  for (const n of BIKE_BONES) { const b = f[n]; if (!b) continue; const d = b.userData;
+    if (d.posed && b.quaternion.equals(d.posed)) b.quaternion.copy(d.base); else (d.base ||= new THREE.Quaternion()).copy(b.quaternion); }
   rider.updateWorldMatrix(true, false); rider.getWorldQuaternion(_bw);
   _bx.set(1, 0, 0).applyQuaternion(_bw); _bz.set(0, 0, 1).applyQuaternion(_bw);
   for (const [side, sg] of [['l', 1], ['r', -1]]) {
-    turnWorld(f['thigh_' + side], _bx, BIKE_SEAT.thigh); turnWorld(f['thigh_' + side], _bz, BIKE_SEAT.spread * sg);
-    turnWorld(f['calf_' + side], _bx, BIKE_SEAT.calf);
+    turnWorld(f['thigh_' + side], _bx, S.thigh); turnWorld(f['thigh_' + side], _bz, S.spread * sg);
+    turnWorld(f['calf_' + side], _bx, S.calf);
   }
+  if (bike && bike.grips) bikeReach(rider, f, bikeGripL.copy(bike.grips[0]).applyMatrix4(bike.model.matrixWorld), bikeGripR.copy(bike.grips[1]).applyMatrix4(bike.model.matrixWorld));
+  for (const n of BIKE_BONES) { const b = f[n]; if (b) (b.userData.posed ||= new THREE.Quaternion()).copy(b.quaternion); }
 }
 function seatY(c, u) { const y = sitOffset(c.type) - DRIVER_DROP; return u.kit && u.roof ? Math.min(y, u.roof - DRIVER_HEAD) : y; }
 
@@ -928,11 +955,11 @@ function frame(now) {
       const look = riding ? lookFor(p, CREWS) : c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
       if (modelReady(look.model)) {
         u.driver = makeCharacter(look, false);
-        if (u.bike) { const sa = u.seatAt || {}; u.driver.position.set(0, sa.y != null ? sa.y - DRIVER_DROP : BIKE_SEAT.y, sa.z ?? BIKE_SEAT.z); u.driver.rotation.set(sa.lean ?? BIKE_SEAT.lean, 0, 0); u.model.add(u.driver); } // each model can set its own seat (kit.json "seat") // on the model, so he leans with the bike
+        if (u.bike) { const S = (u.seatPose ||= { ...BIKE_SEAT, ...(u.rider || {}) }); u.driver.position.set(0, S.y, S.z); u.driver.rotation.set(S.lean, 0, 0); u.model.add(u.driver); } // on the model, so he leans with the bike
         else { u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
       }
     } else if (!wantDriver && u.driver) { u.driver.removeFromParent(); u.driver = null; }
-    if (u.driver) { animate(u.driver, { hp: 1 }, rdt, true); if (u.bike) bikePose(u.driver); }
+    if (u.driver) { animate(u.driver, { hp: 1 }, rdt, true); if (u.bike) bikePose(u.driver, u.seatPose, u); }
     // damage smoke
     if (c.hp < c.max * 0.5 && Math.random() < (c.wrecked ? 0.5 : c.hp < c.max * 0.25 ? 0.3 : 0.12) * (LOW ? 0.6 : 1)) smoke.emit(c.x + Math.sin(c.ry) * 1.8, 1.2, c.z + Math.cos(c.ry) * 1.8, c.wrecked || c.hp < c.max * 0.25, c.wrecked);
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }

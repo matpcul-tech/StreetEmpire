@@ -123,7 +123,7 @@ const BIKE_ORDER = ['sportbike', 'cruiser', 'dirtbike'];
 // the numbers a car or bike drives by
 const statsOf = (c) => (c.type === 'bike' && BIKE_MODELS[c.model]) || CAR_TYPES[c.type];
 function addBikes(s) {
-  const park = (id, model, x, z, paint) => { const T = BIKE_MODELS[model]; s.cars.push({ id, type: 'bike', model, x, z, ry: 0, v: 0, steer: 0, driver: null, ai: false, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: 0, paint }); };
+  const park = (id, model, x, z, paint, ry = 0) => { const T = BIKE_MODELS[model]; s.cars.push({ id, type: 'bike', model, x, z, ry, v: 0, steer: 0, driver: null, ai: false, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: 0, paint }); };
   if (!s.cars.some((c) => c.type === 'bike')) BIKE_BLOCKS.forEach((bi, k) => {
     const b = s.blocks[bi % s.blocks.length]; if (!b) return;
     const bc = blockCenter(b);
@@ -134,8 +134,9 @@ function addBikes(s) {
   for (const c of s.cars) if (c.type === 'bike' && !c.model) { const k = +String(c.id).replace('bike', '') || 0; c.model = BIKE_ORDER[k % 3]; if (!c.driver && c.hp === c.max) c.hp = c.max = BIKE_MODELS[c.model].hp; }
   // one of each by the starting corner, so all three can be tried from the first minute
   const home = blockCenter(s.blocks[0]);
-  if (!s.cars.some((c) => c.id === 'bikeH1')) park('bikeH1', 'cruiser', home.x + PITCH / 2 - 5.6, home.z + 12.6, 1);
-  if (!s.cars.some((c) => c.id === 'bikeH2')) park('bikeH2', 'dirtbike', home.x + PITCH / 2 - 5.6, home.z + 14.2, 4);
+  // (parked nose out, side by side: end to end along the curb they would overlap)
+  if (!s.cars.some((c) => c.id === 'bikeH1')) park('bikeH1', 'cruiser', home.x + PITCH / 2 - 5.6, home.z + 12.5, 1, Math.PI / 2);
+  if (!s.cars.some((c) => c.id === 'bikeH2')) park('bikeH2', 'dirtbike', home.x + PITCH / 2 - 5.6, home.z + 14.0, 4, Math.PI / 2);
 }
 function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
 function makeCar(s, x, z, ry, type, ai) {
@@ -446,7 +447,8 @@ export function nearestCar(s, p, r) {
 }
 function exitCar(s, p) {
   const c = s.cars.find((c) => c.id === p.car); c.driver = null; p.car = null;
-  p.x = c.x - Math.cos(c.ry) * 2.4; p.z = c.z + Math.sin(c.ry) * 2.4;
+  const off = c.type === 'bike' ? 1.1 : 2.4; // step off a bike right beside it
+  p.x = c.x - Math.cos(c.ry) * off; p.z = c.z + Math.sin(c.ry) * off;
 }
 
 function startDodge(s, p, dx, dz) {
@@ -1473,8 +1475,9 @@ export function step(s, dt) {
       // squad rides along: run to the car, hop in (1.2 s max), hop out beside it when you get out
       if (l && l.car && !e.car) {
         const car = s.cars.find((c) => c.id === l.car); e.board = (e.board || 0) + dt;
-        if (car && (dist2(car, e) < 3.2 * 3.2 || e.board > 1.2) && s.ents.filter((x) => x.car === car.id).length < 4) { e.car = car.id; e.board = 0; continue; }
-        if (car) { goal = car; followSpeed = 9.6; foe = null; }
+        const bike = car && car.type === 'bike'; // a bike seats only the rider: the squad follows on foot and catches up after the ride
+        if (car && !bike && (dist2(car, e) < 3.2 * 3.2 || e.board > 1.2) && s.ents.filter((x) => x.car === car.id).length < 4) { e.car = car.id; e.board = 0; continue; }
+        if (car && !bike) { goal = car; followSpeed = 9.6; foe = null; }
       } else if (e.car) {
         const car = s.cars.find((c) => c.id === e.car);
         if (l && l.car === e.car && car) { e.x = car.x; e.z = car.z; continue; }

@@ -53,6 +53,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 ## What is new in v0.3
 
 - People on Quaternius' Universal Animation Library mannequin, with painted outfits and faces: crews wear their own colors, police wear uniforms, Unc wears a suit, and pedestrians vary.
+- Two motorcycles: the sport bike and a black cruiser, parked side by side at the starting corner and around the city. Your crew follows on foot when you ride.
 - Kenney Car Kit vehicles: sedan, muscle car, SUV, van, taxi and police cruiser, with visible drivers, damage smoke and wrecks.
 - Traffic lights at every intersection. Traffic stops on red and for people in the road.
 - Wanted level (five stars): fighting, carjacking, hitting people with cars and shooting raise heat. Police cruisers chase you, officers get out and fight, and at three stars they shoot. Lose them and the heat fades. Get knocked out while wanted and you are BUSTED.

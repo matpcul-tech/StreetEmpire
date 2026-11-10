@@ -246,22 +246,23 @@ function paintHexFor(c) { return c.type === 'police' ? 0x1c1c22 : c.type === 'ta
 // One headlamp and one tail lamp: glow flares and a single beam, same shared materials as the cars.
 const BIKE_PAINT = [0x9a1c16, 0x1c1c1e, 0x1e3a6a, 0xc8c2b4, 0xc2560e, 0x2a4a34];
 let bikeBeam = null;
-function addBikeLights(g) {
-  const P = parts();
+// spec.head and spec.tail ([y, z] in meters, from kit.json) move the lamps for a bike shaped unlike the sport bike
+function addBikeLights(g, spec = {}) {
+  const P = parts(), head = spec.head || [0.95, 1.02], tail = spec.tail || [0.86, -1.02];
   bikeBeam ||= P.beam.clone().rotateX(0.08).translate(0, 0.92, 1.0);
   const tails = new THREE.Mesh(P.lamp, P.tailDim); tails.visible = false; g.add(tails); // the model has its own lamp; kept so the brake logic has a mesh to drive
   const flares = new THREE.Group();
-  const f = new THREE.Sprite(P.flare); f.position.set(0, 0.95, 1.02); f.scale.setScalar(0.7); flares.add(f);
-  const r = new THREE.Sprite(P.flareR); r.position.set(0, 0.86, -1.02); r.scale.setScalar(0.6); r.userData.tail = true; flares.add(r);
+  const f = new THREE.Sprite(P.flare); f.position.set(0, head[0], head[1]); f.scale.setScalar(0.7); flares.add(f);
+  const r = new THREE.Sprite(P.flareR); r.position.set(0, tail[0], tail[1]); r.scale.setScalar(0.6); r.userData.tail = true; flares.add(r);
   g.add(flares);
-  const beams = new THREE.Mesh(bikeBeam, P.beamMat); beams.userData.beam = true; g.add(beams);
+  const beams = new THREE.Mesh(bikeBeam, P.beamMat); beams.position.set(0, head[0] - 0.95, head[1] - 1.02); beams.userData.beam = true; g.add(beams);
   return { tails, flares };
 }
 // A motorcycle: the rigged kit model (wheels on their axles, fork and bars on the steering head).
 // With no kit bike installed it falls back to a plain block bike, so a missing file never breaks the game.
 function makeBike(c) {
-  const g = new THREE.Group(), KT = kitBike(c.model || 'sportbike') || kitBike();
-  const paintHex = BIKE_PAINT[c.paint % BIKE_PAINT.length];
+  const g = new THREE.Group(), KT = kitBike(c.model || 'sportbike') || kitBike(); // c.model picks the bike (sportbike, cruiser); a missing one falls back to the sport bike
+  const paintHex = BIKE_PAINT[c.paint % BIKE_PAINT.length], spec = KT ? KT.spec : {};
   let model, wheels = [], steer = null, wheelR = 0.31, seat = 0.8;
   if (KT) { ({ model, wheels, steer } = cloneKitBike(KT, paintHex)); wheelR = KT.wheelR; }
   else {
@@ -273,11 +274,12 @@ function makeBike(c) {
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.6), dark); s.position.set(0, 0.86, -0.45); model.add(s);
     const bars = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.05, 0.05), dark); bars.position.set(0, 1.0, 0.45); model.add(bars);
   }
-  const axle = (KT && KT.spec.axle) || 'x', seatAt = (KT && KT.spec.seat) || null; // per model, from kit.json
   model.rotation.order = 'YXZ';
   g.add(model);
-  const L = addBikeLights(g);
-  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, seatAt, axle, paintHex };
+  const L = addBikeLights(g, spec);
+  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex, axle: spec.axle || 'x', // axle: the axis the wheel nodes spin on (a file built sideways uses z)
+    rider: spec.rider || null, // kit.json: seat position and pose for this bike, see BIKE_SEAT in main.js
+    grips: spec.grips ? [new THREE.Vector3(spec.grips[0], spec.grips[1], spec.grips[2]), new THREE.Vector3(-spec.grips[0], spec.grips[1], spec.grips[2])] : null }; // left and right handlebar grip, in the model's space
   return g;
 }
 

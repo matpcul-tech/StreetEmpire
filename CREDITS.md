@@ -33,6 +33,7 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: sedan | no credit given (add a .txt next to the upload) |
 | car: taxi | no credit given (add a .txt next to the upload) |
 | car: pickup | no credit given (add a .txt next to the upload) |
+| bike: cruiser | Original Street Empire motorcycle made for this project in Meshy. Not a third-party download. |
 | bike: sportbike | Original Street Empire motorcycle made for this project in Meshy. Not a third-party download. |
 | bike: cruiser | Original Street Empire cruiser motorcycle made for this project by the art team in Meshy. Not a third-party download. |
 | bike: dirtbike | Original Street Empire dirt bike made for this project in Meshy. Not a third-party download. |

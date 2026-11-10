@@ -11,6 +11,7 @@
     "test:bust": "node tools/bust-test.mjs",
     "test:combat": "node tools/combat-test.mjs",
     "test:retarget": "node tools/retarget-test.mjs",
+    "test:bike": "node tools/bike-test.mjs",
     "preview": "vite preview",
     "kit": "node tools/kit-import.mjs"
   },
