@@ -36,10 +36,11 @@ export function initAudio() {
   engineOsc.start(); engineOsc2.start();
 }
 
-export function setEngine(on, speed) {
+// bike: a lower, lumpier idle that climbs faster (a big twin instead of a car engine)
+export function setEngine(on, speed, bike = false) {
   if (!ctx) return;
-  const t = ctx.currentTime, f = 38 + Math.abs(speed) * 4.2;
-  engineGain.gain.setTargetAtTime(on ? 0.09 : 0, t, 0.15);
+  const t = ctx.currentTime, f = bike ? 27 + Math.abs(speed) * 5.2 : 38 + Math.abs(speed) * 4.2;
+  engineGain.gain.setTargetAtTime(on ? (bike ? 0.12 : 0.09) : 0, t, 0.15);
   engineOsc.frequency.setTargetAtTime(f, t, 0.1); engineOsc2.frequency.setTargetAtTime(f * 0.5, t, 0.1);
   engineFilter.frequency.setTargetAtTime(300 + Math.abs(speed) * 40, t, 0.1);
 }

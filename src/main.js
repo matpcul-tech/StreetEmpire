@@ -10,12 +10,12 @@ import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, blockCenter, pla
 import { buildCity } from './city.js';
 import { loadKit } from './kit.js';
 import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './vehicles.js';
-import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
+import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight, ridePose } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { createRadio } from './radio.js';
-import { routeTo } from './state.js';
+import { routeTo, isBike } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -787,6 +787,7 @@ function guideTarget(s, p) {
   return null;
 }
 
+const bikeGripL = new THREE.Vector3(), bikeGripR = new THREE.Vector3();
 const DRIVER_DROP = 0.55; // seat height minus the hips of the Driving_Loop pose
 function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' || type === 'pickup' ? 0.8 : 0.55; }
 // a seated driver's head tops out about 1.64 m above his seat position (measured, caps included);
@@ -885,24 +886,32 @@ function frame(now) {
     // tire smoke and skid marks from the rear wheels while sliding
     if (c.skid && !c.wrecked && d2 < 70 * 70) {
       const sn = Math.sin(c.ry), cs = Math.cos(c.ry);
-      for (const side of [-1, 1]) {
-        const wx = c.x - sn * 1.35 + cs * 0.75 * side, wz = c.z - cs * 1.35 - sn * 0.75 * side;
+      for (const side of isBike(c) ? [0] : [-1, 1]) { // a bike lays one line from its rear tire
+        const wx = c.x - sn * (side ? 1.35 : 0.75) + cs * 0.75 * side, wz = c.z - cs * (side ? 1.35 : 0.75) - sn * 0.75 * side;
         skids.mark(c.id + side, wx, wz);
         if (Math.random() < (LOW ? 0.25 : 0.5)) smoke.emit(wx, 0.4, wz, false, false);
       }
       if (p.car === c.id) skidVol = Math.min(1, c.slip * 2 + 0.4);
-    } else { skids.lift(c.id + -1); skids.lift(c.id + 1); }
+    } else { skids.lift(c.id + -1); skids.lift(c.id + 1); skids.lift(c.id + 0); }
     // visible driver
     const occupied = (c.ai && !c.wrecked) || (c.cops && s.ents.some((e) => e.car === c.id));
     for (const ch of g.children) if (ch.userData.beam) ch.visible = ch.visible && (occupied || p.car === c.id); // parked cars keep their lights off
     if (!(occupied || p.car === c.id)) { g.userData.flares.visible = false; g.userData.tails.material.color && (g.userData.tails.visible = true); }
-    const wantDriver = peopleReady && occupied && d2 < DRIVER_DIST * DRIVER_DIST;
     const u = g.userData;
+    // a bike has no cabin: whoever rides it is drawn on the seat, the player included, and leans with the bike
+    const riding = u.bike && p.car === c.id && p.hp > 0;
+    const wantDriver = peopleReady && (riding || (occupied && d2 < DRIVER_DIST * DRIVER_DIST));
     if (wantDriver && !u.driver) {
-      const look = c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
-      if (modelReady(look.model)) { u.driver = makeCharacter(look, false); u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
-    } else if (!wantDriver && u.driver) { g.remove(u.driver); u.driver = null; }
+      const look = riding ? lookFor(p, CREWS) : c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
+      if (modelReady(look.model)) {
+        u.driver = makeCharacter(look, false);
+        if (u.bike) { u.driver.position.set(0, u.seat[0] - DRIVER_DROP, u.seat[1]); u.model.add(u.driver); }
+        else { u.driver.position.set(-0.42, seatY(c, u), 0.15); g.add(u.driver); }
+        u.driver.rotation.y = 0;
+      }
+    } else if (!wantDriver && u.driver) { u.driver.parent.remove(u.driver); u.driver = null; }
     if (u.driver) animate(u.driver, { hp: 1 }, rdt, true);
+    if (u.driver && u.bike) { u.model.updateWorldMatrix(true, false); ridePose(u.driver, bikeGripL.copy(u.grips[0]).applyMatrix4(u.model.matrixWorld), bikeGripR.copy(u.grips[1]).applyMatrix4(u.model.matrixWorld)); } // hands on the grips, knees around the tank
     // damage smoke
     if (c.hp < c.max * 0.5 && Math.random() < (c.wrecked ? 0.5 : c.hp < c.max * 0.25 ? 0.3 : 0.12) * (LOW ? 0.6 : 1)) smoke.emit(c.x + Math.sin(c.ry) * 1.8, 1.2, c.z + Math.cos(c.ry) * 1.8, c.wrecked || c.hp < c.max * 0.25, c.wrecked);
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }
@@ -911,8 +920,9 @@ function frame(now) {
   // car entry and exit moments
   if (p.car !== prevCar) {
     const pg = charViz.get(p.id);
-    if (p.car && p.hp > 0) cine.car('in', carViz.get(p.car), pg, pendingJack);
-    else if (!p.car && prevCar && p.hp > 0 && !(p.downT > 0) && !cine.pausesSim) { const cg = carViz.get(prevCar); if (cg && pg && Math.hypot(cg.position.x - p.x, cg.position.z - p.z) < 4) cine.car('out', cg, pg); }
+    // bikes have no door to open: you are on or off at once
+    if (p.car && p.hp > 0 && !carViz.get(p.car)?.userData.bike) cine.car('in', carViz.get(p.car), pg, pendingJack);
+    else if (!p.car && prevCar && p.hp > 0 && !(p.downT > 0) && !cine.pausesSim) { const cg = carViz.get(prevCar); if (cg && !cg.userData.bike && pg && Math.hypot(cg.position.x - p.x, cg.position.z - p.z) < 4) cine.car('out', cg, pg); }
     prevCar = p.car; pendingJack = null;
   }
   // Unc briefing: starts as soon as both characters are drawn
@@ -925,7 +935,7 @@ function frame(now) {
   if (started) updateSpots(s, p, now);
   wasDown = p.downT > 0;
   smoke.update(rdt);
-  sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
+  sfx.setEngine(!!pcar, pcar ? pcar.v : 0, isBike(pcar));
   radio.setOn(started && !!pcar && !paused && !s.over && !pcar.wrecked && !(p.downT > 0));
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
   // headlight throw on the road: an additive ground decal on every platform
@@ -980,7 +990,8 @@ function frame(now) {
   lookIdle += rdt;
   if (pcar) { const head = pcar.ry * 0.6 + (pcar.mh ?? pcar.ry) * 0.4, target = head + Math.PI; let d = target - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); if (lookIdle > 0.5) yaw += d * Math.min(1, rdt * (2.2 + Math.abs(pcar.v) * 0.08)); }
   const downK = p.downT > 0 ? 1 - p.downT / DOWN_TIME : 0;
-  const dist = (pcar ? 8.8 + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? 2.5 : 1.7) + downK * 3;
+  const pbike = isBike(pcar); // the camera rides closer and lower behind a bike
+  const dist = (pcar ? (pbike ? 6.2 : 8.8) + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? (pbike ? 2.1 : 2.5) : 1.7) + downK * 3;
   let dd = dist;
   for (; dd > 1.5; dd -= 0.5) { const cx = pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, cy = h + Math.sin(pitch) * dd, cz = pv.z + Math.cos(yaw) * Math.cos(pitch) * dd; if (!insideBuilding(cx, cz, 0.3, cy)) break; }
   tmp.set(pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, Math.max(0.6, h + Math.sin(pitch) * dd), pv.z + Math.cos(yaw) * Math.cos(pitch) * dd);

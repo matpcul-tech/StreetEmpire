@@ -14,6 +14,7 @@ The build kit swaps the built-in cars, buildings and people for downloaded model
 | Kind | Slots | In game |
 | --- | --- | --- |
 | car | sedan, muscle, suv, van, taxi, police, lowrider, pickup | scaled to 4.4 m long (set `len`), sits on the road, wheels spin and steer, paint changes per car, police get the light bar, headlight beams and brake glow are added |
+| motorcycle | cruiser (uploaded to `kit-inbox/cars` like a car) | scaled to 2.35 m long, leans into turns, rests on its side stand when parked, one headlight beam and one tail glow, the rider sits in the open with hands on the grips. Seats one. See Motorcycles below |
 | building | house, store, apt, tower, shed | fitted into the 13 m corner lot, turned to face a street, the hustle sign is added; a slot can hold variants (`house`, `house-2`, `house-3`) and the city mixes them |
 
 Which buildings each district uses: Eastside is store, house and apt. Downtown is tower and apt. Harbor is shed.
@@ -62,6 +63,21 @@ For CC BY models, upload a text file with the same name next to it (`sedan.txt` 
 Meshy buildings sometimes ship with normals pointing into the model, which shows in game as black holes and shredded stripes on the walls. `node tools/kit-normals.mjs --dry public/models/kit/buildings/*.glb` reports them; run it without `--dry` (add `--all` when the walls still look shredded) to fix the file, then `node tools/kit-import.mjs far` so the far version matches.
 
 Other commands: `list`, `remove car sedan`, `remove building house house-2`, `inbox`.
+
+## Motorcycles
+
+A raw Meshy bike is one mesh, so nothing can turn. `tools/bike-split.mjs` separates the two wheels without remodeling anything: it finds the tires, fits the axles, and moves each tire with its rim, spokes, hub and brake disc under its own node. Fork, fenders and brake calipers stay on the frame.
+
+```
+node tools/bike-split.mjs raw.glb split.glb            # add --front +x (or +z, -z) when the bike does not face -x
+node tools/kit-import.mjs add car cruiser split.glb --keep --no-paint --yaw 0 --name cruiser-v2
+```
+
+The split prints the axle positions, wheel sizes and triangle counts; check them, then look at the bike in kit.html. The front wheel spins but does not turn with the bars (fork and fender are one piece with the frame), which the lean hides in play. To get real steering, the modeler has to deliver the fork, front fender and front wheel as one separate part.
+
+Where the rider sits, where the hands go and where the lamps glow are worked out from the model's size. If a new bike has a different shape, set them in its kit.json entry in meters: `"seat": [y, z]`, `"grip": [y, z]`, `"gripX": 0.44`, `"head": [y, z]`, `"tail": [y, z]`.
+
+`node tools/bike-test.mjs` checks the riding rules. `node tools/bike-shots.mjs <url> <dir>` shoots the bike parked, ridden, leaning and at night.
 
 ## Checking a model for flaws
 

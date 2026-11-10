@@ -1,6 +1,7 @@
 // Cars from Kenney's Car Kit (CC0): sedan, sports (muscle), SUV, van, taxi and
 // police. Wheels are separate nodes so they spin and steer. Lights, beams,
-// sirens and damage smoke are added in code.
+// sirens and damage smoke are added in code. Motorcycles (kit slot cruiser) lean
+// into turns, carry one headlight and one tail lamp, and seat the rider in the open.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -279,11 +280,35 @@ function makeKitCar(c, KT) {
   const { model, wheels } = cloneKitCar(KT, paintHex);
   model.rotation.order = 'YXZ';
   g.add(model);
+  if (KT.bike) return makeKitBike(g, c, KT, model, wheels);
   const roof = new THREE.Box3().setFromObject(model, true).max.y;
   const L = addLights(g, c, roof + 0.08);
   L.heads.visible = false; L.tails.visible = false; // the model has its own lamps; only the glow flares and beams are added
   g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true, roof };
   g.userData.paintHex = paintHexFor(c);
+  return g;
+}
+
+// A motorcycle: the kit model, one headlight beam and glow, one tail glow. The glows and the beam hang
+// off the model so they lean with it. Lamp and seat spots are fractions of the model's box (length z, height y),
+// overridable per model in kit.json ("head", "tail", "seat", "grip": [y, z] and "gripX", in meters).
+const BIKE_SPOTS = { head: [0.77, 0.29], tail: [0.46, -0.485], seat: [0.68, -0.035], grip: [0.897, 0.113] }; // seat: where the rider's seat point goes; grip: the handlebar grips
+const BIKE_GRIP_X = 0.415; // each grip's distance from the centerline, as a fraction of the model's width
+let bikeBeam = null;
+function makeKitBike(g, c, KT, model, wheels) {
+  const P = parts(), S = KT.size, spot = (k) => KT.spec[k] || [BIKE_SPOTS[k][0] * S.y, BIKE_SPOTS[k][1] * S.z];
+  const head = spot('head'), tail = spot('tail'), seat = spot('seat');
+  const flares = new THREE.Group();
+  const f = new THREE.Sprite(P.flare); f.position.set(0, head[0], head[1] + 0.12); f.scale.setScalar(0.8); flares.add(f);
+  const r = new THREE.Sprite(P.flareR); r.position.set(0, tail[0], tail[1] - 0.06); r.scale.setScalar(0.7); r.userData.tail = true; flares.add(r);
+  model.add(flares);
+  bikeBeam ||= P.beam.clone().rotateX(0.06);
+  const beam = new THREE.Mesh(bikeBeam, P.beamMat); beam.position.set(0, head[0], head[1] + 0.1); beam.userData.beam = true; g.add(beam);
+  const tails = new THREE.Mesh(new THREE.BufferGeometry(), P.tailDim); g.add(tails); // the model has its own tail lamp; this only carries the brake state
+  const grip = spot('grip'), gx = KT.spec.gripX || BIKE_GRIP_X * S.x;
+  g.userData = { wheels, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails, flares, kit: true, bike: true, seat, roof: S.y, halfW: 0.45,
+    grips: [new THREE.Vector3(gx, grip[0], grip[1]), new THREE.Vector3(-gx, grip[0], grip[1])] }; // left, right, in the model's space
+  g.userData.paintHex = 0x1a1a1c;
   return g;
 }
 
@@ -320,8 +345,8 @@ function lampGeos(grp) {
 
 export function updateCar(g, c, dt, night, now) {
   const u = g.userData;
-  u.spinA += (c.v * dt) / 0.37;
-  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
+  u.spinA += (c.v * dt) / (u.bike ? 0.33 : 0.37);
+  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front && !u.bike) w.node.rotation.y = c.steer; } // a bike's fork and fender are one piece with the frame, so its front wheel only spins
   let d = c.ry - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
   g.rotation.y += Math.abs(d) > 0.01 ? d * Math.min(1, dt * (c.ai ? 6 : 30)) : d;
   g.position.x += (c.x - g.position.x) * Math.min(1, dt * (c.ai ? 8 : 40));
@@ -329,12 +354,17 @@ export function updateCar(g, c, dt, night, now) {
   // suspension: springy pitch under throttle and brakes, body roll in turns and
   // slides, and a vertical bounce kicked by crashes (u.bounce)
   const acc = dt > 0 ? (c.v - (u.lastV ?? c.v)) / dt : 0; u.lastV = c.v;
-  const tPitch = THREE.MathUtils.clamp(-acc * 0.0035, -0.07, 0.07), tRoll = -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
+  // cars roll out of a turn; a bike leans into it by the angle that balances the turn (v squared over g r),
+  // and rests a little to the left on its side stand when nobody is on it
+  const tPitch = THREE.MathUtils.clamp(-acc * (u.bike ? 0.006 : 0.0035), u.bike ? -0.1 : -0.07, 0.07);
+  const tRoll = u.bike
+    ? (c.wrecked ? -1.25 : c.driver == null && !c.ai ? -0.13 : THREE.MathUtils.clamp(Math.atan(c.v * c.v * Math.tan(c.steer) / (1.9 * 9.8)) * 0.85 + (c.slip || 0) * Math.sign(c.steer || 0) * 0.25, -0.72, 0.72))
+    : -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
   u.pv = ((u.pv || 0) + ((tPitch - (u.pitch || 0)) * 90 - (u.pv || 0) * 9) * dt); u.pitch = (u.pitch || 0) + u.pv * dt;
-  u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * 80 - (u.rv || 0) * 8) * dt); u.roll = (u.roll || 0) + u.rv * dt;
+  u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * (u.bike ? 60 : 80) - (u.rv || 0) * (u.bike ? 13 : 8)) * dt); u.roll = (u.roll || 0) + u.rv * dt;
   u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
   u.model.rotation.x = u.pitch; u.model.rotation.z = u.roll; u.model.position.y = u.baseY + by;
-  for (const ch of g.children) if (ch.userData.beam) ch.visible = night && !c.wrecked;
+  for (const ch of g.children) if (ch.userData.beam) { ch.visible = night && !c.wrecked; if (u.bike) ch.rotation.z = u.roll || 0; }
   // brake lights glow when slowing hard or stopped in traffic, flares at night
   const braking = !c.wrecked && (acc < -2.5 || (c.ai && Math.abs(c.v) < 0.5));
   u.tails.material = braking ? parts().tailBrake : night && !c.wrecked ? parts().tail : parts().tailDim;

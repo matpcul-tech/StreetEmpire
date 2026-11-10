@@ -47,6 +47,12 @@
       "yaw": 0,
       "length": 5.2,
       "paint": true
+    },
+    "cruiser": {
+      "file": "cars/cruiser-v1.glb",
+      "yaw": 0,
+      "length": 2.35,
+      "paint": false
     }
   },
   "buildings": {

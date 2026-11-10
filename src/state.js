@@ -44,7 +44,10 @@ export const CAR_TYPES = {
   sedan: { max: 28, acc: 16, hp: 100 }, muscle: { max: 36, acc: 21, hp: 100 }, suv: { max: 26, acc: 15, hp: 140 },
   van: { max: 22, acc: 12, hp: 160 }, taxi: { max: 28, acc: 16, hp: 100 }, police: { max: 34, acc: 20, hp: 150 },
   lowrider: { max: 26, acc: 15, hp: 110 }, pickup: { max: 27, acc: 15, hp: 135 },
+  // motorcycle: quick off the line, short wheelbase, narrow, fragile, and it seats only the rider
+  cruiser: { max: 37, acc: 25, hp: 70, bike: true, wb: 1.9, rad: 0.9 },
 };
+export const isBike = (c) => !!(c && CAR_TYPES[c.type] && CAR_TYPES[c.type].bike);
 // kb: knockback speed on hit. Ranged weapons spend ammo (pistol) or shells (shotgun).
 // The five weapons stay as they are. Timing, arc and stun are what separate them:
 // fists are a fast jab then cross, knuckles stun, the bat is a slow wide cleave,
@@ -97,6 +100,7 @@ export function createState(seed = 1, cfg = {}) {
     s.cars.push(makeCar(s, bc.x + PITCH / 2 - 5.6, bc.z - 10 + (i % 3) * 6, 0, types[i % types.length], false));
     if (i % 2 === 0) s.cars.push(makeCar(s, bc.x - 8 + (i % 4) * 3, bc.z - PITCH / 2 + 5.6, Math.PI / 2, types[(i + 2) % types.length], false));
   });
+  parkBikes(s);
   // pickups in alleys
   [[1, 0, 'bat'], [1, 1, 'pistol'], [2, 2, 'knuckles'], [3, 3, 'shotgun'], [3, 1, 'bat'], [1, 3, 'pistol'], [3, 0, 'knuckles'], [2, 4, 'shotgun'],
     [5, 1, 'bat'], [1, 5, 'pistol'], [5, 4, 'knuckles'], [4, 6, 'shotgun'], [6, 2, 'pistol'], [2, 7, 'bat'], [6, 6, 'shotgun'], [7, 4, 'knuckles'], [4, 8, 'pistol'], [8, 5, 'bat']].forEach(([gx, gz, type], k) => {
@@ -109,7 +113,15 @@ export function createState(seed = 1, cfg = {}) {
 function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
 function makeCar(s, x, z, ry, type, ai) {
   const T = CAR_TYPES[type];
-  return { id: 'c' + s.nextId++, type, x, z, ry, v: 0, steer: 0, driver: null, ai, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: ai ? 8 + R(s) * 3 : 0, paint: Math.floor(R(s) * 8) };
+  return { id: 'c' + s.nextId++, type, x, z, ry, v: 0, steer: 0, driver: null, ai, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: ai ? 8 + R(s) * 3 : 0, paint: T.bike ? 0 : Math.floor(R(s) * 8) }; // bikes draw no random number, so adding them leaves the seeded world as it was
+}
+// Motorcycles parked at the curb: one by the starting corner, then one on every fourth block,
+// on the stretch of curb the parked cars leave empty. Saves from before bikes get them through migrate.
+function parkBikes(s) {
+  s.bikesV = 1;
+  const spot = (x, z, ry) => { if (!s.cars.some((c) => dist2(c, { x, z }) < 16)) s.cars.push(makeCar(s, x, z, ry, 'cruiser', false)); };
+  const b0 = blockCenter(s.blocks[0]); spot(b0.x + PITCH / 2 - 5.9, b0.z + 9, 0);
+  s.blocks.forEach((b, i) => { if (i % 4 === 1) { const bc = blockCenter(b); spot(bc.x - 8 + (i % 3) * 5, bc.z - PITCH / 2 + 5.9, Math.PI / 2); } });
 }
 function spawnTraffic(s, anywhere) {
   const p = player(s);
@@ -395,7 +407,7 @@ export function applyAction(s, playerId, a) {
         if (c.type === 'police') addHeat(s, p, 25);
         c.driver = p.id; c.ai = false; p.car = c.id;
         missionCheck(s, p);
-      } else log(s, 'No car close enough.');
+      } else log(s, 'No ride close enough.');
     }
   } else if (a.type === 'buy') buy(s, p, a.item);
   else if (a.type === 'house') buyHouse(s, p);
@@ -415,7 +427,8 @@ export function nearestCar(s, p, r) {
 }
 function exitCar(s, p) {
   const c = s.cars.find((c) => c.id === p.car); c.driver = null; p.car = null;
-  p.x = c.x - Math.cos(c.ry) * 2.4; p.z = c.z + Math.sin(c.ry) * 2.4;
+  const off = isBike(c) ? 1.1 : 2.4; // step off a bike right beside it
+  p.x = c.x - Math.cos(c.ry) * off; p.z = c.z + Math.sin(c.ry) * off;
 }
 
 function startDodge(s, p, dx, dz) {
@@ -571,7 +584,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.v += throttle * (braking ? 34 : c.v < 0 ? 10 : T.acc) * dt;
   c.v *= 1 - (handbrake ? 0.7 : Math.abs(throttle) < 0.05 ? 0.9 : 0.25) * dt;
   c.v = Math.max(-9, Math.min(T.max, c.v));
-  c.ry -= (c.v / 2.7) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
+  c.ry -= (c.v / (T.wb || 2.7)) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
   const grip = handbrake ? 1.1 : 6.5 - sp * 2;
   c.mh += angDiff(c.ry, c.mh) * Math.min(1, dt * grip);
   c.slip = Math.abs(angDiff(c.ry, c.mh));
@@ -580,7 +593,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt;
   clampWorld(c);
   c.scrapeT = Math.max(0, (c.scrapeT || 0) - dt);
-  collideBuildings(c, 1.6, () => {
+  collideBuildings(c, T.rad || 1.6, () => {
     const n = Math.abs(c.v);
     if (c.scrapeT <= 0 && n > 3) { c.scrapeT = 0.15; s.fx.push({ type: n > 10 ? 'crash' : 'scrape', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0, n }); }
     carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 0.85; c.mh = c.ry;
@@ -1151,6 +1164,7 @@ export function contactFor(s) {
 export function migrate(s) {
   ensureContacts(s);
   if (s.jobsV !== 2) { s.jobsV = 2; s.mission = null; s.missionIdx = s.missionIdx > 0 ? 1 : 0; }
+  if (!s.bikesV) parkBikes(s); // saves from before motorcycles
   return s;
 }
 const missionCar = (s, m) => (m.carId ? s.cars.find((c) => c.id === m.carId) : null);
@@ -1441,8 +1455,8 @@ export function step(s, dt) {
       // squad rides along: run to the car, hop in (1.2 s max), hop out beside it when you get out
       if (l && l.car && !e.car) {
         const car = s.cars.find((c) => c.id === l.car); e.board = (e.board || 0) + dt;
-        if (car && (dist2(car, e) < 3.2 * 3.2 || e.board > 1.2) && s.ents.filter((x) => x.car === car.id).length < 4) { e.car = car.id; e.board = 0; continue; }
-        if (car) { goal = car; followSpeed = 9.6; foe = null; }
+        if (car && !isBike(car) && (dist2(car, e) < 3.2 * 3.2 || e.board > 1.2) && s.ents.filter((x) => x.car === car.id).length < 4) { e.car = car.id; e.board = 0; continue; }
+        if (car && !isBike(car)) { goal = car; followSpeed = 9.6; foe = null; } // a bike seats only the rider: the squad follows on foot and catches up after the ride
       } else if (e.car) {
         const car = s.cars.find((c) => c.id === e.car);
         if (l && l.car === e.car && car) { e.x = car.x; e.z = car.z; continue; }
