@@ -9,6 +9,9 @@ function makeNoise() {
 }
 function noiseSrc(loop) { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = !!loop; return s; }
 
+// the shared context and output, for modules that make their own sound (the radio)
+export const audio = () => (ctx ? { ctx, master } : null);
+
 export function initAudio() {
   if (ctx) { ctx.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
