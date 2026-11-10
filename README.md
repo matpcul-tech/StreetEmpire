@@ -38,6 +38,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 ## What is new in v0.12
 
 - A 19 job chain across four contacts: Unc (Eastside), Dee (Midtown), Rook (Downtown) and Sal (Harbor). Job types: fetch, pickups, car theft, block takeover, clean delivery, tailing, a lap of the Loop, a car chase, crew fights, block defense, losing the police, and marked targets.
+- Three motorcycles to ride: a sport bike (fastest), a cruiser (slower, tougher) and a dirt bike (quickest off the line). One of each is parked by the starting corner.
 - A route line on the radar: the way along the streets to the job marker, or to the contact with the next job.
 - Police escalation: four stars brings tactical units (more officers, three to a tougher cruiser), five stars puts roadblocks on the street ahead of your car.
 - Car radio: RADIO on a phone or M on a keyboard steps through the stations. Three built-in stations are made in code; your own tracks go in `public/radio/` (see docs/radio.md).

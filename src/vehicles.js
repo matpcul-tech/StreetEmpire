@@ -277,7 +277,7 @@ function makeBike(c) {
   model.rotation.order = 'YXZ';
   g.add(model);
   const L = addBikeLights(g, spec);
-  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex,
+  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex, axle: spec.axle || 'x', // axle: the axis the wheel nodes spin on (a file built sideways uses z)
     rider: spec.rider || null, // kit.json: seat position and pose for this bike, see BIKE_SEAT in main.js
     grips: spec.grips ? [new THREE.Vector3(spec.grips[0], spec.grips[1], spec.grips[2]), new THREE.Vector3(-spec.grips[0], spec.grips[1], spec.grips[2])] : null }; // left and right handlebar grip, in the model's space
   return g;
@@ -365,7 +365,7 @@ export function updateCar(g, c, dt, night, now) {
   u.spinA += (c.v * dt) / (u.bike ? u.wheelR : 0.37);
   for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
   if (u.bike) {
-    for (const w of u.bikeWheels) w.rotation.x = u.spinA;
+    for (const w of u.bikeWheels) w.rotation[u.axle] = u.spinA; // a model built sideways in its file spins its wheels on its own axle axis
     // the bars turn less the faster it goes; at speed a bike turns by leaning
     if (u.steer) u.steer.node.quaternion.setFromAxisAngle(u.steer.axis, -c.steer * (0.75 - 0.45 * Math.min(1, Math.abs(c.v) / 16)));
   }
