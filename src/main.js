@@ -16,7 +16,7 @@ import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
-import { routeTo } from './state.js';
+import { routeTo, RAMPS } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -234,6 +234,15 @@ for (let i = 0; i < 8; i++) {
   const geo = new THREE.RingGeometry(0.62, 0.84, 20); geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff5530, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
   mesh.visible = false; mesh.frustumCulled = false; scene.add(mesh); tellRings.push(mesh);
+}
+// Stunt ramps: an orange wedge in the middle of the street, low end facing the run-up.
+{
+  const sh = new THREE.Shape(); sh.moveTo(-3, 0); sh.lineTo(2.2, 0); sh.lineTo(2.2, 1.35); sh.closePath();
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: 3, bevelEnabled: false }); geo.translate(0, 0, -1.5); geo.rotateY(-Math.PI / 2); // length along +z, low end at -z
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d'); cx.fillStyle = '#e8891c'; cx.fillRect(0, 0, 64, 64); cx.fillStyle = '#1a1a1a'; for (let i = -64; i < 64; i += 32) { cx.beginPath(); cx.moveTo(i, 64); cx.lineTo(i + 16, 64); cx.lineTo(i + 80, 0); cx.lineTo(i + 64, 0); cx.fill(); }
+  const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(0.6, 0.6); tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, metalness: 0.1 });
+  for (const r of RAMPS) { const m = new THREE.Mesh(geo, mat); m.position.set(r.x, 0, r.z); m.rotation.y = r.ry; m.castShadow = true; m.receiveShadow = true; scene.add(m); }
 }
 const hitNums = [];
 const hitProj = new THREE.Vector3();
@@ -493,7 +502,7 @@ function drawRadar(now) {
     } }
   // shops ($) and safehouses (H) on the radar, upright whatever way the map is turned
   const tag = (q, ch, col) => { if (Math.abs(q.x - p.x) > 130 || Math.abs(q.z - p.z) > 130) return; dot(q.x, q.z, '#000', 8); dot(q.x, q.z, col, 6.5); ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(ch, 0, 0.5); ctx.restore(); };
-  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff'));
+  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
   for (const e of s.ents) {
     if (e.hp <= 0 || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
     if (e.kind === 'npc') dot(e.x, e.z, CREWS[e.crew].css, 3);
@@ -617,7 +626,7 @@ function handleFx(list) {
       if (vol > 0) { if (big) sfx.crash(vol); else sfx.scrape(vol); }
       parts.burst(f.x, 0.6, f.z, big ? Math.min(24, 6 + n) : 6, big ? 6 : 4, { color: 0xffc070, life: 0.35, g: 9, s: 0.05, stretch: 1, bounce: 0.3 });
       if (big) parts.burst(f.x, 0.3, f.z, 6, 2, { color: 0x8a8070, life: 0.8, g: 1, s: 0.3, up: 0.4 });
-      if (f.by === p.id) { shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + (big ? 0.25 : 0.06); }
+      if (f.by === p.id) { if (big && n > 20) { slowT = 0.4; fovKick = 5; } shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + (big ? 0.25 : 0.06); }
     }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
     else if (f.type === 'guards') { pop(`${f.n} guard${f.n > 1 ? 's' : ''} hold the block`); }
@@ -627,6 +636,22 @@ function handleFx(list) {
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
+    else if (f.type === 'boom') {
+      sfx.boom(Math.max(0.15, 1 - d / 120));
+      if (d < 140) {
+        flashes.flash(f.x, 1.6, f.z, 14); flashes.flash(f.x + 1, 2.6, f.z - 1, 9);
+        parts.burst(f.x, 1.2, f.z, LOW ? 26 : 50, 13, { color: 0xffa030, life: 0.9, g: 10, s: 0.11, stretch: 1, bounce: 0.3, up: 1.4 });
+        parts.burst(f.x, 0.8, f.z, LOW ? 10 : 20, 7, { color: 0x2a2622, life: 1.4, g: 6, s: 0.22, bounce: 0.2, up: 1.6 });
+        for (let i = 0; i < (LOW ? 8 : 16); i++) smoke.emit(f.x + (Math.random() - 0.5) * 3, 1 + Math.random() * 2, f.z + (Math.random() - 0.5) * 3, true, true);
+      }
+      const g = carViz.get(f.car); if (g && !g.userData.charred) { g.userData.charred = true; g.userData.bounce = 1.2; g.traverse((o) => { if (o.isMesh && o.material && o.material.color) { o.material = o.material.clone(); o.material.color.multiplyScalar(0.16); if (o.material.emissive) o.material.emissive.setScalar(0); } }); }
+      if (d < 60) { shake = Math.max(shake, 1.1 - d / 60); camKick = Math.max(camKick, 0.8); if (d < 30) { slowT = 0.6; fovKick = 7; } if (isTouch && navigator.vibrate) navigator.vibrate([90, 40, 140]); }
+    }
+    else if (f.type === 'fire') { if (d < 60) parts.burst(f.x, 1.2, f.z, 12, 4, { color: 0xff7a20, life: 0.5, g: 2, s: 0.1, up: 1.5 }); if (p.car === f.car) showBig('ON FIRE: GET OUT', true); }
+    else if (f.type === 'launch') { slowT = 0.5; fovKick = 6; sfx.whoosh(); }
+    else if (f.type === 'land') { if (f.by === p.id) { shake = Math.max(shake, Math.min(0.9, 0.2 + f.n * 0.06)); const g = carViz.get(f.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + 0.5; if (isTouch && navigator.vibrate) navigator.vibrate(70); } if (vol > 0) sfx.impact('bat', vol); parts.burst(f.x, 0.2, f.z, 14, 4, { color: 0x9a8a78, life: 0.7, g: 1.5, s: 0.25, up: 0.4 }); }
+    else if (f.type === 'stunt') { showBig(`STUNT JUMP ${Math.round(f.dist)} M`); pop(`+$${f.pay}${f.first ? ` ramp ${f.done} of ${f.of}` : ''}`); sfx.chime(true); }
+    else if (f.type === 'nearmiss') { pop(`NEAR MISS${f.n > 1 ? ' x' + f.n : ''} +$${f.pay}`); sfx.whoosh(); fovKick = Math.max(fovKick, 3); }
     else if (f.type === 'bark') { if (d < 26 && !cine.active) floatSay(f.id, f.x, f.z, f.text, f.set === 'call' ? 'call' : f.set === 'fight' || f.set === 'rage' || f.set === 'jacked' ? 'mad' : ''); }
     else if (f.type === 'called') { pop('A witness called it in', 'bad'); sfx.chime(false); floatSay(f.id, f.x, f.z, 'They are on the way.', 'call'); }
     else if (f.type === 'dive') { if (d < 30) parts.burst(f.x, 0.2, f.z, 5, 1.5, { color: 0x9a8064, life: 0.5, g: 1, s: 0.2, up: 0.3 }); }
@@ -971,6 +996,9 @@ function frame(now) {
       }
     } else if (!wantDriver && u.driver) { u.driver.removeFromParent(); u.driver = null; }
     if (u.driver) { animate(u.driver, { hp: 1 }, rdt, true); if (u.bike) bikePose(u.driver, u.seatPose, u); }
+    // a burning car: flames from the hood until it goes up, and for a few seconds on the wreck after
+    if (u.charred && c.wreckT < 9) u.afterT = 1; else u.afterT = 0;
+    if ((c.burn > 0 || u.afterT) && d2 < 90 * 90) { const hx = c.x + Math.sin(c.ry) * 1.5, hz = c.z + Math.cos(c.ry) * 1.5; parts.burst(hx, 1.1 + (c.y || 0), hz, LOW ? 1 : 2, 1.6, { color: Math.random() < 0.5 ? 0xff8a1a : 0xffd040, life: 0.45, g: -3, s: 0.16, up: 2 }); if (Math.random() < 0.3) smoke.emit(hx, 1.6, hz, true, true); }
     // damage smoke
     if (c.hp < c.max * 0.5 && Math.random() < (c.wrecked ? 0.5 : c.hp < c.max * 0.25 ? 0.3 : 0.12) * (LOW ? 0.6 : 1)) smoke.emit(c.x + Math.sin(c.ry) * 1.8, 1.2, c.z + Math.cos(c.ry) * 1.8, c.wrecked || c.hp < c.max * 0.25, c.wrecked);
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }
@@ -1169,6 +1197,6 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
+window.__game = session; window.__dbg = { RAMPS, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

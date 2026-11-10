@@ -13,6 +13,7 @@
     "test:retarget": "node tools/retarget-test.mjs",
     "test:bike": "node tools/bike-test.mjs",
     "test:city": "node tools/city-test.mjs",
+    "test:chaos": "node tools/chaos-test.mjs",
     "preview": "vite preview",
     "kit": "node tools/kit-import.mjs"
   },

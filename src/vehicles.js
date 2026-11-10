@@ -373,6 +373,8 @@ export function updateCar(g, c, dt, night, now) {
   g.rotation.y += Math.abs(d) > 0.01 ? d * Math.min(1, dt * (c.ai ? 6 : 30)) : d;
   g.position.x += (c.x - g.position.x) * Math.min(1, dt * (c.ai ? 8 : 40));
   g.position.z += (c.z - g.position.z) * Math.min(1, dt * (c.ai ? 8 : 40));
+  g.rotation.order = 'YXZ'; g.position.y += ((c.y || 0) - g.position.y) * Math.min(1, dt * 30); // off a stunt ramp
+  g.rotation.x += ((c.y > 0 ? THREE.MathUtils.clamp(-(c.vy || 0) * 0.035, -0.3, 0.3) : 0) - g.rotation.x) * Math.min(1, dt * 8);
   // suspension: springy pitch under throttle and brakes, body roll in turns and
   // slides, and a vertical bounce kicked by crashes (u.bounce)
   const acc = dt > 0 ? (c.v - (u.lastV ?? c.v)) / dt : 0; u.lastV = c.v;
