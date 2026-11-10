@@ -12,6 +12,7 @@
     "test:combat": "node tools/combat-test.mjs",
     "test:retarget": "node tools/retarget-test.mjs",
     "test:bike": "node tools/bike-test.mjs",
+    "test:city": "node tools/city-test.mjs",
     "preview": "vite preview",
     "kit": "node tools/kit-import.mjs"
   },

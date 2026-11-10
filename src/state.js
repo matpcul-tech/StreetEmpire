@@ -433,7 +433,8 @@ export function applyAction(s, playerId, a) {
         if (c.ai) {
           log(s, 'You jacked a ride.'); addHeat(s, p, 6);
           const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: 8, look: Math.floor(R(s) * 100), x: c.x - Math.cos(c.ry) * 2.2, z: c.z + Math.sin(c.ry) * 2.2, fromX: p.x, fromZ: p.z });
-          s.ents.push(d); s.fx.push({ type: 'jack', car: c.id, ped: d.id });
+          if (c.type !== 'police' && carNerve(c) < 22) { d.flee = 0; d.angry = 10; d.hp = d.max = 45; d.cd = 1; } // one driver in five wants the car back
+          s.ents.push(d); s.fx.push({ type: 'jack', car: c.id, ped: d.id }); bark(s, d, 'jacked', true);
         }
         if (c.type === 'police') addHeat(s, p, 25);
         c.driver = p.id; c.ai = false; p.car = c.id;
@@ -493,7 +494,7 @@ function attack(s, p, targetId) {
     if (best && gun === 'pistol') p.ry = Math.atan2(best.x - p.x, best.z - p.z);
     const tx = best ? best.x : p.x + Math.sin(p.ry) * 22, tz = best ? best.z : p.z + Math.cos(p.ry) * 22;
     s.fx.push({ type: 'shot', x: p.x, z: p.z, tx, tz, by: p.id, gun, ry: p.ry });
-    addHeat(s, p, gun === 'shotgun' ? 10 : 8); panic(s, p.x, p.z, 30);
+    addHeat(s, p, gun === 'shotgun' ? 10 : 8); panic(s, p.x, p.z, 30, true, true);
     if (gun === 'pistol') { if (best) damage(s, best, w.dmg, p, true, w.kb); }
     else for (const [, e, d] of hits.slice(0, 3)) damage(s, e, Math.round(w.dmg * (1.6 - d / w.range)), p, true, w.kb * (1.3 - d / w.range));
     if (gun === 'pistol' && p.ammo <= 0) p.weapon = meleeFallback(p);
@@ -531,7 +532,66 @@ function attack(s, p, targetId) {
   } else s.fx.push({ type: 'whiff', x: p.x, z: p.z, by: p.id });
 }
 
-function panic(s, x, z, r) { for (const e of s.ents) if (e.kind === 'ped' && e.hp > 0 && (e.x - x) ** 2 + (e.z - z) ** 2 < r * r) { e.flee = 6 + R(s) * 4; e.fromX = x; e.fromZ = z; } }
+// ---------- the city reacts ----------
+// Every pedestrian has a temper, fixed for its life. Most run. Some stand and fight, some phone it in,
+// some stop to watch a fist fight, and some freeze with their hands up when a gun goes off close by.
+export const temper = (e) => { const n = (e.look * 37 + e.id * 11) % 100; return n < 12 ? 'fighter' : n < 26 ? 'caller' : n < 38 ? 'gawker' : n < 55 ? 'freezer' : 'runner'; };
+const carNerve = (c) => (parseInt(String(c.id).slice(1), 10) * 13) % 100;
+const BARKS = {
+  gun: ['He has a gun!', 'Get down!', 'Run!', 'Shots! Go, go!', 'Not today!'],
+  run: ['Whoa, whoa!', 'I am out of here!', 'Not my business!', 'Somebody stop him!'],
+  cower: ['Do not shoot!', 'Please, no!', 'Take it, take it!', 'I saw nothing!'],
+  call: ['I am calling this in!', 'Hello, police?', 'Yes, I can see him right now.'],
+  fight: ['Wrong one, buddy!', 'Oh, you want some?', 'Square up then!', 'You picked the wrong day!'],
+  gawk: ['Somebody film this!', 'Oh, he is getting cooked!', 'Hit him back!', 'This block, man...'],
+  car: ['Watch it!', 'Hey! Sidewalk!', 'Are you blind?', 'Learn to drive!'],
+  rage: ['My car! You are paying for that!', 'Get out! Get out of the car!', 'Look what you did!'],
+  jacked: ['That is my car!', 'Give it back!', 'You are dead, you hear me?'],
+  bail: ['Forget the car!', 'I am not dying in traffic!'],
+  armed: ['Is that a gun?', 'Easy, easy...', 'I do not want trouble.'],
+  hot: ['That is him from the news.', 'Cops are looking for you.', 'Keep walking, do not look.'],
+  respect: ['Respect.', 'Block looks good these days.', 'Orange runs this corner.', 'Hey, boss.'],
+};
+function bark(s, e, set, force, quiet = 5) {
+  if ((e.barkT || 0) > s.t || (!force && (s.barkT || 0) > s.t)) return;
+  const L = BARKS[set]; s.barkT = s.t + 0.9; e.barkT = s.t + quiet;
+  s.fx.push({ type: 'bark', x: e.x, z: e.z, id: e.id, set, text: L[(e.id + Math.floor(s.t * 7)) % L.length] });
+}
+// Something loud happened at x, z. by: the player did it. gun: it was a gunshot.
+function panic(s, x, z, r, by, gun) {
+  for (const e of s.ents) if (e.kind === 'ped' && e.hp > 0 && !(e.angry > 0) && !(e.call > 0) && e.hurtT !== s.t) {
+    const d2 = (e.x - x) ** 2 + (e.z - z) ** 2; if (d2 >= r * r) continue;
+    const T = temper(e);
+    e.fromX = x; e.fromZ = z;
+    if (gun && T === 'freezer' && d2 < 100) { e.cower = 2.5 + (e.id % 3) * 0.5; e.flee = 0; e.gawk = 0; bark(s, e, 'cower'); continue; }
+    if (!gun && T === 'gawker' && d2 > 49) { e.gawk = 6; e.flee = 0; continue; }
+    if (by && T === 'caller' && d2 > 64 && (s.callerT || 0) <= s.t) { e.call = 3.5; s.callerT = s.t + 8; e.flee = 0; e.gawk = 0; bark(s, e, 'call', true); continue; }
+    e.gawk = 0; e.flee = 6 + R(s) * 4; bark(s, e, gun ? 'gun' : 'run');
+  }
+  // drivers hear gunfire too: most floor it through the lights, a few leave the car where it stands and run
+  if (gun) for (const c of s.cars) if (c.ai && !c.wrecked && c.type !== 'police' && !c.mark && !c.scout && !c.roadblock && !(c.scare > 0) && (c.x - x) ** 2 + (c.z - z) ** 2 < r * r) {
+    if (carNerve(c) < 22 && Math.abs(c.v) < 7) { const d = ditch(s, c, x, z, false); bark(s, d, 'bail'); } else c.scare = 5 + (carNerve(c) % 3);
+  }
+}
+// The driver gets out and the car stays where it is. angry: he comes for the player instead of running.
+function ditch(s, c, fromX, fromZ, angry) {
+  c.ai = false; c.v = 0; c.scare = 0; c.ditched = true;
+  const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: angry ? 45 : 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: angry ? 0 : 8, angry: angry ? 14 : 0, cd: 0.8, look: (carNerve(c) * 7) % 100, x: c.x - Math.cos(c.ry) * 2.2, z: c.z + Math.sin(c.ry) * 2.2, fromX, fromZ });
+  s.ents.push(d); s.fx.push({ type: 'ditch', car: c.id, ped: d.id, angry: !!angry, x: c.x, z: c.z }); return d;
+}
+// The player's car hit this one. Once per car: the driver gets out swinging, or takes off, or leans on the horn.
+function rammed(s, o, by) {
+  if (!o.ai || o.wrecked || o.type === 'police' || o.mark || o.scout || o.roadblock || o.rammed) return;
+  o.rammed = true; const n = carNerve(o);
+  if (n < 28) { const d = ditch(s, o, by.x, by.z, true); bark(s, d, 'rage', true); } else if (n < 70) o.scare = 6; else o.honk = (o.honk || 0) + 4;
+}
+function pedHurt(s, e, src) {
+  e.call = 0; e.gawk = 0; e.cower = 0; e.hurtT = s.t;
+  e.fromX = src ? src.x : e.x; e.fromZ = src ? src.z : e.z;
+  const gun = src && (src.weapon === 'pistol' || src.weapon === 'shotgun');
+  if (e.hp > 0 && src && src.kind === 'player' && !gun && (e.angry > 0 || temper(e) === 'fighter')) { if (!(e.angry > 0)) bark(s, e, 'fight', true); e.angry = 12; e.flee = 0; e.cd = Math.max(e.cd, 0.5); }
+  else { e.angry = 0; e.flee = 8; }
+}
 
 function damage(s, e, amt, src, heavy, kb, stunO) {
   if (e.hp <= 0 || e.kind === 'giver') return;
@@ -557,8 +617,8 @@ function damage(s, e, amt, src, heavy, kb, stunO) {
     addHeat(s, src, e.kind === 'ped' ? 7 : e.kind === 'cop' ? 18 : 2);
     if (ko) addHeat(s, src, e.kind === 'ped' ? 8 : e.kind === 'cop' ? 15 : 4);
   }
-  if (e.kind === 'ped') { e.flee = 8; e.fromX = src ? src.x : e.x; e.fromZ = src ? src.z : e.z; }
-  panic(s, e.x, e.z, 14);
+  if (e.kind === 'ped') pedHurt(s, e, src);
+  panic(s, e.x, e.z, 14, !!src && (src.kind === 'player' || (src.driver != null && src.driver === player(s).id)), false);
   if (e.kind === 'cop' && src && src.kind === 'player') s.ents.forEach((c) => { if (c.kind === 'cop') c.alert = 1; });
   if (ko) {
     e.hp = 0;
@@ -632,7 +692,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   for (const o of s.cars) if (o !== c && dist2(o, c) < 9) {
     const d = Math.sqrt(dist2(o, c)) || 1, push = (3 - d) / 2;
     c.x -= (o.x - c.x) / d * push; c.z -= (o.z - c.z) / d * push; o.x += (o.x - c.x) / d * push; o.z += (o.z - c.z) / d * push;
-    if (Math.abs(c.v) > 4) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); }
+    if (Math.abs(c.v) > 4) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') { addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); if (Math.abs(c.v) > 6) rammed(s, o, c); } }
     c.v *= 0.5;
   }
   if (Math.abs(c.v) > 6) for (const e of s.ents) if (e !== driverEnt && e.hp > 0 && !e.car && e.kind !== 'giver' && dist2(e, c) < 5) {
@@ -806,11 +866,13 @@ function trafficStep(s, c, dt) {
   const sig = signal(s), axis = dx === 0 ? 'z' : 'x';
   // the Loop: the ring road around the city. Traffic on it runs faster and does not stop for the lights.
   const onLoop = Math.abs(Math.abs(nearestLine(dx !== 0 ? c.z : c.x)) - (GRID * PITCH) / 2) < 1;
-  if (!onLoop && !c.flee && sig !== axis && toStop > 9 && toStop < 15 && nextI >= 0 && nextI <= GRID) blocked = true;
+  if (c.scare > 0) c.scare -= dt;
+  const scared = c.scare > 0;
+  if (!onLoop && !c.flee && !scared && sig !== axis && toStop > 9 && toStop < 15 && nextI >= 0 && nextI <= GRID) blocked = true;
   if (!blocked) for (const o of s.cars) {
     if (o === c) continue;
     const rx = o.x - c.x, rz = o.z - c.z, ahead = rx * dx + rz * dz, side = Math.abs(rx * dz - rz * dx);
-    if (ahead > 0 && ahead < 9 && side < 1.9) { blocked = true; break; }
+    if (ahead > 0 && ahead < 9 && side < 1.9) { blocked = true; if (o.driver != null && !o.ai && c.v < 1) c.honk = (c.honk || 0) + dt; break; } // a driven car sitting in the lane gets the horn
   }
   if (!blocked) for (const o of s.ents) {
     if (o.hp <= 0 || o.car) continue;
@@ -819,8 +881,8 @@ function trafficStep(s, c, dt) {
   }
   c.waitT = blocked && toStop > 15 ? (c.waitT || 0) + dt : 0;
   if (c.waitT > 4) { blocked = false; if (c.waitT > 5.5) c.waitT = 0; }
-  const target = blocked ? 0 : c.cruise * (onLoop ? 1.6 : 1);
-  c.v += Math.sign(target - c.v) * Math.min(Math.abs(target - c.v), (blocked ? 22 : 6) * dt);
+  const target = blocked ? 0 : c.cruise * (scared ? 1.9 : onLoop ? 1.6 : 1);
+  c.v += Math.sign(target - c.v) * Math.min(Math.abs(target - c.v), (blocked ? 22 : scared ? 12 : 6) * dt);
   c.x += dx * c.v * dt; c.z += dz * c.v * dt;
   c.steer *= 0.9;
   const iCoord = nearestLine(along);
@@ -1000,26 +1062,73 @@ function moveToward(e, goal, sp, dt) {
 }
 
 // ---------- pedestrians ----------
+function pedHome(s, e) { const b = blockAt(s, e.x, e.z) || s.blocks[e.block]; e.block = b.id; e.pt = closestT(e, blockCenter(b)); }
 function pedStep(s, e, dt, p) {
-  if (e.hp <= 0) { e.downT = (e.downT || 0) + dt; if (e.downT > 5) { e.hp = 30; e.downT = 0; e.flee = 8; e.fromX = p.x; e.fromZ = p.z; } return; }
+  if (e.hp <= 0) { e.downT = (e.downT || 0) + dt; e.angry = 0; if (e.downT > 5) { e.hp = 30; e.downT = 0; e.flee = 8; e.fromX = p.x; e.fromZ = p.z; } return; }
   if (e.stun > 0) { e.moving = 0; return; }
+  const d2p = dist2(e, p), face = () => { e.ry = Math.atan2(e.fromX - e.x, e.fromZ - e.z); e.moving = 0; };
+  // came to fight: chases the player on foot, or hammers on the car the player is sitting in
+  if (e.angry > 0) {
+    e.angry -= dt;
+    const armed = p.weapon === 'pistol' || p.weapon === 'shotgun';
+    if (e.angry <= 0 || p.hp <= 0 || p.downT > 0 || d2p > 26 * 26 || (armed && !p.car && p.swing > 0)) { e.angry = 0; if (armed && d2p < 26 * 26) { e.flee = 6; e.fromX = p.x; e.fromZ = p.z; } else pedHome(s, e); return; }
+    const reach = p.car ? 2.7 : 1.5;
+    if (d2p > reach * reach) { moveToward(e, p, 4.3, dt); return; }
+    e.moving = 0; e.ry = Math.atan2(p.x - e.x, p.z - e.z);
+    if (e.cd <= 0) {
+      e.cd = 1.2; e.swing = 0.3;
+      if (p.car) { const c = s.cars.find((o) => o.id === p.car); if (c) { carHurt(s, c, 4); s.fx.push({ type: 'scrape', x: c.x, z: c.z, by: e.id, n: 5 }); } }
+      else damage(s, p, 5, e, false, 2);
+    }
+    return;
+  }
+  if (e.cower > 0) { e.cower -= dt; face(); if (e.cower <= 0) e.flee = 5; return; }
+  if (e.call > 0) {
+    e.call -= dt; face();
+    // the call goes through unless the witness is knocked off the phone first
+    if (e.call <= 0) { if (d2p < 70 * 70 && p.hp > 0) { addHeat(s, p, 12); s.fx.push({ type: 'called', x: e.x, z: e.z, id: e.id }); log(s, 'A witness called it in.'); } e.flee = 5; }
+    return;
+  }
+  if (e.gawk > 0) {
+    e.gawk -= dt; face();
+    if ((e.x - e.fromX) ** 2 + (e.z - e.fromZ) ** 2 < 30 || (p.swing > 0 && d2p < 36)) { e.gawk = 0; e.flee = 5; e.fromX = p.x; e.fromZ = p.z; } else bark(s, e, 'gawk', false, 4);
+    if (e.gawk <= 0 && e.flee <= 0) pedHome(s, e);
+    return;
+  }
   if (e.flee > 0) {
     e.flee -= dt;
     const dx = e.x - e.fromX, dz = e.z - e.fromZ, d = Math.hypot(dx, dz) || 1;
     const goal = { x: e.x + dx / d * 10, z: e.z + dz / d * 10 };
     e.x += (goal.x - e.x) / 10 * 7 * dt; e.z += (goal.z - e.z) / 10 * 7 * dt;
     e.ry = Math.atan2(dx, dz); e.moving = 1.5; collideBuildings(e, 0.5); clampWorld(e);
-    if (e.flee <= 0) { const b = blockAt(s, e.x, e.z) || s.blocks[e.block]; e.block = b.id; const c = blockCenter(b); e.pt = closestT(e, c); }
+    if (e.flee <= 0) pedHome(s, e);
     return;
   }
+  // react to the player waving fists or a gun
+  if (p.swing > 0 && d2p < 36) { e.flee = 6; e.fromX = p.x; e.fromZ = p.z; return; }
+  if (p.car) {
+    // a car coming fast: most people throw themselves out of its way. Not everyone makes it.
+    const car = d2p < 30 * 30 ? s.cars.find((o) => o.id === p.car) : null;
+    if (car && Math.abs(car.v) > 7 && temper(e) !== 'freezer') {
+      const sg = Math.sign(car.v), fx = Math.sin(car.ry) * sg, fz = Math.cos(car.ry) * sg, rx = e.x - car.x, rz = e.z - car.z, ahead = rx * fx + rz * fz, side = rx * fz - rz * fx;
+      if (ahead > 0 && ahead < 5 + Math.abs(car.v) * 0.55 && Math.abs(side) < 2.4) {
+        const k = side >= 0 ? 1 : -1; e.kx = fz * k * 12; e.kz = -fx * k * 12; e.flee = 3; e.fromX = car.x; e.fromZ = car.z;
+        s.fx.push({ type: 'dive', x: e.x, z: e.z, id: e.id }); bark(s, e, 'car');
+      }
+    }
+  } else if (d2p < 30 && p.hp > 0 && (s.ambT || 0) <= s.t && (e.barkT || 0) <= s.t) {
+    // people on the street have something to say about who is walking past
+    const armed = p.weapon === 'pistol' || p.weapon === 'shotgun', own = s.blocks[e.block] && s.blocks[e.block].owner === 'player';
+    const set = p.heat >= 40 ? 'hot' : armed ? 'armed' : own ? 'respect' : null;
+    if (set) { s.ambT = s.t + 7; bark(s, e, set, true, 25); }
+  }
+  if (e.flee > 0) return;
   const c = blockCenter(s.blocks[e.block]), r = BLOCK / 2 + 1;
   const q = perimeter(e.pt, c, r);
   if (dist2(e, q) > 4) { moveToward(e, q, 2.5, dt); return; }
   e.pt += e.dir * e.speed * dt / (r * 2);
   const nq = perimeter(e.pt, c, r);
   e.ry = Math.atan2(nq.x - e.x, nq.z - e.z); e.x = nq.x; e.z = nq.z; e.moving = 0.32;
-  // react to the player waving fists or a gun
-  if (p.swing > 0 && dist2(e, p) < 36) { e.flee = 6; e.fromX = p.x; e.fromZ = p.z; }
 }
 function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t += 0.05) { const q = perimeter(t, c, BLOCK / 2 + 1), d = dist2(q, e); if (d < bd) { bd = d; bt = t; } } return bt; }
 
@@ -1451,6 +1560,7 @@ export function step(s, dt) {
   // keep traffic topped up near the player
   const traffic = s.cars.filter((c) => c.ai && !c.wrecked);
   for (const c of traffic) if (dist2(c, p) > 180 * 180 && !c.mark) c.remove = true;
+  for (const c of s.cars) if (c.ditched && !c.driver && !c.wrecked && dist2(c, p) > 150 * 150) c.remove = true;
   if (traffic.length < s.cfg.traffic && R(s) < dt) spawnTraffic(s, false);
   // entities
   const chasers = new Map(), cells = bucketEnts(s);

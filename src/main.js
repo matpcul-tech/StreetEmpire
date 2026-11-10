@@ -242,6 +242,13 @@ function floatHit(x, z, text, color) {
   document.body.appendChild(el); hitNums.push({ el, x, y: 1.55, z, t: 0.75 });
   while (hitNums.length > 8) { const old = hitNums.shift(); old.el.remove(); }
 }
+// What someone on the street says: a line over their head that follows them for a couple of seconds.
+function floatSay(id, x, z, text, cls = '') {
+  for (let i = hitNums.length - 1; i >= 0; i--) if (hitNums[i].id === id) { hitNums[i].el.remove(); hitNums.splice(i, 1); }
+  const el = document.createElement('div'); el.className = 'hitn say ' + cls; el.textContent = text;
+  document.body.appendChild(el); hitNums.push({ el, x, y: 2.05, z, t: 2.2, id, slow: true });
+  while (hitNums.length > 8) { const old = hitNums.shift(); old.el.remove(); }
+}
 const tracers = [];
 const tracerMat = new THREE.LineBasicMaterial({ color: 0xfff0a0, transparent: true, toneMapped: false });
 for (let i = 0; i < 10; i++) { const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]); const l = new THREE.Line(g, tracerMat.clone()); l.visible = false; l.frustumCulled = false; scene.add(l); tracers.push({ l, t: 0 }); }
@@ -620,6 +627,10 @@ function handleFx(list) {
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
+    else if (f.type === 'bark') { if (d < 26 && !cine.active) floatSay(f.id, f.x, f.z, f.text, f.set === 'call' ? 'call' : f.set === 'fight' || f.set === 'rage' || f.set === 'jacked' ? 'mad' : ''); }
+    else if (f.type === 'called') { pop('A witness called it in', 'bad'); sfx.chime(false); floatSay(f.id, f.x, f.z, 'They are on the way.', 'call'); }
+    else if (f.type === 'dive') { if (d < 30) parts.burst(f.x, 0.2, f.z, 5, 1.5, { color: 0x9a8064, life: 0.5, g: 1, s: 0.2, up: 0.3 }); }
+    else if (f.type === 'ditch') { if (vol > 0) sfx.block(vol * 0.6); }
     else if (f.type === 'pickup') sfx.chime(true);
     else if (f.type === 'bought') { pop(`-$${f.cost} ${SHOP_ITEMS[f.item].name}`); sfx.chime(true); }
     else if (f.type === 'house') { showBig('SAFEHOUSE BOUGHT'); pop(f.name); sfx.chime(true); }
@@ -1123,7 +1134,8 @@ function frame(now) {
   }
   for (; ri < tellRings.length; ri++) tellRings[ri].visible = false;
   for (let i = hitNums.length - 1; i >= 0; i--) {
-    const h = hitNums[i]; h.t -= rdt; h.y += rdt * 0.9;
+    const h = hitNums[i]; h.t -= rdt; h.y += rdt * (h.slow ? 0.12 : 0.9);
+    if (h.id) { const g = charViz.get(h.id); if (g) { h.x = g.position.x; h.z = g.position.z; } }
     if (h.t <= 0) { h.el.remove(); hitNums.splice(i, 1); continue; }
     hitProj.set(h.x, h.y, h.z).project(camera);
     if (hitProj.z > 1) { h.el.style.opacity = '0'; continue; }
