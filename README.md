@@ -37,6 +37,8 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **The radio talks.** Between songs a DJ line, an ad for a made-up business, or news about what you just did shows on screen. Stations can also play recorded drops between songs (see `docs/radio.md`). Each contact now has something to say when a job comes back done or blown.
+
 - **Fire and explosions.** A car beaten or shot down to a sixth of its health catches fire and blows a few seconds later. The blast hurts everything near it, other cars included, so a row of parked cars goes up one after another. Guns now hit cars.
 - **Stunt ramps.** Eight orange ramps sit in the middle of streets around the city (a `^` on the radar). Hit one fast and straight and the car flies in slow motion. The first clean jump off each pays a bonus.
 - **Near misses.** Pass moving traffic close and fast without touching it for a small payout that grows with a streak.

@@ -24,13 +24,41 @@ const BUILT_IN = [
 ];
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
-export function createRadio({ audio, base = './', onTune = () => {} }) {
+// What the radio says between songs, shown as a line on screen: the DJ, and ads for businesses that do not exist.
+// {station} is the station's name. The game can also hand in news about what the player just did (news()).
+const DJ = [
+  'You are locked in to {station}. Do not touch that dial.',
+  'Shout out to everybody stuck on the Loop right now.',
+  'Traffic report: it is bad, and it is somebody else\'s fault.',
+  'If you can hear sirens, turn it up.',
+  'Weather for the Eastside: warm. Heat for some of you: warmer.',
+  'Police say stay out of Downtown tonight. So now you know where the party is.',
+  'This one goes out to the corner store that never closes.',
+  'Text the station. We will not read it, but text it.',
+  '{station}. Louder than your neighbor, quieter than his car.',
+  'Harbor side, Midtown, Eastside, Downtown. We see you. All of you.',
+];
+const ADS = [
+  'Pawn Counter. Your stuff, our prices.',
+  'Loop Mutual Insurance. We cover everything except what happens.',
+  'Harbor Fresh Seafood. Caught this week. Probably.',
+  'Midtown Garage. No questions is our warranty.',
+  'Dice Games on Second. The house always thanks you.',
+  'Eastside Laundromat. We clean anything. Clothes too.',
+  'A message from City Hall: the orange ramps are not for stunts.',
+  'Flower Stall. Say sorry before she finds out.',
+  'Dockside Locker. If it fell off a boat, it is in aisle three.',
+  'Tired of traffic? So is everyone. Honk less. Paid for by people who honk.',
+];
+
+export function createRadio({ audio, base = './', onTune = () => {}, onAir = () => {} }) {
   let stations = BUILT_IN.map((s) => ({ ...s, kind: 'synth' }));
   let idx = -1, on = false, bus = null, timer = null, step = 0, nextT = 0, el = null, track = 0, noise = null;
+  let airN = Math.floor(Math.random() * 50), airClock = 0, nextAir = 18, inDrop = false; const queue = [];
   try { const v = localStorage.getItem('se-radio'); idx = v == null ? 0 : +v; } catch (e) { idx = 0; }
   // stations.json is optional: without it only the built-in stations exist
   fetch(`${base}radio/stations.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((j) => {
-    const extra = ((j && j.stations) || []).filter((s) => s && s.name && Array.isArray(s.tracks) && s.tracks.length).map((s) => ({ name: s.name, tracks: s.tracks, kind: 'tracks' }));
+    const extra = ((j && j.stations) || []).filter((s) => s && s.name && Array.isArray(s.tracks) && s.tracks.length).map((s) => ({ name: s.name, tracks: s.tracks, drops: Array.isArray(s.drops) ? s.drops.filter((d) => d && d.file) : [], kind: 'tracks' }));
     if (extra.length) { stations = [...extra, ...stations]; if (idx >= 0) idx += extra.length; if (!localStorage.getItem('se-radio')) idx = 0; }
   }).catch(() => { /* no station file */ });
 
@@ -77,7 +105,11 @@ export function createRadio({ audio, base = './', onTune = () => {} }) {
   }
   function playTrack() {
     const S = stations[idx]; if (!S || S.kind !== 'tracks') return;
-    if (!el) { el = new Audio(); el.preload = 'none'; el.volume = 0.55; el.addEventListener('ended', () => { track++; playTrack(); }); el.addEventListener('error', () => { if (on && stations[idx] && stations[idx].kind === 'tracks' && stations[idx].tracks.length > 1) { track++; playTrack(); } }); }
+    // after a song, a recorded drop (a DJ line or an ad) if the station has any, then the next song
+    if (!el) { el = new Audio(); el.preload = 'none'; el.volume = 0.55; el.addEventListener('ended', () => {
+      const S2 = stations[idx], drops = (S2 && S2.drops) || [];
+      if (!inDrop && drops.length) { inDrop = true; const D = drops[(track + airN++) % drops.length], src = `${base}radio/${D.file}`; el.dataset.src = src; el.src = src; el.play().catch(() => {}); if (D.text) onAir(S2.name, D.text); return; }
+      inDrop = false; track++; playTrack(); }); el.addEventListener('error', () => { if (on && stations[idx] && stations[idx].kind === 'tracks' && stations[idx].tracks.length > 1) { track++; playTrack(); } }); }
     const T = S.tracks[track % S.tracks.length], src = `${base}radio/${T.file}`;
     if (el.dataset.src !== src) { el.dataset.src = src; el.src = src; }
     el.play().catch(() => { /* the browser wants a tap first: the next tap on RADIO starts it */ });
@@ -90,6 +122,14 @@ export function createRadio({ audio, base = './', onTune = () => {} }) {
     bus.gain.gain.setTargetAtTime(0.5, bus.ctx.currentTime, 0.15);
     nextT = 0; timer = setInterval(schedule, 60); schedule();
   }
+  // one line on the air: news the game handed in first, then the DJ and the ads in turn
+  function air() {
+    const S = stations[idx]; if (!on || !S) return;
+    let text = queue.shift();
+    if (!text) { const pool = airN % 2 ? ADS : DJ; text = pool[(airN * 7 + idx * 3) % pool.length]; }
+    airN++; onAir(S.name, text.replace('{station}', S.name));
+  }
+  setInterval(() => { if (!on || idx < 0) return; if (++airClock >= nextAir) { nextAir = airClock + 42 + (airN % 4) * 6; air(); } }, 1000);
   const label = () => (idx < 0 || !stations[idx] ? 'Radio off' : stations[idx].name + (stations[idx].kind === 'tracks' ? `: ${stations[idx].tracks[track % stations[idx].tracks.length].title || ''}` : ''));
   return {
     // in a car and not paused: the radio plays
@@ -100,6 +140,9 @@ export function createRadio({ audio, base = './', onTune = () => {} }) {
       start(); onTune(label());
     },
     get label() { return label(); },
+    // something happened in the city that the newsreader would mention; said at the next break, soon
+    news(text) { if (queue.length < 3 && !queue.includes(text)) queue.push(text); if (on && idx >= 0) nextAir = Math.min(nextAir, airClock + 6); },
+    air,
     // for tests: render a built-in station offline and report how loud it is and where its energy sits
     async probe(name, sec = 6) {
       const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext, sr = 44100, oc = new AC(1, sr * sec, sr);
@@ -112,7 +155,7 @@ export function createRadio({ audio, base = './', onTune = () => {} }) {
       return { rms: +Math.sqrt(sum / d.length).toFixed(3), peak: +peak.toFixed(2), onsets, clipped: peak > 1 };
     },
     // for tests: what is sounding right now
-    get state() { return { on, station: idx, synth: !!timer, step, track: el && !el.paused ? { time: el.currentTime, src: el.dataset.src } : null }; },
+    get state() { return { on, station: idx, queued: queue.length, synth: !!timer, step, track: el && !el.paused ? { time: el.currentTime, src: el.dataset.src } : null }; },
     get stations() { return stations.map((s) => s.name); },
   };
 }

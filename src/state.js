@@ -1298,11 +1298,22 @@ function housesStep(s, p, dt) {
 // Contacts hand out the jobs. Unc stands on the home block; the others wait on a street corner of their
 // block, outside the reach of whoever guards it, so talking to one never starts a fight.
 export const CONTACTS = [
-  { name: 'Unc', gx: 0, gz: 0 },
-  { name: 'Dee', gx: 3, gz: 2, slot: 'crew', female: true, look: 0 },
-  { name: 'Rook', gx: 5, gz: 4, slot: 'locals', look: 1 },
-  { name: 'Sal', gx: 6, gz: 7, slot: 'locals', look: 5 },
+  // pass, fail: what each one says when a job comes back done or blown. Unc is tired and proud, Dee talks fast and
+  // counts money, Rook wastes no words, Sal has seen it all on the docks.
+  { name: 'Unc', gx: 0, gz: 0,
+    pass: ['That is how your father did it. Quieter, but that is how.', 'Good. Eat something. Then come back.', 'I knew it. Do not tell anybody I said that.'],
+    fail: ['It happens. Do not let it happen twice.', 'Sit. Breathe. Then go again.'] },
+  { name: 'Dee', gx: 3, gz: 2, slot: 'crew', female: true, look: 0,
+    pass: ['On time and in one piece. I could cry.', 'Money is counted. You are officially my favorite today.', 'Not a scratch I can bill you for. Shame.'],
+    fail: ['That is coming out of your cut. All of it.', 'My grandmother drives better, and she is not allowed to.'] },
+  { name: 'Rook', gx: 5, gz: 4, slot: 'locals', look: 1,
+    pass: ['Done. Good.', 'They got the message.', 'You are useful. Stay that way.'],
+    fail: ['No.', 'Again. Properly.'] },
+  { name: 'Sal', gx: 6, gz: 7, slot: 'locals', look: 5,
+    pass: ['Forty years on these docks, and you still surprised me.', 'Clean work. The tide owes you one.', 'Good. Now nobody saw you here.'],
+    fail: ['The harbor is full of men who almost did it.', 'Go dry off and try again.'] },
 ];
+const contactLine = (m, kind) => { const C = CONTACTS.find((c) => c.name === (MISSIONS[m.idx] || {}).by); const L = C && C[kind]; return L && L.length ? `${C.name}: "${L[(m.idx ?? 0) % L.length]}"` : ''; };
 // One chain, in order. by: who gives it. brief: the lines of the sit-down before the intro line.
 // kind: hook, collect, chop, take, fetch, deliver, tail, race, chase, beat, defend, escape, hit, own.
 export const MISSIONS = [
@@ -1606,7 +1617,8 @@ export function missionText(s) {
 }
 function passMission(s) {
   const m = s.mission; s.crews.player.cash += m.reward; s.crews.player.rep += m.rep;
-  log(s, `Job done: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep });
+  log(s, `Job done: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep, said: contactLine(m, 'pass') });
+  if (contactLine(m, 'pass')) log(s, contactLine(m, 'pass'));
   s.mission = null; s.missionIdx++;
   if (m.gift === 'follower') grantFollower(s);
   const next = MISSIONS[s.missionIdx];
@@ -1615,7 +1627,7 @@ function passMission(s) {
 function failMission(s, why) {
   const m = s.mission, car = missionCar(s, m);
   if (car && (m.kind === 'tail' || m.kind === 'chase')) { car.mark = false; car.flee = false; if (car.ai) car.cruise = 9; }
-  log(s, why); s.fx.push({ type: 'mission', state: 'fail', title: m.title }); s.mission = null;
+  log(s, [why, contactLine(m, 'fail')].filter(Boolean).join(' ')); s.fx.push({ type: 'mission', state: 'fail', title: m.title }); s.mission = null;
 }
 
 // ---------- main step ----------
