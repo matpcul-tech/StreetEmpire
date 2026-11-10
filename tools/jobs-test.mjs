@@ -143,7 +143,7 @@ const anyCar = (s, p, type) => s.cars.filter((c) => !c.driver && !c.wrecked && !
 { const { s, p } = world('Repo'); const m = talk(s, p), mark = s.cars.find((c) => c.id === m.carId);
   check('Repo passes if you take the car', board(s, p, mark) && !s.mission && s.missionIdx === G.MISSIONS.findIndex((x) => x.title === 'Repo') + 1); }
 { const { s, p } = world('Repo'); const m = talk(s, p), mark = s.cars.find((c) => c.id === m.carId); mark.cruise = 0; mark.v = 0;
-  p.x = mark.x + 20; p.z = mark.z; tick(s, p, 5); p.x = mark.x + (mark.x > 0 ? -200 : 200); tick(s, p, 11 * 30); check('Repo fails if he gets away', !s.mission && said(s, /He got away/)); }
+  p.x = mark.x + 20; p.z = mark.z; tick(s, p, 5); p.x = mark.x + (mark.x > 0 ? -200 : 200); tick(s, p, 11 * 30); check('Repo fails if he gets away', !s.mission && said(s, /He got away/)); check('and Dee has something to say about it', said(s, /He got away.*Dee: "/)); }
 { const { s, p } = world('Hold the Line'); const m = talk(s, p); s.blocks[m.block].owner = 'reds'; tick(s, p, 2); check('Hold the Line fails if the block falls', !s.mission && said(s, /fell. Job failed/)); }
 { const { s, p } = world('Lose Them'); talk(s, p); G.debugDown(s); check('Lose Them fails if you are locked up', !s.mission && said(s, /Locked up/)); }
 { const { s, p } = world('Loop Time'); const m = talk(s, p); s.mission.timer = 0.05; tick(s, p, 5); check('Loop Time fails on the clock', !s.mission && said(s, /Out of time/)); }

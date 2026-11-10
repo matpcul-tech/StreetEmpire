@@ -396,7 +396,8 @@ const radar = $('radar').getContext('2d');
 let msgT = 0, bigT = 0, dtagT = 0, lastHere = null;
 let incT = 0, starWant = 0, starShown = 0, starHold = 0;
 // ---------- car radio ----------
-const radio = createRadio({ audio: sfx.audio, base: BASE, onTune: (name) => pop('\u266B ' + name) });
+const radio = createRadio({ audio: sfx.audio, base: BASE, onTune: (name) => pop('\u266B ' + name), onAir: (st, text) => { if (!cine.active) showMsg(`\u266B ${st}: ${text}`); } });
+const hood = () => { const s = S(), p = player(s), b = blockAt(s, p.x, p.z); return b ? DISTRICTS[districtOf(b)] : 'the city'; };
 
 // ---------- shops and safehouses ----------
 // The shop is a small panel over the game: the street keeps running behind it, and it closes if you step away.
@@ -630,13 +631,14 @@ function handleFx(list) {
     }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
     else if (f.type === 'guards') { pop(`${f.n} guard${f.n > 1 ? 's' : ''} hold the block`); }
-    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
+    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { radio.news(`News: a corner in ${hood()} is under new management. Orange is in.`); const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
     else if (f.type === 'stash' && (!f.stolen || f.crew === 'player')) pop(`+$${f.amt} ${f.hustle}`);
     else if (f.type === 'upgrade') pop(`${f.n} guard${f.n > 1 ? 's' : ''} armed`);
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
-    else if (f.type === 'lost') { showBig('BLOCK LOST', true); sfx.chime(false); }
+    else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'boom') {
+      if (d < 60) radio.news(`News: a car just went up in ${hood()}. Police would like a word with a man in orange.`);
       sfx.boom(Math.max(0.15, 1 - d / 120));
       if (d < 140) {
         flashes.flash(f.x, 1.6, f.z, 14); flashes.flash(f.x + 1, 2.6, f.z - 1, 9);
@@ -650,10 +652,10 @@ function handleFx(list) {
     else if (f.type === 'fire') { if (d < 60) parts.burst(f.x, 1.2, f.z, 12, 4, { color: 0xff7a20, life: 0.5, g: 2, s: 0.1, up: 1.5 }); if (p.car === f.car) showBig('ON FIRE: GET OUT', true); }
     else if (f.type === 'launch') { slowT = 0.5; fovKick = 6; sfx.whoosh(); }
     else if (f.type === 'land') { if (f.by === p.id) { shake = Math.max(shake, Math.min(0.9, 0.2 + f.n * 0.06)); const g = carViz.get(f.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + 0.5; if (isTouch && navigator.vibrate) navigator.vibrate(70); } if (vol > 0) sfx.impact('bat', vol); parts.burst(f.x, 0.2, f.z, 14, 4, { color: 0x9a8a78, life: 0.7, g: 1.5, s: 0.25, up: 0.4 }); }
-    else if (f.type === 'stunt') { showBig(`STUNT JUMP ${Math.round(f.dist)} M`); pop(`+$${f.pay}${f.first ? ` ramp ${f.done} of ${f.of}` : ''}`); sfx.chime(true); }
+    else if (f.type === 'stunt') { radio.news(`A caller in ${hood()} says a car just flew over her street. We believe her.`); showBig(`STUNT JUMP ${Math.round(f.dist)} M`); pop(`+$${f.pay}${f.first ? ` ramp ${f.done} of ${f.of}` : ''}`); sfx.chime(true); }
     else if (f.type === 'nearmiss') { pop(`NEAR MISS${f.n > 1 ? ' x' + f.n : ''} +$${f.pay}`); sfx.whoosh(); fovKick = Math.max(fovKick, 3); }
     else if (f.type === 'bark') { if (d < 26 && !cine.active) floatSay(f.id, f.x, f.z, f.text, f.set === 'call' ? 'call' : f.set === 'fight' || f.set === 'rage' || f.set === 'jacked' ? 'mad' : ''); }
-    else if (f.type === 'called') { pop('A witness called it in', 'bad'); sfx.chime(false); floatSay(f.id, f.x, f.z, 'They are on the way.', 'call'); }
+    else if (f.type === 'called') { radio.news(`Police are answering a call in ${hood()}. If that is you, we never spoke.`); pop('A witness called it in', 'bad'); sfx.chime(false); floatSay(f.id, f.x, f.z, 'They are on the way.', 'call'); }
     else if (f.type === 'dive') { if (d < 30) parts.burst(f.x, 0.2, f.z, 5, 1.5, { color: 0x9a8064, life: 0.5, g: 1, s: 0.2, up: 0.3 }); }
     else if (f.type === 'ditch') { if (vol > 0) sfx.block(vol * 0.6); }
     else if (f.type === 'pickup') sfx.chime(true);
