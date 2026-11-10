@@ -397,7 +397,9 @@ export function applyAction(s, playerId, a) {
         missionCheck(s, p);
       } else log(s, 'No car close enough.');
     }
-  } else if (a.type === 'talk') {
+  } else if (a.type === 'buy') buy(s, p, a.item);
+  else if (a.type === 'house') buyHouse(s, p);
+  else if (a.type === 'talk') {
     let g = null, bd = 16; for (const e of s.ents) if (e.kind === 'giver') { const d = dist2(e, p); if (d < bd) { bd = d; g = e; } }
     if (!g) return;
     if (s.mission) log(s, `${g.name}: "Finish ${s.mission.title} first."`);
@@ -540,8 +542,10 @@ export function debugDown(s) { const p = player(s); if (p.hp <= 0) return; p.hp 
 function respawnPlayer(s, p) {
   const own = s.blocks.filter((b) => b.owner === p.crew); if (!own.length) return;
   const busted = p.downBusted; p.downT = 0;
-  const c = blockCenter(own[0]);
-  p.x = c.x + BLOCK / 2 + 3; p.z = c.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0; p.dodgeBuf = 0;
+  // back at your nearest safehouse; without one, at your first block
+  const c = blockCenter(own[0]); let at = { x: c.x + BLOCK / 2 + 3, z: c.z }, bd = Infinity;
+  for (const i of s.houses || []) { const q = houseSpot(i), d = dist2(q, p); if (d < bd) { bd = d; at = { x: q.x, z: q.z }; } }
+  p.x = at.x; p.z = at.z; p.hp = p.max; p.kx = p.kz = 0; p.heat = 0; p.dodgeBuf = 0;
   if (busted) { p.ammo = 0; p.shells = 0; p.weapon = meleeFallback(p); }
   // the chase is over: officers leave, and no cruiser keeps a siren
   for (const e of s.ents) if (e.kind === 'cop') e.leave = true;
@@ -549,7 +553,6 @@ function respawnPlayer(s, p) {
   // a bust is not an ambush window: the corner call ends and stays quiet for a bit
   endCall(s, 'bust');
   const calls = ensureCalls(s); calls.grace = 12; calls.cd = Math.max(calls.cd || 0, 12);
-  if (s.mission) failMission(s, 'You went down. Mission failed.');
 }
 
 // ---------- cars ----------
@@ -950,6 +953,77 @@ function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t +=
 // each kind lives in startMission (setup), missionCheck (car events) and
 // missionStep (per tick win and fail checks). s.mission.target is the marker
 // the client shows (beacon, radar icon and edge arrow).
+// ---------- shops and safehouses ----------
+// Things to spend cash on. A shop is a counter on a street corner: stand at it and buy. A safehouse is bought
+// once: you come back there instead of your first block when you go down, you heal and the heat drains while
+// you stand at it with no police close, and a car of your own waits at its curb.
+export const SHOP_ITEMS = {
+  pistol: { name: 'Pistol, 24 rounds', cost: 150 },
+  shotgun: { name: 'Shotgun, 10 shells', cost: 220 },
+  bat: { name: 'Bat', cost: 80 },
+  knuckles: { name: 'Brass knuckles', cost: 60 },
+  patch: { name: 'Patch up (full health)', cost: 40 },
+};
+export const SHOPS = [{ name: 'Pawn Counter', gx: 1, gz: 1 }, { name: 'Back Room Supply', gx: 4, gz: 3 }, { name: 'Dockside Locker', gx: 6, gz: 6 }];
+export const HOUSES = [
+  { name: 'Eastside walk-up', gx: 1, gz: 0, price: 800, car: 'sedan' },
+  { name: 'Midtown apartment', gx: 2, gz: 3, price: 1600, car: 'lowrider' },
+  { name: 'Downtown loft', gx: 5, gz: 3, price: 2800, car: 'muscle' },
+  { name: 'Harbor bunk room', gx: 5, gz: 7, price: 3600, car: 'suv' },
+];
+const SPOT_R2 = 4.5 * 4.5;
+// shops stand on one street corner of their block, safehouse doors on another; contacts use a third
+export const shopSpot = (i) => cornerSpot({ gx: SHOPS[i].gx, gz: SHOPS[i].gz }, 1, -1);
+export const houseSpot = (i) => cornerSpot({ gx: HOUSES[i].gx, gz: HOUSES[i].gz }, -1, 1);
+const houseCurb = (i) => { const q = houseSpot(i); return { x: q.x - 2.4, z: q.z - 7 }; };
+export function shopAt(p) { for (let i = 0; i < SHOPS.length; i++) if (dist2(shopSpot(i), p) < SPOT_R2) return i; return -1; }
+export function houseAt(p) { for (let i = 0; i < HOUSES.length; i++) if (dist2(houseSpot(i), p) < SPOT_R2) return i; return -1; }
+export const ownsHouse = (s, i) => !!(s.houses && s.houses.includes(i));
+function buy(s, p, item) {
+  const it = SHOP_ITEMS[item], cr = s.crews[p.crew];
+  if (!it || shopAt(p) < 0 || p.car) return;
+  if (item === 'patch' && p.hp >= p.max) { log(s, 'You are not hurt.'); return; }
+  if ((item === 'bat' && p.hasBat) || (item === 'knuckles' && p.hasKnux)) { log(s, 'You already carry that.'); return; }
+  if (cr.cash < it.cost) { log(s, `Need $${it.cost} for that.`); s.fx.push({ type: 'broke' }); return; }
+  cr.cash -= it.cost;
+  if (item === 'pistol') { p.ammo += 24; p.weapon = 'pistol'; }
+  else if (item === 'shotgun') { p.shells = (p.shells || 0) + 10; p.weapon = 'shotgun'; }
+  else if (item === 'bat') { p.hasBat = true; p.weapon = 'bat'; }
+  else if (item === 'knuckles') { p.hasKnux = true; p.weapon = 'knuckles'; }
+  else if (item === 'patch') p.hp = p.max;
+  log(s, `Bought: ${it.name}. -$${it.cost}`); s.fx.push({ type: 'bought', item, cost: it.cost });
+}
+function buyHouse(s, p) {
+  const i = houseAt(p), cr = s.crews[p.crew]; if (i < 0 || p.car) return;
+  const H = HOUSES[i]; s.houses = s.houses || [];
+  if (s.houses.includes(i)) { log(s, `The ${H.name} is already yours.`); return; }
+  if (cr.cash < H.price) { log(s, `The ${H.name} costs $${H.price}.`); s.fx.push({ type: 'broke' }); return; }
+  cr.cash -= H.price; s.houses.push(i); cr.rep += 20;
+  log(s, `The ${H.name} is yours. -$${H.price}`); s.fx.push({ type: 'house', i, name: H.name });
+  houseCar(s, i);
+}
+// the car that belongs to a safehouse: parked at its curb, put back when it is gone
+function houseCar(s, i, p) {
+  const at = houseCurb(i), mine = s.cars.find((c) => c.house === i && !c.wrecked);
+  if (mine) {
+    // left somewhere across town: it is brought back and fixed up once you are well away from it
+    if (p && !mine.driver && dist2(mine, at) > 40 * 40 && dist2(mine, p) > 70 * 70) { mine.x = at.x; mine.z = at.z; mine.ry = 0; mine.v = 0; mine.hp = mine.max; }
+    return;
+  }
+  if (s.cars.some((c) => dist2(c, at) < 16)) return; // something is parked in the spot
+  const car = makeCar(s, at.x, at.z, 0, HOUSES[i].car, false); car.house = i; car.paint = 2; s.cars.push(car);
+}
+function housesStep(s, p, dt) {
+  if (!s.houses || !s.houses.length) return;
+  s.houseT = (s.houseT || 0) + dt;
+  if (s.houseT > 20) { s.houseT = 0; for (const i of s.houses) if (dist2(houseCurb(i), p) > 60 * 60) houseCar(s, i, p); }
+  const i = houseAt(p);
+  if (i < 0 || !s.houses.includes(i) || p.car || p.hp <= 0) return;
+  // home: you heal, and with no officer close the heat drains fast
+  if (p.hp < p.max) p.hp = Math.min(p.max, p.hp + 12 * dt);
+  if (p.heat > 0 && !s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && dist2(e, p) < 30 * 30)) p.heat = Math.max(0, p.heat - 14 * dt);
+}
+
 // ---------- jobs ----------
 // Contacts hand out the jobs. Unc stands on the home block; the others wait on a street corner of their
 // block, outside the reach of whoever guards it, so talking to one never starts a fight.
@@ -1473,6 +1547,7 @@ export function step(s, dt) {
   }
   for (const b of s.blocks) if (b.owner === 'neutral' && R(s) < dt / 50 && s.ents.filter((e) => e.crew === 'neutral' && e.home === b.id && e.hp > 0).length < 2) spawnUnit(s, 'neutral', 'defender', b.id);
   missionStep(s, p, dt);
+  housesStep(s, p, dt);
   callsStep(s, dt);
   const pt = s.blocks.filter((b) => b.owner === 'player').length;
   const rivals = s.blocks.filter((b) => ['reds', 'blues', 'golds'].includes(b.owner)).length;

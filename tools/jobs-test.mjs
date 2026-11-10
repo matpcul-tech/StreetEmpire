@@ -147,7 +147,39 @@ const anyCar = (s, p, type) => s.cars.filter((c) => !c.driver && !c.wrecked && !
 { const { s, p } = world('Hold the Line'); const m = talk(s, p); s.blocks[m.block].owner = 'reds'; tick(s, p, 2); check('Hold the Line fails if the block falls', !s.mission && said(s, /fell. Job failed/)); }
 { const { s, p } = world('Lose Them'); talk(s, p); G.debugDown(s); check('Lose Them fails if you are locked up', !s.mission && said(s, /Locked up/)); }
 { const { s, p } = world('Loop Time'); const m = talk(s, p); s.mission.timer = 0.05; tick(s, p, 5); check('Loop Time fails on the clock', !s.mission && said(s, /Out of time/)); }
-{ const { s, p } = world('Corner Collection'); talk(s, p); G.debugDown(s); check('getting knocked out does not end a pickup job', !!s.mission); }
+{ const { s, p } = world('Corner Collection'); talk(s, p); G.debugDown(s); tick(s, p, 90, false); check('getting knocked out does not end a pickup job, even after you are back up', !!s.mission && !(p.downT > 0) && p.hp === p.max); }
+
+// ---- shops ----
+{ const { s, p } = world(); const cr = s.crews.player; cr.cash = 1000;
+  check('three shops and four safehouses, none inside a building', G.SHOPS.length === 3 && G.HOUSES.length === 4 && G.SHOPS.every((_, i) => !G.insideBuilding(G.shopSpot(i).x, G.shopSpot(i).z, 0.4)) && G.HOUSES.every((_, i) => !G.insideBuilding(G.houseSpot(i).x, G.houseSpot(i).z, 0.4)));
+  G.applyAction(s, p.id, { type: 'buy', item: 'pistol' }); check('nothing is sold away from a shop', cr.cash === 1000 && p.ammo === 0);
+  put(s, p, G.shopSpot(0), 1); check('standing at the counter counts as at the shop', G.shopAt(p) === 0);
+  G.applyAction(s, p.id, { type: 'buy', item: 'pistol' }); check('pistol: 24 rounds for $150, drawn', cr.cash === 850 && p.ammo === 24 && p.weapon === 'pistol');
+  G.applyAction(s, p.id, { type: 'buy', item: 'shotgun' }); check('shotgun: 10 shells for $220', cr.cash === 630 && p.shells === 10 && p.weapon === 'shotgun');
+  G.applyAction(s, p.id, { type: 'buy', item: 'bat' }); G.applyAction(s, p.id, { type: 'buy', item: 'bat' }); check('a bat is sold once', cr.cash === 550 && p.hasBat);
+  G.applyAction(s, p.id, { type: 'buy', item: 'knuckles' }); check('brass knuckles for $60', cr.cash === 490 && p.hasKnux);
+  G.applyAction(s, p.id, { type: 'buy', item: 'patch' }); check('no charge for a patch up at full health', cr.cash === 490);
+  p.hp = 20; G.applyAction(s, p.id, { type: 'buy', item: 'patch' }); check('patch up restores health for $40', cr.cash === 450 && p.hp === p.max);
+  cr.cash = 30; G.applyAction(s, p.id, { type: 'buy', item: 'pistol' }); check('no sale without the cash', cr.cash === 30 && p.ammo === 24 && said(s, /Need \$150/));
+  G.applyAction(s, p.id, { type: 'buy', item: 'rocket' }); check('unknown items are ignored', cr.cash === 30); }
+
+// ---- safehouses ----
+{ const { s, p } = world(); const cr = s.crews.player; cr.cash = 5000;
+  G.applyAction(s, p.id, { type: 'house' }); check('no safehouse is sold away from its door', !s.houses || !s.houses.length);
+  put(s, p, G.houseSpot(0), 1); cr.cash = 500; G.applyAction(s, p.id, { type: 'house' }); check('no sale without the cash', !G.ownsHouse(s, 0) && cr.cash === 500);
+  cr.cash = 5000; G.applyAction(s, p.id, { type: 'house' }); const car = s.cars.find((c) => c.house === 0);
+  check('Eastside walk-up bought for $800, with a sedan at the curb', G.ownsHouse(s, 0) && cr.cash === 4200 && car && car.type === 'sedan' && Math.hypot(car.x - p.x, car.z - p.z) < 14);
+  G.applyAction(s, p.id, { type: 'house' }); check('a safehouse is sold once', cr.cash === 4200 && s.houses.length === 1);
+  p.hp = 30; p.heat = 60; tick(s, p, 30 * 8, false); check('at home you heal and the heat drains', p.hp === p.max && p.heat === 0);
+  put(s, p, G.houseSpot(2), 1); G.applyAction(s, p.id, { type: 'house' }); check('Downtown loft bought for $2800, with a muscle car', G.ownsHouse(s, 2) && cr.cash === 1400 && s.cars.some((c) => c.house === 2 && c.type === 'muscle'));
+  // knocked out near the loft: back at the loft, not the home block
+  p.heat = 0; G.debugDown(s); tick(s, p, 90, false); const q = G.houseSpot(2);
+  check('you come back at your nearest safehouse', Math.hypot(p.x - q.x, p.z - q.z) < 1 && p.hp === p.max);
+  // the house car is brought back once it is left across town
+  car.z += 300; put(s, p, G.houseSpot(2), 1); tick(s, p, 30 * 22, false); const curb = G.houseSpot(0);
+  check('a safehouse car left across town is brought back', Math.hypot(car.x - curb.x, car.z - curb.z) < 12);
+  car.wrecked = true; car.remove = true; tick(s, p, 30 * 22, false); check('a wrecked one is replaced', s.cars.filter((c) => c.house === 0 && !c.wrecked).length === 1);
+  const s2 = G.migrate(JSON.parse(JSON.stringify(s))); check('safehouses survive a save', G.ownsHouse(s2, 0) && G.ownsHouse(s2, 2) && !G.ownsHouse(s2, 1)); }
 
 // ---- the marked car is never culled, and a save in the middle of a job still runs ----
 { const { s, p } = world('Shadow'); const m = talk(s, p), mark = s.cars.find((c) => c.id === m.carId);
