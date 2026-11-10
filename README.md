@@ -33,6 +33,14 @@ The game saves itself on this device every few seconds, when you pause and when 
 
 Phones get low settings automatically (no shadows, no dynamic street lights, pixel ratio up to 1.25, character LOD at 32 m). Add `?low` to the URL to force low settings on desktop.
 
+## What is new in v0.12
+
+- A 9 by 9 block city (81 blocks, about 520 m across) in four districts: Eastside, Midtown, Downtown and the Harbor. Each rival crew starts with a 2 by 2 corner.
+- The Loop: traffic on the ring road around the city runs faster and does not stop for lights.
+- Save game: CONTINUE on the title screen.
+- Daytime lighting: dark asphalt, blue sky, real contrast.
+- The simulation is cheaper per step on the big map than it was on the small one (spatial buckets for the fighters' foe search, one pass for block capture).
+
 ## What is new in v0.3
 
 - People on Quaternius' Universal Animation Library mannequin, with painted outfits and faces: crews wear their own colors, police wear uniforms, Unc wears a suit, and pedestrians vary.

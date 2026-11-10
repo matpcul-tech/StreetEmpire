@@ -71,7 +71,7 @@ function untilUp(s, p, cap = 90) {
 {
   const { s, p } = world();
   p.heat = 30;
-  const car = cruiser(s, { x: -87, z: -36, ry: Math.atan2(p.x + 87, p.z + 36), v: 0, siren: true });
+  const car = cruiser(s, { x: p.x + 6, z: p.z + 80, ry: Math.atan2(-6, -80), v: 0, siren: true }); // up the street from the player, facing them
   officer(s, { x: car.x, z: car.z, car: car.id, look: 0 });
   officer(s, { x: car.x, z: car.z, car: car.id, look: 1 });
   frames(s, p, 8);

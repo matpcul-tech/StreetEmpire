@@ -128,6 +128,10 @@ m = talk(); check('Send a Message started', m && m.kind === 'beat');
 check('Send a Message passed', s.missionIdx === after('Send a Message'));
 
 // 3. Chop Job: steal a muscle car and drive it to the marker
+// The Red Kings are a long walk away on the 9 x 9 map and the fight can cost a recruit: bring the squad back to
+// two beside the player, so the checks below still test boarding and leaving the car, not the trek.
+while (followers().length < 2 && s.crews.player.cash >= 0) { s.crews.player.cash += 100; G.applyAction(s, p.id, { type: 'recruit' }); }
+for (const f of followers()) if (Math.hypot(f.x - p.x, f.z - p.z) > 8) { f.x = p.x + 1.5; f.z = p.z + 1.5; }
 m = talk(); check('Chop Job started', m && m.kind === 'chop');
 { let car = s.cars.filter((c) => c.type === 'muscle' && !c.wrecked && !c.driver).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
   for (let k = 0; k < 3; k++) { walkTo(car, 1.8 - k * 0.5, 120); G.applyAction(s, p.id, { type: 'car' }); if (p.car === car.id) break; if (p.car) { G.applyAction(s, p.id, { type: 'car' }); tick(); } }
@@ -177,7 +181,7 @@ check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChaser
   check('stash rate rises with 3 guards (1.0x)', Math.abs(G.stashRate(s2, home) - home.rate * (0.4 + 0.2 * 3)) < 1e-6);
   // put the extras down so the accrue check stays on the starting garrison
   for (const e of G.guardsOf(s2, home).slice(1)) e.hp = 0;
-  const far = G.blockCenter(s2.blocks[24]);
+  const far = G.blockCenter(s2.blocks[s2.blocks.length - 1]);
   p2.x = far.x; p2.z = far.z; p2.hp = p2.max = 100000;
   const cash0 = s2.crews.player.cash;
   let expect = 0;
@@ -208,7 +212,8 @@ check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChaser
 }
 {
   const s3 = G.createState(9, { traffic: 0, peds: 0 });
-  const target = s3.blocks[3];
+  // a neutral block right next to the Red Kings' corner (they hold the two columns at the far end of row 0)
+  const target = s3.blocks[G.GRID - 3];
   target.owner = 'player';
   for (const e of s3.ents) if (e.kind === 'npc' && e.home === target.id) e.hp = 0;
   for (const k of ['blues', 'golds']) s3.crews[k].aiT = 999;
@@ -234,7 +239,7 @@ check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChaser
 {
   const s4 = G.createState(4, { traffic: 0, peds: 0 });
   const p4 = G.player(s4), b = s4.blocks[0], c = G.blockCenter(b), DT4 = 1 / 30;
-  const away = G.blockCenter(s4.blocks[24]);
+  const away = G.blockCenter(s4.blocks[s4.blocks.length - 1]);
   p4.x = away.x; p4.z = away.z; p4.hp = p4.max = 100000;
   for (const e of G.guardsOf(s4, b)) e.hp = 0;
   b.stash = 80;
