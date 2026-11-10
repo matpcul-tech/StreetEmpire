@@ -54,41 +54,48 @@
       {
         "file": "buildings/apt-01-stucco.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/apt-01-stucco.far.glb"
       },
       {
         "file": "buildings/apt-02-brick.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/apt-02-brick.far.glb"
       }
     ],
     "house": [
       {
         "file": "buildings/house-01-bungalow.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/house-01-bungalow.far.glb"
       },
       {
         "file": "buildings/house-02-two-story.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/house-02-two-story.far.glb"
       },
       {
         "file": "buildings/house-03-duplex.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/house-03-duplex.far.glb"
       }
     ],
     "shed": [
       {
         "file": "buildings/shed-01-corrugated.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/shed-01-corrugated.far.glb"
       },
       {
         "file": "buildings/shed-02-brick-industrial.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/shed-02-brick-industrial.far.glb"
       }
     ],
     "store": [
@@ -102,12 +109,14 @@
       {
         "file": "buildings/tower-01-glass-office.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/tower-01-glass-office.far.glb"
       },
       {
         "file": "buildings/tower-02-brick-highrise.glb",
         "yaw": 0,
-        "credit": "Original Street Empire town building made for this project. Not a third-party download."
+        "credit": "Original Street Empire town building made for this project. Not a third-party download.",
+        "far": "buildings/tower-02-brick-highrise.far.glb"
       }
     ]
   },

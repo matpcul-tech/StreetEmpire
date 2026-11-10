@@ -13,10 +13,14 @@
 //   node tools/kit-import.mjs list
 //   node tools/kit-import.mjs remove car sedan
 //   node tools/kit-import.mjs remove building house [variant file name]
+//   node tools/kit-import.mjs far            (re)make the far version of every installed building
 //
 // Steps: dedup, prune, weld, textures to WebP at 1024 px or less, simplify
 // when over the triangle budget, quantize and meshopt. Node names survive so
 // wheels named wheel, tire, tyre or rim still spin in game.
+// Buildings also get a far version (<name>.far.glb, about 8k triangles, 256 px
+// textures) that the game swaps in past street range, so a phone draws only the
+// few buildings near the player at full detail.
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { getBounds } from '@gltf-transform/core';
@@ -43,6 +47,8 @@ const SLOTS = { car: CAR_SLOTS, building: BUILDING_SLOTS, character: CHAR_SLOTS 
 const DIRS = { car: 'cars', building: 'buildings', character: 'characters' };
 // phone budgets: triangles per model and texture size (a character is on screen many times at once)
 const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 }, character: { tris: 15000, tex: 1024 } };
+// far versions of buildings: triangle target and texture size; a model already this light needs none
+const FAR = { tris: 8000, tex: 512, skip: 12000 };
 // bones the game needs to play its animations on a character, by the game rig's names
 const NEED_BONES = ['pelvis', 'spine', 'neck_01', 'Head', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
@@ -243,11 +249,44 @@ export async function importModel(kind, slot, file, opts = {}) {
     const gender = opts.gender === 'f' || opts.gender === 'm' ? opts.gender : inferGender(variant);
     list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(gender && { gender }), ...(credit && { credit }) });
   } else {
+    const far = await writeFar(rel, notes);
     const list = (m.buildings[slot] = [].concat(m.buildings[slot] || []).filter((e) => e.file !== rel));
-    list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
+    list.push({ file: rel, ...(far && { far }), yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
   }
   writeManifest(m);
   return { slot, kind, file: rel, tris: triCount(doc), before, bytes, wheels, materials: mats.length, notes };
+}
+
+// The far version of an installed building: simplified with texture seams kept (the
+// paint stays where it belongs), textures cut to 256 px. Same origin and scale as the
+// full model, so the game can swap one for the other in place.
+async function writeFar(rel, notes = []) {
+  const farRel = rel.replace(/\.glb$/, '.far.glb'), farAbs = path.join(KIT, farRel);
+  const doc = await io.read(path.join(KIT, rel)), before = triCount(doc);
+  if (before <= FAR.skip) { if (fs.existsSync(farAbs)) fs.rmSync(farAbs); return null; }
+  await doc.transform(weld());
+  // at most half a percent of the model's size: past that the baked paint smears and towers crumple
+  for (const error of [0.0025, 0.005]) {
+    if (triCount(doc) <= FAR.tris * 1.15) break;
+    await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: Math.min(1, Math.max(0.02, FAR.tris / triCount(doc))), error }), prune());
+  }
+  const after = triCount(doc);
+  if (after > before * 0.75) { notes.push(`no far version: only got ${before} down to ${after} triangles`); if (fs.existsSync(farAbs)) fs.rmSync(farAbs); return null; }
+  await doc.transform(textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [FAR.tex, FAR.tex], quality: 80 }), quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  await io.write(farAbs, doc);
+  notes.push(`far version ${farRel}: ${after} triangles, ${(fs.statSync(farAbs).size / 1e6).toFixed(2)} MB`);
+  return farRel;
+}
+
+async function remakeFar() {
+  const m = readManifest(), results = [];
+  for (const [slot, list] of Object.entries(m.buildings || {})) for (const e of [].concat(list)) {
+    const notes = [], far = await writeFar(e.file, notes);
+    if (far) e.far = far; else delete e.far;
+    results.push({ ok: true, src: e.file, slot, kind: 'building', file: far || e.file, tris: triCount(await io.read(path.join(KIT, far || e.file))), bytes: fs.statSync(path.join(KIT, far || e.file)).size, materials: 1, notes });
+  }
+  writeManifest(m);
+  return results;
 }
 
 export function removeModel(kind, slot, variant) {
@@ -257,7 +296,7 @@ export function removeModel(kind, slot, variant) {
   for (const [k, group] of [['building', 'buildings'], ['character', 'characters']]) {
     if (kind !== k || !m[group]?.[slot]) continue;
     const keep = [];
-    for (const e of [].concat(m[group][slot])) { if (!variant || path.basename(e.file, '.glb') === variant) drop(e.file); else keep.push(e); }
+    for (const e of [].concat(m[group][slot])) { if (!variant || path.basename(e.file, '.glb') === variant) { drop(e.file); if (e.far) drop(e.far); } else keep.push(e); }
     if (keep.length) m[group][slot] = keep; else delete m[group][slot];
   }
   writeManifest(m);
@@ -343,10 +382,12 @@ if (cmd === 'add') {
 } else if (cmd === 'inbox') {
   const r = report(await processInbox());
   if (r.includes('FAILED')) process.exitCode = 1;
+} else if (cmd === 'far') {
+  report(await remakeFar());
 } else if (cmd === 'list') {
   console.log(JSON.stringify(readManifest(), null, 2));
 } else if (cmd === 'remove') {
   const [kind, slot, variant] = pos; removeModel(kind, slot, variant); console.log(`removed ${kind} ${slot}${variant ? ' ' + variant : ''}`);
 } else {
-  console.log('usage: kit-import.mjs add|inbox|list|remove (see the top of this file)');
+  console.log('usage: kit-import.mjs add|inbox|far|list|remove (see the top of this file)');
 }
