@@ -56,7 +56,10 @@ For CC BY models, upload a text file with the same name next to it (`sedan.txt` 
    - Either way the wheel nodes are tagged, and the game spins and steers them around exactly that pivot. The steering wheel is left in the body.
    - A model that is one solid piece (a raw Meshy export) has no wheels to find: it still drives, but the wheels do not spin. Split the wheels into separate parts first.
 5. Textures to WebP, 1024 px or less. Quantize and meshopt.
-6. Writes `public/models/kit/...`, updates kit.json and the credits.
+6. Buildings over 12k triangles also get a far version (`<name>.far.glb`): simplified at no more than half a percent of the model's size, with texture seams kept and 512 px textures. The game draws it instead of the full model past 38 m on phones (70 m on high), so only the buildings near the player cost full detail. `node tools/kit-import.mjs far` remakes them for every installed building.
+7. Writes `public/models/kit/...`, updates kit.json and the credits.
+
+Meshy buildings sometimes ship with normals pointing into the model, which shows in game as black holes and shredded stripes on the walls. `node tools/kit-normals.mjs --dry public/models/kit/buildings/*.glb` reports them; run it without `--dry` (add `--all` when the walls still look shredded) to fix the file, then `node tools/kit-import.mjs far` so the far version matches.
 
 Other commands: `list`, `remove car sedan`, `remove building house house-2`, `inbox`.
 

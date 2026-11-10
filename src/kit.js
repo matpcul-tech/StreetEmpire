@@ -7,10 +7,12 @@
 // kit.json:
 // {
 //   "cars": { "sedan": { "file": "cars/sedan.glb", "yaw": 0, "length": 4.4, "paint": true } },
-//   "buildings": { "house": [ { "file": "buildings/house.glb", "yaw": 0 } ] }
+//   "buildings": { "house": [ { "file": "buildings/house.glb", "far": "buildings/house.far.glb", "yaw": 0 } ] }
 // }
 // Car slots: sedan, muscle, suv, van, taxi, police, lowrider, pickup.
 // Building slots: house, store, apt, tower, shed (a slot can hold variants).
+// A building's optional far file (made by the importer) is drawn instead of the full model past
+// FAR_AT meters, so only the buildings near the player cost full detail. Without it the full model shows at any range.
 // Character slots: player, unc, crew, reds, blues, golds, locals, cop, ped
 // ("characters": { "player": [ { "file": "characters/player.glb", "yaw": 0, "height": 1.8, "gender": "m" } ] }).
 // Characters are rigged models; src/retarget.js plays the game's clips on them.
@@ -29,6 +31,9 @@ export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
+
+// distance where a building swaps to its far version: phones swap sooner, they draw a lot less
+const FAR_AT = { low: 38, high: 70 };
 
 const kit = { cars: {}, buildings: {}, characters: {} };
 let done = false;
@@ -68,7 +73,9 @@ export async function loadKit(base, { low = false } = {}) {
   for (const [slot, list] of Object.entries(manifest.buildings || {})) {
     if (!BUILDING_SLOTS.includes(slot)) continue;
     const got = [], specs = [].concat(list).filter((x) => x && x.file);
-    specs.forEach((spec, i) => jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { got[i] = prepBuilding(g.scene, spec, low); }).catch((e) => console.warn('kit building', slot, e))));
+    // the far file is optional: if it is missing or fails, the full model shows at any range
+    const far = (spec) => (spec.far ? loader.loadAsync(`${base}models/kit/${spec.far}`).then((g) => g.scene).catch((e) => { console.warn('kit building far', slot, e); return null; }) : null);
+    specs.forEach((spec, i) => jobs.push(Promise.all([loader.loadAsync(`${base}models/kit/${spec.file}`), far(spec)]).then(([g, farScene]) => { got[i] = prepBuilding(g.scene, spec, low, farScene); }).catch((e) => console.warn('kit building', slot, e))));
     kit.buildings[slot] = got; // variants keep the manifest order; empty entries are dropped below
   }
   for (const [slot, list] of Object.entries(manifest.characters || {})) {
@@ -141,7 +148,8 @@ function collectPaint(scene, spec) {
 
 // A building template: turned to +z, footprint fitted into the 13 m lot,
 // standing on the ground. Height follows the model (uniform scale).
-function prepBuilding(scene, spec, low) {
+// The far version gets the full model's turn, scale and offset, so the two swap in place.
+function prepBuilding(scene, spec, low, farScene = null) {
   const root = new THREE.Group(); root.name = 'kit-building';
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
@@ -149,7 +157,13 @@ function prepBuilding(scene, spec, low) {
   const fit = spec.footprint || 13, k = (spec.scale || 1) * fit / Math.max(size.x, size.z, 1e-6);
   inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
   shadows(root, !low, !low); if (low) cheapen(root);
-  return { root, height: size.y * k, spec };
+  let far = null;
+  if (farScene) {
+    far = new THREE.Group(); far.name = 'kit-building-far';
+    const fi = new THREE.Group(); fi.rotation.copy(inner.rotation); fi.scale.copy(inner.scale); fi.position.copy(inner.position); fi.add(farScene); far.add(fi);
+    shadows(far, !low, !low); if (low) cheapen(far);
+  }
+  return { root, far, farAt: low ? FAR_AT.low : FAR_AT.high, height: size.y * k, spec };
 }
 
 // A placed car: a clone of the template, with paint tinted per car (materials
@@ -242,7 +256,13 @@ function finishMaterial(m, key, paintHex) {
   finished.set(id, t); return t;
 }
 
-export function placeKitBuilding(T) { return T.root.clone(true); }
+// A placed building: the full model up close, the far version past T.farAt (three.js picks the level each frame).
+export function placeKitBuilding(T) {
+  if (!T.far) return T.root.clone(true);
+  const lod = new THREE.LOD(); lod.name = 'kit-building-lod';
+  lod.addLevel(T.root.clone(true), 0); lod.addLevel(T.far.clone(true), T.farAt, 0.1);
+  return lod;
+}
 
 // A character template: the file's scene under a yaw turn. Scaling, the feet on the ground and
 // the retargeted clips are done in src/chars.js, which has the game rig to retarget from.
