@@ -388,5 +388,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
     return built.size;
   };
   out.buildAllNear = (px, pz) => { for (let i = 0; i < 40; i++) out.update(px, pz); };
+  // every section, built now and left hidden until update() shows the ones in range (used before the opening flyover)
+  out.buildAll = () => { if (!kitReady()) return; for (const b of blocks) if (!built.has(b.id)) { const g = buildBlock(b); g.visible = false; built.set(b.id, g); } pending = []; };
   return out;
 }
