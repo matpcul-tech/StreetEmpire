@@ -36,6 +36,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x223040, roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.7 });
   function doorFor(g) {
     if (g.userData.door) return g.userData.door;
+    if (g.userData.bike) { g.userData.halfW = 0.1; return null; } // nothing to open: you walk up and swing a leg over
     const rot = g.rotation.y, pos = g.position.clone(); g.rotation.y = 0; g.position.set(0, 0, 0); g.updateMatrixWorld(true);
     const keep = []; for (const ch of g.children) if (ch.userData.beam || ch.isLight) { keep.push([ch, ch.visible]); ch.visible = false; }
     const b = new THREE.Box3(); g.traverse((o) => { if (o.isMesh && o.visible && !o.isSkinnedMesh) b.expandByObject(o); });
@@ -161,18 +162,20 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   function carFrame(c, done) {
     c.jackG = c.jackId != null ? charViz.get(c.jackId) : null;
     const g = c.carG, pg = c.playerG, door = g.userData.door, hw = g.userData.halfW || 0.9;
+    // where the driver ends up: the car seat, or a bike's saddle (set by the bike in vehicles.js)
+    const bike = !!g.userData.bike, st = g.userData.seat, sx = bike ? st.x : -0.42, sy = bike ? st.y - 0.55 : 0.24 + 0.15, sz = bike ? st.z : 0.15, duck = bike ? 0 : 1;
     g.updateMatrixWorld(true);
     pg.userData.cineHold = !done; pg.visible = true;
     const carRy = g.rotation.y;
     if (c.dir === 'in') {
       const t = c.t - c.jack; // the jack beat runs first
-      local(g, -hw - 0.75, 0, 0.1, P1); // standing at the open door
-      local(g, -0.42, 0.24 + 0.15, 0.15, P2); // in the seat
+      local(g, -hw - 0.75, 0, sz, P1); // standing at the open door
+      local(g, sx, sy, sz, P2); // in the seat
       if (c.jackG) { // pull the driver out: seat to the curb, staggering back
         const j = Math.max(0, Math.min(1, c.t / c.jack));
         c.jackG.userData.cineHold = c.t < c.jack + 0.5;
         if (c.t < c.jack + 0.5) { local(g, -0.42, 0.3, 0.15, P0); const to = local(g, -hw - 1.9, 0.24, -0.8, new THREE.Vector3()); c.jackG.position.lerpVectors(P0, to, ease(j)); c.jackG.rotation.y = carRy - Math.PI / 2; c.jackG.visible = true; c.jackG.userData.cineAnim = 'Hit_Chest'; }
-        local(g, -0.42, 0.24 + 0.15, 0.15, P2);
+        local(g, sx, sy, sz, P2);
       }
       const walk = seg(c.t, 0, c.jack + 0.35);
       if (door) { door.visible = true; door.rotation.y = 1.1 * (seg(c.t, c.jack * 0.3, c.jack * 0.3 + 0.3) - seg(t, 0.85, 1.1)); }
@@ -184,21 +187,21 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
         pg.rotation.x = 0;
       } else {
         const k = seg(t, 0.4, 0.85); // duck in and sit
-        pg.position.lerpVectors(P1, P2, k); pg.position.y = P1.y + (P2.y - P1.y) * k + Math.sin(k * Math.PI) * 0.05 - Math.sin(k * Math.PI) * 0.25;
-        if (pg.userData.kit) pg.position.y -= 0.34 * k; // the realistic torso sits higher than the painted body; keep the head in the window
+        pg.position.lerpVectors(P1, P2, k); pg.position.y = P1.y + (P2.y - P1.y) * k + Math.sin(k * Math.PI) * 0.05 - Math.sin(k * Math.PI) * 0.25 * duck;
+        if (pg.userData.kit && !bike) pg.position.y -= 0.34 * k; // the realistic torso sits higher than the painted body; keep the head in the window
         pg.rotation.y = carRy + Math.PI / 2 * (1 - k);
-        pg.rotation.x = Math.sin(k * Math.PI) * 0.35; // duck the head under the roof line
+        pg.rotation.x = Math.sin(k * Math.PI) * 0.35 * duck; // duck the head under the roof line
         pg.userData.cineAnim = k > 0.5 ? 'Driving_Loop' : 'Idle_Loop';
       }
     } else {
-      local(g, -0.42, 0.24 + 0.15, 0.15, P0);
-      local(g, -hw - 0.75, 0, 0.1, P1);
+      local(g, sx, sy, sz, P0);
+      local(g, -hw - 0.75, 0, sz, P1);
       local(g, -2.4, 0, 0, P2);
       if (door) { door.visible = true; door.rotation.y = 1.1 * (seg(c.t, 0, 0.25) - seg(c.t, 0.7, 0.95)); }
       if (c.t < 0.5) {
         const k = seg(c.t, 0.1, 0.5);
-        pg.position.lerpVectors(P0, P1, k); pg.position.y = 0.39 - 0.15 * k - (pg.userData.kit ? 0.34 * (1 - k) : 0);
-        pg.rotation.y = carRy + Math.PI / 2 * k; pg.rotation.x = Math.sin(k * Math.PI) * 0.35;
+        pg.position.lerpVectors(P0, P1, k); pg.position.y = bike ? sy + (0.24 - sy) * k : 0.39 - 0.15 * k - (pg.userData.kit ? 0.34 * (1 - k) : 0);
+        pg.rotation.y = carRy + Math.PI / 2 * k; pg.rotation.x = Math.sin(k * Math.PI) * 0.35 * duck;
         pg.userData.cineAnim = k < 0.4 ? 'Driving_Loop' : 'Idle_Loop';
       } else {
         const k = seg(c.t, 0.5, 0.9);

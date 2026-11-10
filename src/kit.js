@@ -9,7 +9,7 @@
 //   "cars": { "sedan": { "file": "cars/sedan.glb", "yaw": 0, "length": 4.4, "paint": true } },
 //   "buildings": { "house": [ { "file": "buildings/house.glb", "far": "buildings/house.far.glb", "yaw": 0 } ] }
 // }
-// Car slots: sedan, muscle, suv, van, taxi, police, lowrider, pickup.
+// Car slots: sedan, muscle, suv, van, taxi, police, lowrider, pickup, dirtbike (a motorcycle: two wheels, rider in the open).
 // Building slots: house, store, apt, tower, shed (a slot can hold variants).
 // A building's optional far file (made by the importer) is drawn instead of the full model past
 // FAR_AT meters, so only the buildings near the player cost full detail. Without it the full model shows at any range.
@@ -23,12 +23,14 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'];
+export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup', 'dirtbike'];
 // real-world lengths in meters per slot, used when kit.json gives none
-export const CAR_LENGTH = {'sedan': 4.9, 'muscle': 4.8, 'suv': 4.8, 'van': 5.1, 'taxi': 4.9, 'police': 5.2, 'lowrider': 5.4, 'pickup': 5.2};
+export const CAR_LENGTH = {'sedan': 4.9, 'muscle': 4.8, 'suv': 4.8, 'van': 5.1, 'taxi': 4.9, 'police': 5.2, 'lowrider': 5.4, 'pickup': 5.2, 'dirtbike': 2.1};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 // who wears each character slot: player, Unc, your crew, the three rival crews, the Locals crew, police, people on the street
 export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
+// two-wheel slots: no per-pixel car finish (it reads dark tires and seats as glass), the rider sits in the open
+export const BIKE_SLOTS = ['dirtbike'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
 
@@ -119,7 +121,7 @@ function prepCar(scene, spec, slot, low) {
     }
     const paint = collectPaint(scene, spec);
     shadows(root, !low, false); if (low) cheapen(root);
-    return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, slot, spec };
+    return { root, paint, atlas: !paint.length && !BIKE_SLOTS.includes(slot), key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, slot, spec };
   }
   // fallback for untagged models: meshes named like a wheel and much smaller than the body
   const found = [];
@@ -137,7 +139,7 @@ function prepCar(scene, spec, slot, low) {
   const paint = collectPaint(scene, spec);
   shadows(root, !low, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
-  return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
+  return { root, paint, atlas: !paint.length && !BIKE_SLOTS.includes(slot), key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
 }
 
 function collectPaint(scene, spec) {

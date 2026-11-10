@@ -47,6 +47,13 @@
       "yaw": 0,
       "length": 5.2,
       "paint": true
+    },
+    "dirtbike": {
+      "file": "cars/dirt-bike-v1.glb",
+      "yaw": 90,
+      "length": 2.1,
+      "paint": false,
+      "credit": "Original Street Empire dirt bike made for this project in Meshy. Not a third-party download."
     }
   },
   "buildings": {

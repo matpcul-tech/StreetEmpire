@@ -23,7 +23,7 @@ Play it: https://matpcul-tech.github.io/StreetEmpire/
 | Jump | Space | JUMP |
 | Attack or shoot | Click or F | HIT or SHOOT |
 | Switch weapon | Q | Weapon button |
-| Car, talk to Unc | E | Context button |
+| Car or bike, talk to Unc | E | Context button (CAR, RIDE, EXIT) |
 | Recruit ($100) | R | +CREW |
 | Drive | W and S gas and brake, A and D steer | GAS, BRAKE and arrow buttons |
 | Radio (in a car) | M | RADIO |
@@ -37,6 +37,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- Dirt bikes: one parked by your first block and one every few blocks after. Quicker off the line than any car, tighter in a turn, small enough for gaps a car will not fit, and it will not take many hits. You ride in the open and lean into turns. Built from the art team's Meshy model (`docs/build-kit.md`, Motorcycles).
 - A 19 job chain across four contacts: Unc (Eastside), Dee (Midtown), Rook (Downtown) and Sal (Harbor). Job types: fetch, pickups, car theft, block takeover, clean delivery, tailing, a lap of the Loop, a car chase, crew fights, block defense, losing the police, and marked targets.
 - A route line on the radar: the way along the streets to the job marker, or to the contact with the next job.
 - Police escalation: four stars brings tactical units (more officers, three to a tougher cruiser), five stars puts roadblocks on the street ahead of your car.

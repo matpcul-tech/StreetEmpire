@@ -16,6 +16,8 @@ The build kit swaps the built-in cars, buildings and people for downloaded model
 | car | sedan, muscle, suv, van, taxi, police, lowrider, pickup | scaled to 4.4 m long (set `len`), sits on the road, wheels spin and steer, paint changes per car, police get the light bar, headlight beams and brake glow are added |
 | building | house, store, apt, tower, shed | fitted into the 13 m corner lot, turned to face a street, the hustle sign is added; a slot can hold variants (`house`, `house-2`, `house-3`) and the city mixes them |
 
+| motorcycle | dirtbike | a car slot with its own rules: 2.1 m long, two wheels that spin, no car paint or finish pass (the model keeps its texture), one headlight glow and one tail glow, the rider sits on it in the open and leans with it in turns. Parked at the curb, never in traffic. See Motorcycles below |
+
 Which buildings each district uses: Eastside is store, house and apt. Downtown is tower and apt. Harbor is shed.
 
 ## Add a model from your phone
@@ -142,3 +144,19 @@ In game (`src/chars.js`, `src/retarget.js`): weapons go in the right hand in the
 Check it in kit.html: Characters, pick the slot, then tap Idle, Walk, Run, Punch, Bat, Pistol, Drive, Talk, Hit and KO.
 
 `node tools/retarget-test.mjs` checks the bone name matching against Meshy, Mixamo, Unreal, Rigify and Biped names.
+
+## Motorcycles
+
+A generated bike (Meshy and similar) comes as one mesh with the wheels frozen in it. Two steps put it in the game with wheels that turn:
+
+```
+node tools/bike-split.mjs ~/Downloads/dirt-bike.glb /tmp/dirt-bike-split.glb
+node tools/kit-import.mjs add car dirtbike /tmp/dirt-bike-split.glb --keep --yaw 90 --no-paint --name dirt-bike-v1
+```
+
+- `bike-split.mjs` finds the two tires (big, round, thin shells standing on the ground), adds the hub, spokes and sprocket that ride with each, and writes `body`, `wheel_front` and `wheel_rear` with each wheel on its own axle. No triangle is changed. It needs the usual generator layout: Y up, length along X. Pass `--front +x` when the bike faces +X.
+- Feed it the raw file (2K textures); the importer brings the textures down to 1024 px WebP. It also repairs a GLB whose header ends in a zero byte, which browsers refuse to load.
+- `--yaw 90` turns a bike that faces -X to the game's +Z. `--keep` leaves the wheel rig alone. `--no-paint` keeps the model's own colors.
+- The fork and bars are part of the body, so the front wheel does not turn left and right. The lean carries the turn.
+- In game: `CAR_TYPES.dirtbike` in `src/state.js` sets speed, pull, turning (`wb`), size against walls (`r`) and health. `ensureBikes` parks them. `npm run test:bike` checks the riding rules and `node tools/bike-shots.mjs <url> <dir>` takes the review shots.
+- A second bike type needs a new slot name in `CAR_SLOTS` and `BIKE_SLOTS` (`src/kit.js`), `CAR_SLOTS` in `tools/kit-import.mjs`, and an entry in `CAR_TYPES` with `bike: true`.

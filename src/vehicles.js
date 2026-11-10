@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { kitCar, cloneKitCar } from './kit.js';
+import { kitCar, cloneKitCar, BIKE_SLOTS } from './kit.js';
 
 // lowrider: Street Empire pack kitbash (tools/build-se-cars.mjs)
 const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police', lowrider: '../se-pack/cars/lowrider', pickup: 'suv' }; // pickup falls back to the SUV body when no kit model loads
@@ -279,12 +279,33 @@ function makeKitCar(c, KT) {
   const { model, wheels } = cloneKitCar(KT, paintHex);
   model.rotation.order = 'YXZ';
   g.add(model);
-  const roof = new THREE.Box3().setFromObject(model, true).max.y;
+  const box = new THREE.Box3().setFromObject(model, true), roof = box.max.y;
+  if (BIKE_SLOTS.includes(c.type)) {
+    // a motorcycle: one lamp front and back, wheels that spin but do not turn on their own, and a seat in the open.
+    // The seat is measured off the model: 73 percent of its height, a little behind the middle.
+    const L = addBikeLights(g, box);
+    let wheelR = 0.34; if (wheels[0]) wheelR = Math.max(0.2, wheels[0].node.position.y);
+    g.userData = { wheels, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true, roof, bike: true, wheelR, seat: { x: 0, y: roof * 0.73, z: box.min.z + (box.max.z - box.min.z) * 0.37, lean: 0.35 } }; // lean: the rider tips forward onto the bars instead of sitting back like in a car seat
+    g.userData.paintHex = 0x2a4a8a;
+    return g;
+  }
   const L = addLights(g, c, roof + 0.08);
   L.heads.visible = false; L.tails.visible = false; // the model has its own lamps; only the glow flares and beams are added
   g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true, roof };
   g.userData.paintHex = paintHexFor(c);
   return g;
+}
+// one headlight glow and beam at the bars, one tail glow on the rear fender; no lamp boxes (a bike has no body to hide them in)
+let noGeo = null;
+function addBikeLights(g, box) {
+  const P = parts(), y = box.max.y * 0.84;
+  const tails = new THREE.Mesh(noGeo ||= new THREE.BufferGeometry(), P.tailDim); g.add(tails);
+  const flares = new THREE.Group();
+  const f = new THREE.Sprite(P.flare); f.position.set(0, y, box.max.z * 0.62); f.scale.setScalar(0.7); flares.add(f);
+  const r = new THREE.Sprite(P.flareR); r.position.set(0, box.max.y * 0.72, box.min.z * 0.96); r.scale.setScalar(0.6); r.userData.tail = true; flares.add(r);
+  g.add(flares);
+  const beam = new THREE.Mesh(P.beam, P.beamMat); beam.position.set(0, y, box.max.z * 0.62); beam.rotation.x = 0.06; beam.scale.set(0.7, 0.7, 1); beam.userData.beam = true; g.add(beam);
+  return { tails, flares };
 }
 
 function addLights(g, c, roofY = 1.75) {
@@ -320,8 +341,8 @@ function lampGeos(grp) {
 
 export function updateCar(g, c, dt, night, now) {
   const u = g.userData;
-  u.spinA += (c.v * dt) / 0.37;
-  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
+  u.spinA += (c.v * dt) / (u.wheelR || 0.37);
+  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front && !u.bike) w.node.rotation.y = c.steer; }
   let d = c.ry - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
   g.rotation.y += Math.abs(d) > 0.01 ? d * Math.min(1, dt * (c.ai ? 6 : 30)) : d;
   g.position.x += (c.x - g.position.x) * Math.min(1, dt * (c.ai ? 8 : 40));
@@ -329,7 +350,9 @@ export function updateCar(g, c, dt, night, now) {
   // suspension: springy pitch under throttle and brakes, body roll in turns and
   // slides, and a vertical bounce kicked by crashes (u.bounce)
   const acc = dt > 0 ? (c.v - (u.lastV ?? c.v)) / dt : 0; u.lastV = c.v;
-  const tPitch = THREE.MathUtils.clamp(-acc * 0.0035, -0.07, 0.07), tRoll = -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
+  // a car's body rolls away from the turn; a bike and its rider lean into it, harder with speed
+  const tPitch = THREE.MathUtils.clamp(-acc * (u.bike ? 0.006 : 0.0035), u.bike ? -0.12 : -0.07, 0.07);
+  const tRoll = u.bike ? c.steer * Math.min(1, Math.abs(c.v) / 16) * 1.5 : -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
   u.pv = ((u.pv || 0) + ((tPitch - (u.pitch || 0)) * 90 - (u.pv || 0) * 9) * dt); u.pitch = (u.pitch || 0) + u.pv * dt;
   u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * 80 - (u.rv || 0) * 8) * dt); u.roll = (u.roll || 0) + u.rv * dt;
   u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
@@ -342,6 +365,7 @@ export function updateCar(g, c, dt, night, now) {
   for (const f of u.flares.children) f.visible = f.userData.tail ? (braking || night) : night;
   for (const f of u.flares.children) if (f.userData.tail) f.scale.setScalar(braking ? 1.3 : 0.8);
   if (u.siren) { const on = c.siren && Math.floor(now / 180) % 2 === 0; u.siren[0].visible = !c.siren || on; u.siren[1].visible = !c.siren || !on; }
+  if (c.wrecked && !u.burnt && u.driver && u.driver.parent === u.model) { u.model.remove(u.driver); u.driver = null; } // a bike's rider leans with it: take him off before the paint burns
   if (c.wrecked && !u.burnt) { u.burnt = true; u.model.traverse((o) => { if (o.isMesh) o.material = parts().burnt; }); }
 }
 

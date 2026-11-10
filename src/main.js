@@ -16,7 +16,7 @@ import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { createRadio } from './radio.js';
 import { routeTo } from './state.js';
-import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
+import { CAR_TYPES, SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
@@ -259,7 +259,7 @@ function context() {
   if (!s.mission) for (const g of s.ents) if (g.kind === 'giver' && (g.x - p.x) ** 2 + (g.z - p.z) ** 2 < 16) return 'TALK';
   if (shopAt(p) >= 0) return 'SHOP';
   { const h = houseAt(p); if (h >= 0 && !ownsHouse(s, h)) return 'BUY'; }
-  if (nearestCar(s, p, 5)) return 'CAR';
+  { const c = nearestCar(s, p, 5); if (c) return CAR_TYPES[c.type].bike ? 'RIDE' : 'CAR'; }
   const b = blockAt(s, p.x, p.z);
   if (b && b.owner === p.crew && !b.upgraded) return 'UPGRADE';
   return null;
@@ -885,8 +885,9 @@ function frame(now) {
     // tire smoke and skid marks from the rear wheels while sliding
     if (c.skid && !c.wrecked && d2 < 70 * 70) {
       const sn = Math.sin(c.ry), cs = Math.cos(c.ry);
-      for (const side of [-1, 1]) {
-        const wx = c.x - sn * 1.35 + cs * 0.75 * side, wz = c.z - cs * 1.35 - sn * 0.75 * side;
+      const bk = g.userData.bike; // a bike lays one mark from its rear tire
+      for (const side of bk ? [1] : [-1, 1]) {
+        const wx = c.x - sn * (bk ? 0.73 : 1.35) + cs * (bk ? 0 : 0.75) * side, wz = c.z - cs * (bk ? 0.73 : 1.35) - sn * (bk ? 0 : 0.75) * side;
         skids.mark(c.id + side, wx, wz);
         if (Math.random() < (LOW ? 0.25 : 0.5)) smoke.emit(wx, 0.4, wz, false, false);
       }
@@ -896,15 +897,21 @@ function frame(now) {
     const occupied = (c.ai && !c.wrecked) || (c.cops && s.ents.some((e) => e.car === c.id));
     for (const ch of g.children) if (ch.userData.beam) ch.visible = ch.visible && (occupied || p.car === c.id); // parked cars keep their lights off
     if (!(occupied || p.car === c.id)) { g.userData.flares.visible = false; g.userData.tails.material.color && (g.userData.tails.visible = true); }
-    const wantDriver = peopleReady && occupied && d2 < DRIVER_DIST * DRIVER_DIST;
     const u = g.userData;
+    // on a bike you ride in the open: the player is drawn on the saddle (he is hidden inside a car), and leans with the bike
+    const riding = u.bike && p.car === c.id && prevCar === c.id && !c.wrecked && cine.active !== 'car'; // prevCar: only once the getting-on moment has started and finished
+    const wantDriver = peopleReady && (riding || (occupied && d2 < DRIVER_DIST * DRIVER_DIST));
     if (wantDriver && !u.driver) {
-      const look = c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
-      if (modelReady(look.model)) { u.driver = makeCharacter(look, false); u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
-    } else if (!wantDriver && u.driver) { g.remove(u.driver); u.driver = null; }
+      const look = riding ? lookFor(p, CREWS) : c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
+      if (modelReady(look.model)) {
+        u.driver = makeCharacter(look, false); u.driver.rotation.y = 0;
+        if (u.bike) { u.driver.position.set(u.seat.x, u.seat.y - DRIVER_DROP, u.seat.z); u.driver.rotation.x = u.seat.lean || 0; u.model.add(u.driver); }
+        else { u.driver.position.set(-0.42, seatY(c, u), 0.15); g.add(u.driver); }
+      }
+    } else if (!wantDriver && u.driver) { u.driver.parent && u.driver.parent.remove(u.driver); u.driver = null; }
     if (u.driver) animate(u.driver, { hp: 1 }, rdt, true);
     // damage smoke
-    if (c.hp < c.max * 0.5 && Math.random() < (c.wrecked ? 0.5 : c.hp < c.max * 0.25 ? 0.3 : 0.12) * (LOW ? 0.6 : 1)) smoke.emit(c.x + Math.sin(c.ry) * 1.8, 1.2, c.z + Math.cos(c.ry) * 1.8, c.wrecked || c.hp < c.max * 0.25, c.wrecked);
+    if (c.hp < c.max * 0.5 && Math.random() < (c.wrecked ? 0.5 : c.hp < c.max * 0.25 ? 0.3 : 0.12) * (LOW ? 0.6 : 1)) smoke.emit(c.x + Math.sin(c.ry) * (u.bike ? 0.3 : 1.8), u.bike ? 0.8 : 1.2, c.z + Math.cos(c.ry) * (u.bike ? 0.3 : 1.8), c.wrecked || c.hp < c.max * 0.25, c.wrecked);
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }
   }
   for (const [id, g] of carViz) if (!seenCars.has(id)) { scene.remove(g); carViz.delete(id); }
@@ -925,7 +932,8 @@ function frame(now) {
   if (started) updateSpots(s, p, now);
   wasDown = p.downT > 0;
   smoke.update(rdt);
-  sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
+  const pbike = !!pcar && !!CAR_TYPES[pcar.type].bike;
+  sfx.setEngine(!!pcar, pcar ? pcar.v : 0, pbike);
   radio.setOn(started && !!pcar && !paused && !s.over && !pcar.wrecked && !(p.downT > 0));
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
   // headlight throw on the road: an additive ground decal on every platform
@@ -980,7 +988,7 @@ function frame(now) {
   lookIdle += rdt;
   if (pcar) { const head = pcar.ry * 0.6 + (pcar.mh ?? pcar.ry) * 0.4, target = head + Math.PI; let d = target - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); if (lookIdle > 0.5) yaw += d * Math.min(1, rdt * (2.2 + Math.abs(pcar.v) * 0.08)); }
   const downK = p.downT > 0 ? 1 - p.downT / DOWN_TIME : 0;
-  const dist = (pcar ? 8.8 + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? 2.5 : 1.7) + downK * 3;
+  const dist = (pcar ? (pbike ? 6.4 : 8.8) + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? (pbike ? 2.2 : 2.5) : 1.7) + downK * 3; // a bike is small: the camera rides closer
   let dd = dist;
   for (; dd > 1.5; dd -= 0.5) { const cx = pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, cy = h + Math.sin(pitch) * dd, cz = pv.z + Math.cos(yaw) * Math.cos(pitch) * dd; if (!insideBuilding(cx, cz, 0.3, cy)) break; }
   tmp.set(pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, Math.max(0.6, h + Math.sin(pitch) * dd), pv.z + Math.cos(yaw) * Math.cos(pitch) * dd);
@@ -1030,7 +1038,8 @@ function frame(now) {
   document.body.classList.toggle('driving', !!p.car);
   const ctxName = context(); const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName === 'UPGRADE' ? 'ARM' : ctxName;
   // desktop prompt for the E key, so walking up to Unc or a car says what E will do
-  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? 'E  Get in' : ctxName === 'EXIT' ? 'E  Get out' : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : '';
+  const pbikeNow = !!pcar && !!CAR_TYPES[pcar.type].bike;
+  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? 'E  Get in' : ctxName === 'RIDE' ? 'E  Ride' : ctxName === 'EXIT' ? (pbikeNow ? 'E  Get off' : 'E  Get out') : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : '';
   if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
   const here = blockAt(s, p.x, p.z);

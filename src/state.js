@@ -44,6 +44,9 @@ export const CAR_TYPES = {
   sedan: { max: 28, acc: 16, hp: 100 }, muscle: { max: 36, acc: 21, hp: 100 }, suv: { max: 26, acc: 15, hp: 140 },
   van: { max: 22, acc: 12, hp: 160 }, taxi: { max: 28, acc: 16, hp: 100 }, police: { max: 34, acc: 20, hp: 150 },
   lowrider: { max: 26, acc: 15, hp: 110 }, pickup: { max: 27, acc: 15, hp: 135 },
+  // a motorcycle: quick off the line, turns tighter, slips through gaps a car cannot, takes far less punishment.
+  // bike: the rider sits in the open. wb: wheelbase the steering turns on (cars 2.7). r: size against walls (cars 1.6).
+  dirtbike: { max: 31, acc: 20, hp: 70, bike: true, wb: 1.9, r: 0.9 },
 };
 // kb: knockback speed on hit. Ranged weapons spend ammo (pistol) or shells (shotgun).
 // The five weapons stay as they are. Timing, arc and stun are what separate them:
@@ -97,6 +100,7 @@ export function createState(seed = 1, cfg = {}) {
     s.cars.push(makeCar(s, bc.x + PITCH / 2 - 5.6, bc.z - 10 + (i % 3) * 6, 0, types[i % types.length], false));
     if (i % 2 === 0) s.cars.push(makeCar(s, bc.x - 8 + (i % 4) * 3, bc.z - PITCH / 2 + 5.6, Math.PI / 2, types[(i + 2) % types.length], false));
   });
+  ensureBikes(s);
   // pickups in alleys
   [[1, 0, 'bat'], [1, 1, 'pistol'], [2, 2, 'knuckles'], [3, 3, 'shotgun'], [3, 1, 'bat'], [1, 3, 'pistol'], [3, 0, 'knuckles'], [2, 4, 'shotgun'],
     [5, 1, 'bat'], [1, 5, 'pistol'], [5, 4, 'knuckles'], [4, 6, 'shotgun'], [6, 2, 'pistol'], [2, 7, 'bat'], [6, 6, 'shotgun'], [7, 4, 'knuckles'], [4, 8, 'pistol'], [8, 5, 'bat']].forEach(([gx, gz, type], k) => {
@@ -107,9 +111,20 @@ export function createState(seed = 1, cfg = {}) {
   return s;
 }
 function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
-function makeCar(s, x, z, ry, type, ai) {
+function makeCar(s, x, z, ry, type, ai, paint) {
   const T = CAR_TYPES[type];
-  return { id: 'c' + s.nextId++, type, x, z, ry, v: 0, steer: 0, driver: null, ai, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: ai ? 8 + R(s) * 3 : 0, paint: Math.floor(R(s) * 8) };
+  return { id: 'c' + s.nextId++, type, x, z, ry, v: 0, steer: 0, driver: null, ai, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: ai ? 8 + R(s) * 3 : 0, paint: paint ?? Math.floor(R(s) * 8) };
+}
+// Dirt bikes parked at the curb: one by the block you start on, then one every seventh block.
+// Placed without the random stream, so adding them changes nothing else, and run on load so old saves get them too.
+export function ensureBikes(s) {
+  if (s.bikesV === 1) return; s.bikesV = 1;
+  s.blocks.forEach((b, i) => {
+    if (i % 7) return;
+    const bc = blockCenter(b), x = bc.x + PITCH / 2 - 5.9, z = bc.z + 9;
+    if (s.cars.some((c) => dist2(c, { x, z }) < 9)) return;
+    s.cars.push(makeCar(s, x, z, 0, 'dirtbike', false, 0));
+  });
 }
 function spawnTraffic(s, anywhere) {
   const p = player(s);
@@ -571,7 +586,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.v += throttle * (braking ? 34 : c.v < 0 ? 10 : T.acc) * dt;
   c.v *= 1 - (handbrake ? 0.7 : Math.abs(throttle) < 0.05 ? 0.9 : 0.25) * dt;
   c.v = Math.max(-9, Math.min(T.max, c.v));
-  c.ry -= (c.v / 2.7) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
+  c.ry -= (c.v / (T.wb || 2.7)) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
   const grip = handbrake ? 1.1 : 6.5 - sp * 2;
   c.mh += angDiff(c.ry, c.mh) * Math.min(1, dt * grip);
   c.slip = Math.abs(angDiff(c.ry, c.mh));
@@ -580,7 +595,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt;
   clampWorld(c);
   c.scrapeT = Math.max(0, (c.scrapeT || 0) - dt);
-  collideBuildings(c, 1.6, () => {
+  collideBuildings(c, T.r || 1.6, () => {
     const n = Math.abs(c.v);
     if (c.scrapeT <= 0 && n > 3) { c.scrapeT = 0.15; s.fx.push({ type: n > 10 ? 'crash' : 'scrape', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0, n }); }
     carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 0.85; c.mh = c.ry;
@@ -1149,7 +1164,7 @@ export function contactFor(s) {
 }
 // Saves from before the job chain: the old five jobs map onto the new list by name where they still exist.
 export function migrate(s) {
-  ensureContacts(s);
+  ensureContacts(s); ensureBikes(s);
   if (s.jobsV !== 2) { s.jobsV = 2; s.mission = null; s.missionIdx = s.missionIdx > 0 ? 1 : 0; }
   return s;
 }

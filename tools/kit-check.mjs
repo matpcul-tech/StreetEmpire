@@ -9,7 +9,7 @@ import draco3d from 'draco3dgltf';
 await MeshoptDecoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder, 'draco3d.decoder': await draco3d.createDecoderModule() });
 // real-world size per slot (m): length, width with mirrors about 0.2 m less, height
-export const REF = { sedan: [4.9, 1.8, 1.4], muscle: [4.8, 1.72, 1.3], suv: [4.8, 1.95, 1.8], van: [5.1, 2.0, 2.0], taxi: [4.9, 1.8, 1.4], police: [5.2, 1.98, 1.47], lowrider: [5.4, 2.0, 1.38], pickup: [5.2, 1.95, 1.75] };
+export const REF = { sedan: [4.9, 1.8, 1.4], muscle: [4.8, 1.72, 1.3], suv: [4.8, 1.95, 1.8], van: [5.1, 2.0, 2.0], taxi: [4.9, 1.8, 1.4], police: [5.2, 1.98, 1.47], lowrider: [5.4, 2.0, 1.38], pickup: [5.2, 1.95, 1.75], dirtbike: [2.1, 0.82, 1.25] };
 export const slotOf = (f) => Object.keys(REF).find((s) => f.split('/').pop().toLowerCase().startsWith(s)) || Object.keys(REF).find((s) => f.toLowerCase().includes(s)) || 'sedan';
 export async function holes(file) {
   const d = await io.read(file);
