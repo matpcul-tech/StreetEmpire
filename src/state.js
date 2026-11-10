@@ -44,6 +44,7 @@ export const CAR_TYPES = {
   sedan: { max: 28, acc: 16, hp: 100 }, muscle: { max: 36, acc: 21, hp: 100 }, suv: { max: 26, acc: 15, hp: 140 },
   van: { max: 22, acc: 12, hp: 160 }, taxi: { max: 28, acc: 16, hp: 100 }, police: { max: 34, acc: 20, hp: 150 },
   lowrider: { max: 26, acc: 15, hp: 110 }, pickup: { max: 27, acc: 15, hp: 135 },
+  bike: { max: 39, acc: 25, hp: 90 }, // sport bike: quickest thing on the street, and the easiest to wreck
 };
 // kb: knockback speed on hit. Ranged weapons spend ammo (pistol) or shells (shotgun).
 // The five weapons stay as they are. Timing, arc and stun are what separate them:
@@ -97,6 +98,7 @@ export function createState(seed = 1, cfg = {}) {
     s.cars.push(makeCar(s, bc.x + PITCH / 2 - 5.6, bc.z - 10 + (i % 3) * 6, 0, types[i % types.length], false));
     if (i % 2 === 0) s.cars.push(makeCar(s, bc.x - 8 + (i % 4) * 3, bc.z - PITCH / 2 + 5.6, Math.PI / 2, types[(i + 2) % types.length], false));
   });
+  addBikes(s);
   // pickups in alleys
   [[1, 0, 'bat'], [1, 1, 'pistol'], [2, 2, 'knuckles'], [3, 3, 'shotgun'], [3, 1, 'bat'], [1, 3, 'pistol'], [3, 0, 'knuckles'], [2, 4, 'shotgun'],
     [5, 1, 'bat'], [1, 5, 'pistol'], [5, 4, 'knuckles'], [4, 6, 'shotgun'], [6, 2, 'pistol'], [2, 7, 'bat'], [6, 6, 'shotgun'], [7, 4, 'knuckles'], [4, 8, 'pistol'], [8, 5, 'bat']].forEach(([gx, gz, type], k) => {
@@ -105,6 +107,18 @@ export function createState(seed = 1, cfg = {}) {
   for (let i = 0; i < s.cfg.traffic; i++) spawnTraffic(s, true);
   for (let i = 0; i < s.cfg.peds; i++) spawnPed(s, null);
   return s;
+}
+// Parked sport bikes: one by the starting corner, the rest spread over the city. They take no ids and
+// no random numbers, so adding them leaves everything else in a new game exactly as it was.
+const BIKE_BLOCKS = [0, 6, 20, 34, 40, 52, 64, 78];
+function addBikes(s) {
+  if (s.cars.some((c) => c.type === 'bike')) return;
+  const T = CAR_TYPES.bike;
+  BIKE_BLOCKS.forEach((bi, k) => {
+    const b = s.blocks[bi % s.blocks.length]; if (!b) return;
+    const bc = blockCenter(b);
+    s.cars.push({ id: 'bike' + k, type: 'bike', x: bc.x + PITCH / 2 - 5.6, z: bc.z + 9.5 + (k % 2) * 1.5, ry: 0, v: 0, steer: 0, driver: null, ai: false, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: 0, paint: k });
+  });
 }
 function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
 function makeCar(s, x, z, ry, type, ai) {
@@ -1151,6 +1165,7 @@ export function contactFor(s) {
 export function migrate(s) {
   ensureContacts(s);
   if (s.jobsV !== 2) { s.jobsV = 2; s.mission = null; s.missionIdx = s.missionIdx > 0 ? 1 : 0; }
+  addBikes(s); // saves from before the motorcycles get them parked
   return s;
 }
 const missionCar = (s, m) => (m.carId ? s.cars.find((c) => c.id === m.carId) : null);

@@ -18,6 +18,10 @@
 // Characters are rigged models; src/retarget.js plays the game's clips on them.
 // gender "m" or "f" is optional. A missing file is left out of kit.json and that person keeps the painted body.
 // The full list to generate is public/models/kit/character-roster.json. Only installed files are loaded.
+// Motorcycles: "bikes": { "sportbike": { "file": "bikes/sportbike.glb", "yaw": 0, "length": 2.1 } }.
+// A bike file is rigged before it is installed: nodes tagged extras.kitWheel (origin on the axle) spin, and
+// the node tagged extras.kitSteer (fork, fender, bars and the front wheel under it) turns around
+// extras.kitSteerAxis. See docs/build-kit.md, Motorcycles.
 // Models face +z (the glTF convention); yaw (degrees) turns one that does not.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -35,10 +39,11 @@ const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
 // distance where a building swaps to its far version: phones swap sooner, they draw a lot less
 const FAR_AT = { low: 38, high: 70 };
 
-const kit = { cars: {}, buildings: {}, characters: {} };
+const kit = { cars: {}, buildings: {}, characters: {}, bikes: {} };
 let done = false;
 export const kitReady = () => done;
 export const kitCar = (type) => kit.cars[type] || null;
+export const kitBike = (slot = 'sportbike') => kit.bikes[slot] || null;
 export function kitBuilding(kind, seed) { const v = kit.buildings[kind]; return v && v.length ? v[seed % v.length] : null; }
 export const kitInfo = () => kit;
 // Pick one installed variant. When a slot has gendered files, men and women stay in their own pool.
@@ -69,6 +74,10 @@ export async function loadKit(base, { low = false } = {}) {
   for (const [slot, spec] of Object.entries(manifest.cars || {})) {
     if (!CAR_SLOTS.includes(slot) || !spec || !spec.file) continue;
     jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { kit.cars[slot] = prepCar(g.scene, spec, slot, low); }).catch((e) => console.warn('kit car', slot, e)));
+  }
+  for (const [slot, spec] of Object.entries(manifest.bikes || {})) {
+    if (!spec || !spec.file) continue;
+    jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { kit.bikes[slot] = prepBike(g.scene, spec, slot, low); }).catch((e) => console.warn('kit bike', slot, e)));
   }
   for (const [slot, list] of Object.entries(manifest.buildings || {})) {
     if (!BUILDING_SLOTS.includes(slot)) continue;
@@ -138,6 +147,38 @@ function prepCar(scene, spec, slot, low) {
   shadows(root, !low, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
   return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
+}
+
+// A bike template: turned to +z, scaled to its length, tires on the ground. The file's own rig is kept
+// as built (wheel nodes on their axles, the steer node on the steering head), so nothing is re-pivoted here.
+function prepBike(scene, spec, slot, low) {
+  const root = new THREE.Group(); root.name = 'kit-bike';
+  const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
+  const k = (spec.length || 2.1) / Math.max(size.z, 1e-6);
+  inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
+  root.updateMatrixWorld(true);
+  let wheels = 0, steer = 0, wheelR = 0.31;
+  scene.traverse((o) => {
+    if (o.userData && o.userData.kitSteer) steer++;
+    if (o.userData && o.userData.kitWheel) { wheels++; const b = new THREE.Box3().setFromObject(o, true); wheelR = (b.max.y - b.min.y) / 2; }
+  });
+  shadows(root, !low, false); if (low) cheapen(root);
+  return { root, key: spec.paint === false ? null : paintKey(scene), hasWheels: wheels > 0, hasSteer: steer > 0, wheelR, height: size.y * k, slot, spec };
+}
+
+// A placed bike: a clone of the template with the same per-pixel finish and repaint the single-texture
+// cars get. Returns the model, its wheel nodes and the steer node with its axis.
+export function cloneKitBike(T, paintHex) {
+  const model = T.root.clone(true);
+  const wheels = []; let steer = null;
+  model.traverse((o) => {
+    if (o.isMesh) { const swap = (m) => (m.map ? finishMaterial(m, T.key, T.key ? paintHex : null) : m); o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material); }
+    if (o.userData && o.userData.kitWheel) wheels.push(o);
+    if (o.userData && o.userData.kitSteer && !steer) steer = { node: o, axis: new THREE.Vector3(...(o.userData.kitSteerAxis || [0, 1, 0])).normalize() };
+  });
+  return { model, wheels, steer };
 }
 
 function collectPaint(scene, spec) {

@@ -69,6 +69,7 @@ function writeCredits(m) {
   const START = '<!-- kit-credits:start -->', END = '<!-- kit-credits:end -->';
   const rows = [];
   for (const [slot, e] of Object.entries(m.cars || {})) rows.push(`| car: ${slot} | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
+  for (const [slot, e] of Object.entries(m.bikes || {})) rows.push(`| bike: ${slot} | ${e.credit || 'no credit given'} |`);
   for (const [slot, list] of Object.entries(m.buildings || {})) for (const e of [].concat(list)) rows.push(`| building: ${slot} (${path.basename(e.file, '.glb')}) | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
   for (const [slot, list] of Object.entries(m.characters || {})) for (const e of [].concat(list)) rows.push(`| character: ${slot} (${path.basename(e.file, '.glb')}) | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
   const block = `${START}\n## Build kit models\n\nInstalled through tools/kit-import.mjs (generated from public/models/kit/kit.json).\n\n${rows.length ? '| Slot | Credit and license |\n|---|---|\n' + rows.join('\n') : 'None installed.'}\n${END}`;

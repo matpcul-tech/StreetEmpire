@@ -93,6 +93,29 @@ The same author's Riverside '88 (a late 80s American sedan) is also worth checki
 
 On Sketchfab, search for the vehicle or building, then filter Downloadable, License (CC0 or CC Attribution) and Face count (up to 50k). Good search words: "low poly", "game ready", "PBR", plus an era or type ("80s sedan", "corner store", "stucco house", "warehouse").
 
+## Motorcycles
+
+The city has parked sport bikes you can ride: get on with the same button as a car, the rider is visible, the bike leans into turns, the bars and front wheel turn, and both wheels spin. They are listed under `bikes` in kit.json:
+
+```json
+"bikes": { "sportbike": { "file": "bikes/sportbike.glb", "yaw": 0, "length": 2.1 } }
+```
+
+Bikes do not go through kit-inbox yet. A raw Meshy bike is one fused mesh, so it is rigged first and the finished file is committed to `public/models/kit/bikes/`. The file needs:
+
+| Node | Tag in extras | What it is |
+| --- | --- | --- |
+| `wheel_rear` | `kitWheel: true` | rear tire, rim and disc, origin on the axle |
+| `steer` | `kitSteer: true`, `kitSteerAxis: [x, y, z]` | origin on the steering head; holds the fork, fender, calipers, bars and levers, and the front wheel under it. The game turns it around the axis (the fork's rake) |
+| `wheel_front` | `kitWheel: true` | child of `steer`, origin on the axle |
+| `body` | none | everything else |
+
+Same rules as cars otherwise: faces +z, tires on y=0, one material, 1024 px WebP textures, quantized and meshopt compressed. The sport bike is 30,862 triangles in 4 draw calls. Paint is changed per bike the same way single-texture cars are repainted (the body's main hue is swapped, chrome, tires and lamps stay).
+
+If the bike file is missing or fails to load, the game draws a plain block bike instead, so it never breaks.
+
+In the game: `makeBike` in `src/vehicles.js`, `prepBike` and `cloneKitBike` in `src/kit.js`, the rider pose in `src/main.js` (`BIKE_SEAT`, `bikePose`), stats and parked spots in `src/state.js` (`CAR_TYPES.bike`, `addBikes`).
+
 ## Characters
 
 A rigged character in a slot replaces the painted people for whoever wears that slot. The game's own 18 animation clips (idle, walk, jog, sprint, punches, bat, pistol, driving, hits, roll, jump, knockout, talking) are retargeted onto the character's skeleton when the game loads, so the art team never has to animate anything.
