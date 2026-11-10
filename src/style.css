@@ -211,7 +211,7 @@ body.cine-on #lcol{visibility:hidden}
   #lcol{left:calc(var(--sl) + var(--rad) + 22px)!important;max-width:260px}
   #sub{font-size:11px;margin-top:1px;white-space:nowrap}
 }
-#stars i{background:rgba(0,0,0,.6);border-color:rgba(255,255,255,.7)}#stars i.on{border-color:#000;box-shadow:0 0 3px #000}#stars b{text-shadow:0 0 3px #000}#stars.none{opacity:.6}
+#stars i{background:rgba(0,0,0,.6);border-color:rgba(255,255,255,.7)}#stars i.on{border-color:#000;box-shadow:0 0 3px #000}#stars b{text-shadow:0 0 3px #000}#stars.none{opacity:.85}#stars b{opacity:1;text-shadow:1px 1px 0 #000,-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,0 0 4px #000}
 
 /* Portrait phone: two bands. Left column is mission, capture, tutorial, toast.
    Right stack under Rep/Turf holds cash pops, the momentary title, and the pass card.

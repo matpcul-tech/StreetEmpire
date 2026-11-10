@@ -803,13 +803,43 @@ function trafficStep(s, c, dt) {
 }
 
 // ---------- police ----------
+// Five stars, in a car, at speed: two cruisers are parked nose to tail across the street about 95 m ahead,
+// with two officers on foot beside them. At most two roadblocks stand at once; ones left far behind are cleared.
+function roadblockStep(s, p, st, dt) {
+  for (const c of s.cars) if (c.roadblock && (st === 0 || dist2(c, p) > 170 * 170)) c.remove = true;
+  s.blockT = Math.max(0, (s.blockT || 0) - dt);
+  if (st < 5 || !p.car || s.blockT > 0) return;
+  const car = s.cars.find((c) => c.id === p.car); if (!car || Math.abs(car.v) < 9) return;
+  if (s.cars.filter((c) => c.roadblock && !c.remove).length >= 4) return;
+  const sx = Math.sin(car.ry) * Math.sign(car.v), sz = Math.cos(car.ry) * Math.sign(car.v), alongX = Math.abs(sx) > Math.abs(sz);
+  const E = (GRID * PITCH) / 2;
+  // snapped to the street the car is on, in the middle of a block side (never in an intersection)
+  const line = nearestLine(alongX ? car.z : car.x), ahead = (alongX ? car.x : car.z) + Math.sign(alongX ? sx : sz) * 95;
+  const mid = lineCoord(Math.max(0, Math.min(GRID - 1, Math.floor(ahead / PITCH + GRID / 2)))) + PITCH / 2;
+  if (Math.abs(mid) > E || Math.abs(mid - (alongX ? car.x : car.z)) < 50) return;
+  s.blockT = 14;
+  for (const off of [-2.7, 2.7]) {
+    const x = alongX ? mid : line + off, z = alongX ? line + off : mid;
+    const c = makeCar(s, x, z, alongX ? 0 : Math.PI / 2, 'police', false); c.cops = true; c.siren = true; c.roadblock = true; s.cars.push(c);
+    s.ents.push(newEnt(s, { kind: 'cop', crew: 'police', hp: 120, x: x + (alongX ? -Math.sign(sx) * 3 : off), z: z + (alongX ? off : -Math.sign(sz) * 3), weapon: 'pistol', look: off > 0 ? 1 : 0, alert: 1 }));
+  }
+  s.fx.push({ type: 'roadblock', x: alongX ? mid : line, z: alongX ? line : mid });
+}
 function policeStep(s, dt) {
   const p = player(s), st = stars(p);
   const cops = s.ents.filter((e) => e.kind === 'cop' && e.hp > 0);
   s.policeT = (s.policeT || 0) - dt;
-  const want = Math.min(8, st * 2);
+  // Escalation: four stars brings tactical units (more officers, three to a tougher cruiser, sent faster),
+  // five stars adds roadblocks on the street ahead of a car on the run.
+  const want = Math.min(12, st * 2 + (st >= 4 ? 2 : 0));
+  if (st !== (s.starsSeen || 0)) {
+    if (st > (s.starsSeen || 0) && st === 4) log(s, 'Tactical units are rolling.');
+    if (st > (s.starsSeen || 0) && st === 5) log(s, 'Every unit is on you. Roadblocks ahead.');
+    s.starsSeen = st;
+  }
+  roadblockStep(s, p, st, dt);
   if (st > 0 && cops.length < want && s.policeT <= 0) {
-    s.policeT = 5;
+    s.policeT = st >= 4 ? 3.5 : 5;
     // spawn a cruiser on a street node 60 to 100 m away
     const { nodes } = nav();
     const opts = nodes.filter((n) => { const d = Math.hypot(n.x - p.x, n.z - p.z); return d > 60 && d < 110 && !insideBuilding(n.x, n.z, 1); });
@@ -817,7 +847,8 @@ function policeStep(s, dt) {
     if (n) {
       const car = makeCar(s, n.x, n.z, Math.atan2(p.x - n.x, p.z - n.z), 'police', false);
       car.cops = true; car.siren = true; s.cars.push(car);
-      for (let i = 0; i < 2; i++) s.ents.push(newEnt(s, { kind: 'cop', crew: 'police', hp: 80, car: car.id, x: car.x, z: car.z, weapon: st >= 3 ? 'pistol' : 'fists', look: i }));
+      const tac = st >= 4; if (tac) car.hp = car.max = 220;
+      for (let i = 0; i < (tac ? 3 : 2); i++) s.ents.push(newEnt(s, { kind: 'cop', crew: 'police', hp: tac ? 120 : 80, car: car.id, x: car.x, z: car.z, weapon: st >= 3 ? 'pistol' : 'fists', look: i }));
     }
   }
   // A siren belongs to an active chase. Empty stars, a bust, or a wreck ends it.
@@ -1863,3 +1894,4 @@ function aiThink(s, k, dt) {
 export const serialize = (s) => JSON.stringify(s, (k, v) => (k === 'path' ? undefined : v));
 export const deserialize = (j) => JSON.parse(j);
 export { steerPoint as navPoint }; // used by the headless mission tests
+export { findPath as routeTo }; // street route between two points, for the radar's route line
