@@ -821,6 +821,7 @@ function bikeReach(rider, f, gripL, gripR) {
   }
 }
 const bikeGripL = new THREE.Vector3(), bikeGripR = new THREE.Vector3();
+const BIKE_BONES = ['thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'upperarm_l', 'upperarm_r', 'lowerarm_l', 'lowerarm_r'];
 function bikePose(rider, S = BIKE_SEAT, bike = null) {
   const u = rider.userData;
   if (u.bikeLegs === undefined) {
@@ -828,6 +829,11 @@ function bikePose(rider, S = BIKE_SEAT, bike = null) {
     u.bikeLegs = f.thigh_l && f.thigh_r && f.calf_l && f.calf_r ? f : null;
   }
   const f = u.bikeLegs; if (!f) return;
+  // The animation mixer only rewrites a bone when the clip's value for it changes, and the seated clip holds
+  // the legs still. Without this the turns below would stack on top of last frame's and the legs would spin.
+  // So each posed bone goes back to the clip's own pose first (a bone the mixer did rewrite is taken as the new base).
+  for (const n of BIKE_BONES) { const b = f[n]; if (!b) continue; const d = b.userData;
+    if (d.posed && b.quaternion.equals(d.posed)) b.quaternion.copy(d.base); else (d.base ||= new THREE.Quaternion()).copy(b.quaternion); }
   rider.updateWorldMatrix(true, false); rider.getWorldQuaternion(_bw);
   _bx.set(1, 0, 0).applyQuaternion(_bw); _bz.set(0, 0, 1).applyQuaternion(_bw);
   for (const [side, sg] of [['l', 1], ['r', -1]]) {
@@ -835,6 +841,7 @@ function bikePose(rider, S = BIKE_SEAT, bike = null) {
     turnWorld(f['calf_' + side], _bx, S.calf);
   }
   if (bike && bike.grips) bikeReach(rider, f, bikeGripL.copy(bike.grips[0]).applyMatrix4(bike.model.matrixWorld), bikeGripR.copy(bike.grips[1]).applyMatrix4(bike.model.matrixWorld));
+  for (const n of BIKE_BONES) { const b = f[n]; if (b) (b.userData.posed ||= new THREE.Quaternion()).copy(b.quaternion); }
 }
 function seatY(c, u) { const y = sitOffset(c.type) - DRIVER_DROP; return u.kit && u.roof ? Math.min(y, u.roof - DRIVER_HEAD) : y; }
 
