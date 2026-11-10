@@ -1218,6 +1218,67 @@ function pedStep(s, e, dt, p) {
 }
 function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t += 0.05) { const q = perimeter(t, c, BLOCK / 2 + 1), d = dist2(q, e); if (d < bd) { bd = d; bt = t; } } return bt; }
 
+// ---------- side activities: street races, garages, hidden stashes ----------
+// Street races: drive a car into the start ring and the clock runs. Checkpoints are street corners (line indices).
+const corner = (i, j) => ({ x: lineCoord(i), z: lineCoord(j) });
+const mkRace = (name, start, pts) => {
+  const points = pts.map(([i, j]) => corner(i, j)), s0 = { x: (lineCoord(start[0]) + lineCoord(start[2])) / 2, z: (lineCoord(start[1]) + lineCoord(start[3])) / 2 };
+  let len = 0, a = s0; for (const q of points) { len += Math.hypot(q.x - a.x, q.z - a.z); a = q; }
+  return { name, start: s0, points, len, gold: Math.round(len / 17), silver: Math.round(len / 14), bronze: Math.round(len / 11) };
+};
+export const RACES = [
+  mkRace('Eastside Sprint', [1, 1, 1, 2], [[1, 3], [3, 3], [3, 1], [1, 1]]),
+  mkRace('Midtown Circuit', [4, 4, 5, 4], [[6, 4], [6, 6], [4, 6], [4, 3], [6, 3]]),
+  mkRace('Harbor Dash', [7, 5, 7, 6], [[7, 8], [5, 8], [5, 6], [8, 6], [8, 4]]),
+];
+export const RACE_PAY = { gold: 400, silver: 250, bronze: 120, none: 40 };
+// Garages: drive in slowly with $150. The car is fixed and resprayed, and the police lose you unless one saw you go in.
+export const GARAGE_COST = 150;
+export const GARAGES = [{ name: 'Midtown Garage', i: 3, j: 3 }, { name: 'Harbor Body Shop', i: 6, j: 7 }, { name: 'Eastside Spray', i: 1, j: 2 }].map((g) => ({ name: g.name, x: lineCoord(g.i) + LANE + 3.5, z: (lineCoord(g.j) + lineCoord(g.j + 1)) / 2 }));
+// Hidden stashes: twenty bags in the alleys behind the buildings. Not on the radar. Find them all for a bigger body.
+export const STASH_PAY = 100, STASH_ALL = 2500;
+export const STASHES = Array.from({ length: 20 }, (_, k) => { const id = (k * 4 + 2) % (GRID * GRID), c = blockCenter({ gx: id % GRID, gz: Math.floor(id / GRID) }), o = [[0, 13], [13, 0], [0, -13], [-13, 0]][k % 4]; return { x: c.x + o[0], z: c.z + o[1] }; });
+export function sideText(s) { const r = s.side; if (!r) return ''; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
+function sideStep(s, p, dt) {
+  const cash = s.crews.player, car = p.car ? s.cars.find((c) => c.id === p.car) : null;
+  // stashes, on foot
+  if (!p.car && p.hp > 0) for (let k = 0; k < STASHES.length; k++) {
+    const found = s.stashes || (s.stashes = []); if (found.includes(k) || dist2(STASHES[k], p) > 4) continue;
+    found.push(k); let pay = STASH_PAY; const all = found.length === STASHES.length;
+    if (all) { pay += STASH_ALL; p.max += 25; p.hp = p.max; }
+    cash.cash += pay; s.fx.push({ type: 'found', k, n: found.length, of: STASHES.length, pay, all, x: p.x, z: p.z });
+    log(s, all ? `Every stash found. +$${pay}, and you can take more punishment now.` : `Hidden stash ${found.length} of ${STASHES.length}. +$${pay}`);
+  }
+  // garages
+  if (s.garageLock != null && (!car || dist2(GARAGES[s.garageLock], car) > 100)) s.garageLock = null;
+  if (car && s.garageLock == null && Math.abs(car.v) < 4 && !(car.y > 0)) for (let k = 0; k < GARAGES.length; k++) if (dist2(GARAGES[k], car) < 10) {
+    s.garageLock = k;
+    if (cash.cash < GARAGE_COST) { s.fx.push({ type: 'garage', ok: false, k }); log(s, `${GARAGES[k].name}: $${GARAGE_COST} for a fix and a respray.`); break; }
+    const seen = p.heat > 0 && s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && dist2(e, car) < 30 * 30) || s.cars.some((c) => c.cops && !c.wrecked && dist2(c, car) < 30 * 30 && p.heat > 0);
+    cash.cash -= GARAGE_COST; car.hp = car.max; car.burn = 0; car.paint = (car.paint + 1 + Math.floor(R(s) * 6)) % 8; car.byP = false;
+    if (!seen) p.heat = 0;
+    s.fx.push({ type: 'garage', ok: true, k, car: car.id, seen }); log(s, seen ? `${GARAGES[k].name}: fixed and resprayed, but they saw you go in. -$${GARAGE_COST}` : `${GARAGES[k].name}: fixed, resprayed, and nobody is looking for this car. -$${GARAGE_COST}`);
+  }
+  // races
+  if (s.raceLock != null && (!car || dist2(RACES[s.raceLock].start, car) > 144)) s.raceLock = null;
+  if (!s.side && !s.mission && car && s.raceLock == null && Math.abs(car.v) < 2) for (let i = 0; i < RACES.length; i++) if (dist2(RACES[i].start, car) < 16) { // stop on the ring to start
+    s.side = { kind: 'race', i, count: 0, t: 0, out: 0, target: RACES[i].points[0] }; s.raceLock = i;
+    s.fx.push({ type: 'race', state: 'go', i, name: RACES[i].name }); log(s, `${RACES[i].name}. Go!`); break;
+  }
+  const r = s.side; if (!r) return;
+  const Rc = RACES[r.i]; r.t += dt; r.out = car ? 0 : r.out + dt;
+  if (s.mission || p.hp <= 0 || r.out > 6 || r.t > Rc.bronze * 1.6) { s.side = null; s.fx.push({ type: 'race', state: 'off', i: r.i }); log(s, `${Rc.name}: race over.`); return; }
+  if (car && dist2(r.target, car) < 121) {
+    r.count++;
+    if (r.count < Rc.points.length) { r.target = Rc.points[r.count]; s.fx.push({ type: 'checkpoint', n: r.count, of: Rc.points.length }); return; }
+    const medal = r.t <= Rc.gold ? 'gold' : r.t <= Rc.silver ? 'silver' : r.t <= Rc.bronze ? 'bronze' : 'none';
+    s.best = s.best || {}; const prev = s.best[r.i], record = prev == null || r.t < prev; if (record) s.best[r.i] = +r.t.toFixed(2);
+    cash.cash += RACE_PAY[medal]; if (medal !== 'none') cash.rep += medal === 'gold' ? 8 : 3;
+    s.fx.push({ type: 'race', state: 'win', i: r.i, name: Rc.name, medal, time: r.t, pay: RACE_PAY[medal], record });
+    log(s, `${Rc.name}: ${r.t.toFixed(1)} s${medal === 'none' ? '' : ', ' + medal}. +$${RACE_PAY[medal]}`); s.side = null;
+  }
+}
+
 // ---------- missions ----------
 // Missions: Unc hands them out in order. Each entry is data; the behavior for
 // each kind lives in startMission (setup), missionCheck (car events) and
@@ -1756,6 +1817,7 @@ export function step(s, dt) {
     }
   }
   openingStep(s, dt);
+  sideStep(s, p, dt);
   for (const e of s.ents) if ((e.kind === 'npc' || e.kind === 'cop') && e.hp <= 0) e.downT = (e.downT || 0) + dt;
   s.ents = s.ents.filter((e) => !(e.downT > 6 && e.kind !== 'ped') && !e.remove);
   s.cars = s.cars.filter((c) => !c.remove || c.driver);

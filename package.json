@@ -14,6 +14,7 @@
     "test:bike": "node tools/bike-test.mjs",
     "test:city": "node tools/city-test.mjs",
     "test:chaos": "node tools/chaos-test.mjs",
+    "test:side": "node tools/side-test.mjs",
     "preview": "vite preview",
     "kit": "node tools/kit-import.mjs"
   },
