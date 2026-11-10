@@ -29,6 +29,8 @@ Play it: https://matpcul-tech.github.io/StreetEmpire/
 
 In a car, forward and back are throttle and left and right steer. Hitting rivals at speed knocks them down.
 
+The game saves itself on this device every few seconds, when you pause and when you leave the page. The title screen then offers CONTINUE, with NEW GAME under it (two taps, it erases the save). RESTART in the pause menu also starts over.
+
 Phones get low settings automatically (no shadows, no dynamic street lights, pixel ratio up to 1.25, character LOD at 32 m). Add `?low` to the URL to force low settings on desktop.
 
 ## What is new in v0.3

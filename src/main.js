@@ -34,8 +34,29 @@ addEventListener('contextmenu', (e) => { if (!e.target.closest || !e.target.clos
 const LOD_DIST = LOW ? 34 : 60, CAR_DIST = LOW ? 90 : 170, DRIVER_DIST = LOW ? 30 : 50;
 const BASE = import.meta.env.BASE_URL;
 
-const session = new LocalSession({ traffic: POTATO ? 5 : LOW ? 8 : 12, peds: POTATO ? 6 : LOW ? 10 : 18 });
+// ---------- save game ----------
+// The whole sim state is plain JSON, so a save is the state itself in localStorage.
+// It is written every few seconds, on pause and when the tab is hidden or closed.
+// A save from a different map size, or of a finished game, is ignored.
+const SAVE_KEY = 'se-save-v1';
+function readSave() {
+  try {
+    const d = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'), s = d && d.v === 1 && d.state;
+    if (!s || s.over || !Array.isArray(s.blocks) || s.blocks.length !== GRID * GRID || !Array.isArray(s.ents) || !s.ents.some((e) => e.kind === 'player')) return null;
+    return s;
+  } catch (e) { return null; }
+}
+function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* storage off: nothing to clear */ } }
+const savedState = params.has('new') ? null : readSave();
+const session = new LocalSession({ traffic: POTATO ? 5 : LOW ? 8 : 12, peds: POTATO ? 6 : LOW ? 10 : 18 }, savedState);
 const S = () => session.state;
+let saveT = 0;
+function writeSave() {
+  const s = session.state;
+  if (!started || s.over) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v: 1, at: Date.now(), state: { ...s, events: [], fx: [] } })); } catch (e) { /* storage full or off: play on without saving */ }
+}
+addEventListener('pagehide', writeSave);
 
 // ---------- renderer, sky and light ----------
 const renderer = new THREE.WebGLRenderer({ antialias: !LOW, powerPreference: 'high-performance' });
@@ -452,15 +473,16 @@ let hitStop = 0, shake = 0;
 let paused = false;
 function setPaused(on) {
   if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
+  if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
 }
 addEventListener('keydown', (e) => { if ((e.code === 'Escape' || e.code === 'KeyP') && started && !cine.active) setPaused(!paused); });
 document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && started && !paused && !isTouch && !cine.active) setPaused(true); });
 $('bPause').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setPaused(true); });
 $('pResume').onclick = () => setPaused(false);
-$('pRestart').onclick = () => location.reload();
-for (const b of document.querySelectorAll('#pause [data-q]')) b.onclick = () => { localStorage.setItem('se-q', b.dataset.q); const u = new URL(location.href); u.searchParams.set('q', b.dataset.q); location.href = u.toString(); };
-document.addEventListener('visibilitychange', () => { if (document.hidden && started) setPaused(true); });
+$('pRestart').onclick = () => { started = false; clearSave(); location.reload(); };
+for (const b of document.querySelectorAll('#pause [data-q]')) b.onclick = () => { writeSave(); localStorage.setItem('se-q', b.dataset.q); const u = new URL(location.href); u.searchParams.set('q', b.dataset.q); location.href = u.toString(); };
+document.addEventListener('visibilitychange', () => { if (document.hidden && started) { setPaused(true); writeSave(); } });
 function handleFx(list) {
   const s = S(), p = player(s);
   const byId = (id) => s.ents.find((e) => e.id === id);
@@ -586,6 +608,12 @@ const camPos = new THREE.Vector3(), tmp = new THREE.Vector3(), look = new THREE.
 let slowFor = 0, potatoOffered = false;
 let last = performance.now(), radarT = 0, frameAvg = 16, resT = 0, camInit = false;
 const startBtn = $('start');
+// with a save on this device the title offers CONTINUE, and NEW GAME under it (two taps, it erases the save)
+const START_LABEL = savedState ? 'CONTINUE' : 'HIT THE STREETS';
+if (savedState) {
+  const nb = $('newBtn'); nb.classList.remove('hidden'); let armed = false;
+  nb.onclick = () => { if (!armed) { armed = true; nb.textContent = 'TAP AGAIN TO ERASE YOUR SAVE'; setTimeout(() => { armed = false; nb.textContent = 'NEW GAME'; }, 4000); return; } clearSave(); location.reload(); };
+}
 let loaded = false, wantStart = false;
 startBtn.textContent = 'LOADING... TAP TO START WHEN READY';
 THREE.DefaultLoadingManager.onProgress = (url, done, total) => { $('loadbar').style.width = Math.round((done / total) * 100) + '%'; };
@@ -594,7 +622,7 @@ Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }, POTATO).catch((e) => console.error(e)),
   // build kit first, so the first cars and city sections already use its models
   Promise.all([loadKit(BASE, { low: LOW }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
-]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = 'HIT THE STREETS'; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
+]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = START_LABEL; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
 startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
 function startGame() {
   if (started) return;
@@ -604,12 +632,14 @@ function startGame() {
   setTimeout(() => {
     $('intro').classList.add('hidden'); $('tiFade').classList.remove('on'); clearTitleProps();
     document.body.classList.remove('pre'); $('bPause').classList.add('show'); started = true; last = performance.now();
-    scuffleT = 2.5; onb.step = onb.done ? -1 : 0; renderOnb();
+    scuffleT = savedState ? 0 : 2.5; onb.step = onb.done || savedState ? -1 : 0; renderOnb();
     const s = S(), p = player(s), pg = charViz.get(p.id), home = blockCenter(s.blocks[0]), far = blockCenter(s.blocks[s.blocks.length - 1]);
     const welcome = () => showMsg('Welcome to the Eastside.');
+    if (savedState) { showMsg('Back on your streets.'); return; } // a continued game drops straight in
     if (params.has('nointro') || !pg) { welcome(); return; }
+    city.buildAll(); // the flyover crosses the whole city: build it behind the fade so no lot is empty
     cine.opening({ home, far, center: { x: 0, z: 0 }, player: pg.position.clone(), onDone: welcome,
-      locs: [{ at: 0.2, k: DISTRICTS[2].toUpperCase(), t: 'Gold Line runs the docks' }, { at: 2.5, k: DISTRICTS[1].toUpperCase(), t: 'Red Kings. Blue Hand. Nobody shares.' }, { at: 4.6, k: DISTRICTS[0].toUpperCase(), t: 'One block. Yours.' }] });
+      locs: [{ at: 0.2, k: DISTRICTS[2].toUpperCase(), t: 'Gold Line runs the docks' }, { at: 1.5, k: DISTRICTS[1].toUpperCase(), t: 'Red Kings. Blue Hand. Nobody shares.' }, { at: 3.4, k: DISTRICTS[0].toUpperCase(), t: 'One block. Yours.' }] });
   }, 480);
 }
 $('howBtn').onclick = () => $('how').classList.remove('hidden');
@@ -694,6 +724,7 @@ function frame(now) {
   const s = S(), p = player(s);
   if (p.downT > 0) dt *= 0.4; // down beat in slow motion
   if (paused) dt = 0;
+  if (started && !paused && (saveT += rdt) > 8) { saveT = 0; writeSave(); }
   if (started && !s.over && !cine.pausesSim && !paused) {
     let f = 0, r = 0;
     if (keys.KeyW || keys.ArrowUp) f += 1; if (keys.KeyS || keys.ArrowDown) f -= 1;
@@ -714,6 +745,7 @@ function frame(now) {
     for (const ev of session.drainEvents()) showMsg(ev.text);
     handleFx(session.drainFx());
     if (s.over) {
+      clearSave(); // a finished game is not resumed
       $('end').classList.remove('hidden');
       $('endTitle').textContent = s.over === 'win' ? 'YOU RUN THIS CITY' : 'PUSHED OUT';
       $('endText').textContent = s.over === 'win' ? `The rival crews are gone. Rep ${Math.round(s.crews.player.rep)}. Time ${Math.round(s.t)}s.` : 'Your last block fell. The rivals own the city for now.';
@@ -880,7 +912,8 @@ function frame(now) {
   const wantFov = 62 + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;
   if (started && !cine.ownsFov) { camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix(); }
   if (!LOW) { sun.position.set(pv.x + sunDir.x * 100, Math.max(15, sunDir.y * 100), pv.z + sunDir.z * 100); sun.target.position.set(pv.x, 0, pv.z); }
-  city.update(pv.x, pv.z);
+  // sections show around the player, or around the camera while the opening flyover is far from them
+  if (cine.active === 'open') city.update(camera.position.x, camera.position.z); else city.update(pv.x, pv.z);
   // HUD
   const cr = s.crews.player;
   $('cash').textContent = '$' + Math.floor(cr.cash).toLocaleString('en-US');

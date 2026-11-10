@@ -4,7 +4,11 @@
 import { createState, step, applyAction, movePlayer, player } from './state.js';
 
 export class LocalSession {
-  constructor(cfg) { this.state = createState(Date.now() % 100000, cfg); this.localPlayerId = player(this.state).id; }
+  // saved: a state from an earlier session (it is plain JSON). The device's own cfg wins over the saved one.
+  constructor(cfg, saved = null) {
+    this.state = saved ? Object.assign(saved, { cfg: { ...saved.cfg, ...cfg }, events: [], fx: [] }) : createState(Date.now() % 100000, cfg);
+    this.localPlayerId = player(this.state).id;
+  }
   send(action) { applyAction(this.state, this.localPlayerId, action); }
   input(mx, mz, sprint, dt) { movePlayer(this.state, player(this.state), mx, mz, sprint, dt); }
   tick(dt) { step(this.state, dt); }
