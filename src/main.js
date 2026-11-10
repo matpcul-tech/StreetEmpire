@@ -10,12 +10,13 @@ import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, blockCenter, pla
 import { buildCity } from './city.js';
 import { loadKit } from './kit.js';
 import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './vehicles.js';
-import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight, ridePose } from './chars.js';
+import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
+import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
-import { routeTo, isBike } from './state.js';
+import { routeTo } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -787,12 +788,54 @@ function guideTarget(s, p) {
   return null;
 }
 
-const bikeGripL = new THREE.Vector3(), bikeGripR = new THREE.Vector3();
 const DRIVER_DROP = 0.55; // seat height minus the hips of the Driving_Loop pose
 function sitOffset(type) { return type === 'van' ? 0.95 : type === 'suv' || type === 'pickup' ? 0.8 : 0.55; }
 // a seated driver's head tops out about 1.64 m above his seat position (measured, caps included);
 // kit cars seat him from their own roof so his head stays inside, built-in cars keep the per-type seat
 const DRIVER_HEAD = 1.72;
+// A rider sits on the bike in the driving pose, tipped forward onto the bars. That pose keeps the legs
+// for a car seat, so the thighs and calves are folded onto the pegs here, turned in world space so it
+// works on any rig (bones are found by the same names the retargeter uses).
+const BIKE_SEAT = { y: 0.76 - DRIVER_DROP, z: -0.6, lean: 0.42, thigh: -0.95, calf: 1.35, spread: 0.22 };
+const _bq = new THREE.Quaternion(), _bp = new THREE.Quaternion(), _bw = new THREE.Quaternion(), _bx = new THREE.Vector3(), _bz = new THREE.Vector3();
+function turnWorld(bone, axis, angle) {
+  bone.parent.updateWorldMatrix(true, false); bone.parent.getWorldQuaternion(_bp); _bw.copy(_bp).multiply(bone.quaternion);
+  bone.quaternion.copy(_bp.invert()).multiply(_bq.setFromAxisAngle(axis, angle).multiply(_bw));
+}
+// Arms: when the bike lists its grips (kit.json "grips"), each hand is put on its grip with a two-bone reach:
+// bend the elbow to the right length, then swing the whole arm onto the target. gripL and gripR are world positions.
+const _rs = new THREE.Vector3(), _re = new THREE.Vector3(), _rh = new THREE.Vector3(), _ra = new THREE.Vector3(), _rb = new THREE.Vector3(), _rx = new THREE.Vector3(), _rq = new THREE.Quaternion(), _rw = new THREE.Quaternion();
+function turnWorldQ(bone, q) { bone.parent.getWorldQuaternion(_bp); bone.getWorldQuaternion(_rw); bone.quaternion.copy(_bp.invert()).multiply(q).multiply(_rw); bone.updateWorldMatrix(false, true); }
+function bikeReach(rider, f, gripL, gripR) {
+  rider.updateWorldMatrix(true, true);
+  for (const [side, T] of [['l', gripL], ['r', gripR]]) {
+    const up = f['upperarm_' + side], lo = f['lowerarm_' + side], hand = f['hand_' + side]; if (!up || !lo || !hand) continue;
+    up.getWorldPosition(_rs); lo.getWorldPosition(_re); hand.getWorldPosition(_rh);
+    const a = _rs.distanceTo(_re), b = _re.distanceTo(_rh), d = Math.max(Math.abs(a - b) + 1e-3, Math.min((a + b) * 0.995, _rs.distanceTo(T)));
+    _ra.subVectors(_rs, _re).normalize(); _rb.subVectors(_rh, _re).normalize();
+    const now = Math.acos(THREE.MathUtils.clamp(_ra.dot(_rb), -1, 1)), want = Math.acos(THREE.MathUtils.clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1));
+    _rx.crossVectors(_ra, _rb); if (_rx.lengthSq() < 1e-8) _rx.set(side === 'l' ? -1 : 1, 0, 0); _rx.normalize();
+    turnWorldQ(lo, _rq.setFromAxisAngle(_rx, want - now));
+    hand.getWorldPosition(_rh);
+    turnWorldQ(up, _rq.setFromUnitVectors(_ra.subVectors(_rh, _rs).normalize(), _rb.subVectors(T, _rs).normalize()));
+  }
+}
+const bikeGripL = new THREE.Vector3(), bikeGripR = new THREE.Vector3();
+function bikePose(rider, S = BIKE_SEAT, bike = null) {
+  const u = rider.userData;
+  if (u.bikeLegs === undefined) {
+    const f = {}; rider.traverse((o) => { if (o.isBone) { const n = canonical(o.name); if (n && !f[n]) f[n] = o; } });
+    u.bikeLegs = f.thigh_l && f.thigh_r && f.calf_l && f.calf_r ? f : null;
+  }
+  const f = u.bikeLegs; if (!f) return;
+  rider.updateWorldMatrix(true, false); rider.getWorldQuaternion(_bw);
+  _bx.set(1, 0, 0).applyQuaternion(_bw); _bz.set(0, 0, 1).applyQuaternion(_bw);
+  for (const [side, sg] of [['l', 1], ['r', -1]]) {
+    turnWorld(f['thigh_' + side], _bx, S.thigh); turnWorld(f['thigh_' + side], _bz, S.spread * sg);
+    turnWorld(f['calf_' + side], _bx, S.calf);
+  }
+  if (bike && bike.grips) bikeReach(rider, f, bikeGripL.copy(bike.grips[0]).applyMatrix4(bike.model.matrixWorld), bikeGripR.copy(bike.grips[1]).applyMatrix4(bike.model.matrixWorld));
+}
 function seatY(c, u) { const y = sitOffset(c.type) - DRIVER_DROP; return u.kit && u.roof ? Math.min(y, u.roof - DRIVER_HEAD) : y; }
 
 function frame(now) {
@@ -886,8 +929,8 @@ function frame(now) {
     // tire smoke and skid marks from the rear wheels while sliding
     if (c.skid && !c.wrecked && d2 < 70 * 70) {
       const sn = Math.sin(c.ry), cs = Math.cos(c.ry);
-      for (const side of isBike(c) ? [0] : [-1, 1]) { // a bike lays one line from its rear tire
-        const wx = c.x - sn * (side ? 1.35 : 0.75) + cs * 0.75 * side, wz = c.z - cs * (side ? 1.35 : 0.75) - sn * 0.75 * side;
+      for (const side of c.type === 'bike' ? [0] : [-1, 1]) {
+        const back = c.type === 'bike' ? 0.7 : 1.35, wx = c.x - sn * back + cs * 0.75 * side, wz = c.z - cs * back - sn * 0.75 * side;
         skids.mark(c.id + side, wx, wz);
         if (Math.random() < (LOW ? 0.25 : 0.5)) smoke.emit(wx, 0.4, wz, false, false);
       }
@@ -898,20 +941,18 @@ function frame(now) {
     for (const ch of g.children) if (ch.userData.beam) ch.visible = ch.visible && (occupied || p.car === c.id); // parked cars keep their lights off
     if (!(occupied || p.car === c.id)) { g.userData.flares.visible = false; g.userData.tails.material.color && (g.userData.tails.visible = true); }
     const u = g.userData;
-    // a bike has no cabin: whoever rides it is drawn on the seat, the player included, and leans with the bike
-    const riding = u.bike && p.car === c.id && p.hp > 0;
+    // on a bike the rider is out in the open, so the player is drawn riding too (after the mount moment ends)
+    const riding = u.bike && p.car === c.id && cine.active !== 'car' && p.hp > 0;
     const wantDriver = peopleReady && (riding || (occupied && d2 < DRIVER_DIST * DRIVER_DIST));
     if (wantDriver && !u.driver) {
       const look = riding ? lookFor(p, CREWS) : c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
       if (modelReady(look.model)) {
         u.driver = makeCharacter(look, false);
-        if (u.bike) { u.driver.position.set(0, u.seat[0] - DRIVER_DROP, u.seat[1]); u.model.add(u.driver); }
-        else { u.driver.position.set(-0.42, seatY(c, u), 0.15); g.add(u.driver); }
-        u.driver.rotation.y = 0;
+        if (u.bike) { const S = (u.seatPose ||= { ...BIKE_SEAT, ...(u.rider || {}) }); u.driver.position.set(0, S.y, S.z); u.driver.rotation.set(S.lean, 0, 0); u.model.add(u.driver); } // on the model, so he leans with the bike
+        else { u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
       }
-    } else if (!wantDriver && u.driver) { u.driver.parent.remove(u.driver); u.driver = null; }
-    if (u.driver) animate(u.driver, { hp: 1 }, rdt, true);
-    if (u.driver && u.bike) { u.model.updateWorldMatrix(true, false); ridePose(u.driver, bikeGripL.copy(u.grips[0]).applyMatrix4(u.model.matrixWorld), bikeGripR.copy(u.grips[1]).applyMatrix4(u.model.matrixWorld)); } // hands on the grips, knees around the tank
+    } else if (!wantDriver && u.driver) { u.driver.removeFromParent(); u.driver = null; }
+    if (u.driver) { animate(u.driver, { hp: 1 }, rdt, true); if (u.bike) bikePose(u.driver, u.seatPose, u); }
     // damage smoke
     if (c.hp < c.max * 0.5 && Math.random() < (c.wrecked ? 0.5 : c.hp < c.max * 0.25 ? 0.3 : 0.12) * (LOW ? 0.6 : 1)) smoke.emit(c.x + Math.sin(c.ry) * 1.8, 1.2, c.z + Math.cos(c.ry) * 1.8, c.wrecked || c.hp < c.max * 0.25, c.wrecked);
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }
@@ -920,9 +961,8 @@ function frame(now) {
   // car entry and exit moments
   if (p.car !== prevCar) {
     const pg = charViz.get(p.id);
-    // bikes have no door to open: you are on or off at once
-    if (p.car && p.hp > 0 && !carViz.get(p.car)?.userData.bike) cine.car('in', carViz.get(p.car), pg, pendingJack);
-    else if (!p.car && prevCar && p.hp > 0 && !(p.downT > 0) && !cine.pausesSim) { const cg = carViz.get(prevCar); if (cg && !cg.userData.bike && pg && Math.hypot(cg.position.x - p.x, cg.position.z - p.z) < 4) cine.car('out', cg, pg); }
+    if (p.car && p.hp > 0) cine.car('in', carViz.get(p.car), pg, pendingJack);
+    else if (!p.car && prevCar && p.hp > 0 && !(p.downT > 0) && !cine.pausesSim) { const cg = carViz.get(prevCar); if (cg && pg && Math.hypot(cg.position.x - p.x, cg.position.z - p.z) < 4) cine.car('out', cg, pg); }
     prevCar = p.car; pendingJack = null;
   }
   // Unc briefing: starts as soon as both characters are drawn
@@ -935,7 +975,7 @@ function frame(now) {
   if (started) updateSpots(s, p, now);
   wasDown = p.downT > 0;
   smoke.update(rdt);
-  sfx.setEngine(!!pcar, pcar ? pcar.v : 0, isBike(pcar));
+  sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
   radio.setOn(started && !!pcar && !paused && !s.over && !pcar.wrecked && !(p.downT > 0));
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
   // headlight throw on the road: an additive ground decal on every platform
@@ -990,8 +1030,8 @@ function frame(now) {
   lookIdle += rdt;
   if (pcar) { const head = pcar.ry * 0.6 + (pcar.mh ?? pcar.ry) * 0.4, target = head + Math.PI; let d = target - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); if (lookIdle > 0.5) yaw += d * Math.min(1, rdt * (2.2 + Math.abs(pcar.v) * 0.08)); }
   const downK = p.downT > 0 ? 1 - p.downT / DOWN_TIME : 0;
-  const pbike = isBike(pcar); // the camera rides closer and lower behind a bike
-  const dist = (pcar ? (pbike ? 6.2 : 8.8) + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? (pbike ? 2.1 : 2.5) : 1.7) + downK * 3;
+  const onBike = !!pcar && pcar.type === 'bike'; // a bike is a third the size of a car, so the chase camera sits closer and lower
+  const dist = (pcar ? (onBike ? 6.0 : 8.8) + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? (onBike ? 2.0 : 2.5) : 1.7) + downK * 3;
   let dd = dist;
   for (; dd > 1.5; dd -= 0.5) { const cx = pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, cy = h + Math.sin(pitch) * dd, cz = pv.z + Math.cos(yaw) * Math.cos(pitch) * dd; if (!insideBuilding(cx, cz, 0.3, cy)) break; }
   tmp.set(pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, Math.max(0.6, h + Math.sin(pitch) * dd), pv.z + Math.cos(yaw) * Math.cos(pitch) * dd);
@@ -1039,9 +1079,10 @@ function frame(now) {
   $('stars').classList.toggle('none', st === 0);
   $('stars').classList.toggle('flash', st > 0 && p.calmT < 3 && Math.floor(now / 400) % 2 === 0);
   document.body.classList.toggle('driving', !!p.car);
-  const ctxName = context(); const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName === 'UPGRADE' ? 'ARM' : ctxName;
+  const ctxName = context(); const ctxBike = ctxName === 'EXIT' ? !!s.cars.find((c) => c.id === p.car && c.type === 'bike') : ctxName === 'CAR' && (nearestCar(s, p, 5) || {}).type === 'bike';
+  const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName === 'UPGRADE' ? 'ARM' : ctxName;
   // desktop prompt for the E key, so walking up to Unc or a car says what E will do
-  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? 'E  Get in' : ctxName === 'EXIT' ? 'E  Get out' : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : '';
+  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : '';
   if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
   const here = blockAt(s, p.x, p.z);

@@ -44,6 +44,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
     const halfW = Math.max(0.7, Math.min(1.2, -b.min.x)), h = Math.max(1.1, b.max.y);
     const m = doorMat.clone(); m.color.setHex(g.userData.paintHex ?? 0x555555);
     const pivot = new THREE.Group(); pivot.position.set(-halfW + 0.02, 0, 0.6);
+    if (g.userData.bike) { pivot.visible = false; g.add(pivot); g.userData.door = pivot; g.userData.halfW = 0.45; return pivot; } // nothing to open on a motorcycle
     const panel = new THREE.Mesh(new THREE.BoxGeometry(0.05, h * 0.36, 0.95), m); panel.position.set(-0.02, h * 0.48, -0.48);
     const win = new THREE.Mesh(new THREE.BoxGeometry(0.03, h * 0.24, 0.8), glassMat); win.position.set(-0.02, h * 0.78, -0.52);
     pivot.add(panel, win); pivot.visible = false; g.add(pivot);
@@ -161,18 +162,19 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   function carFrame(c, done) {
     c.jackG = c.jackId != null ? charViz.get(c.jackId) : null;
     const g = c.carG, pg = c.playerG, door = g.userData.door, hw = g.userData.halfW || 0.9;
+    const sx = g.userData.bike ? 0 : -0.42; // a rider sits on the center line
     g.updateMatrixWorld(true);
     pg.userData.cineHold = !done; pg.visible = true;
     const carRy = g.rotation.y;
     if (c.dir === 'in') {
       const t = c.t - c.jack; // the jack beat runs first
       local(g, -hw - 0.75, 0, 0.1, P1); // standing at the open door
-      local(g, -0.42, 0.24 + 0.15, 0.15, P2); // in the seat
+      local(g, sx, 0.24 + 0.15, 0.15, P2); // in the seat
       if (c.jackG) { // pull the driver out: seat to the curb, staggering back
         const j = Math.max(0, Math.min(1, c.t / c.jack));
         c.jackG.userData.cineHold = c.t < c.jack + 0.5;
-        if (c.t < c.jack + 0.5) { local(g, -0.42, 0.3, 0.15, P0); const to = local(g, -hw - 1.9, 0.24, -0.8, new THREE.Vector3()); c.jackG.position.lerpVectors(P0, to, ease(j)); c.jackG.rotation.y = carRy - Math.PI / 2; c.jackG.visible = true; c.jackG.userData.cineAnim = 'Hit_Chest'; }
-        local(g, -0.42, 0.24 + 0.15, 0.15, P2);
+        if (c.t < c.jack + 0.5) { local(g, sx, 0.3, 0.15, P0); const to = local(g, -hw - 1.9, 0.24, -0.8, new THREE.Vector3()); c.jackG.position.lerpVectors(P0, to, ease(j)); c.jackG.rotation.y = carRy - Math.PI / 2; c.jackG.visible = true; c.jackG.userData.cineAnim = 'Hit_Chest'; }
+        local(g, sx, 0.24 + 0.15, 0.15, P2);
       }
       const walk = seg(c.t, 0, c.jack + 0.35);
       if (door) { door.visible = true; door.rotation.y = 1.1 * (seg(c.t, c.jack * 0.3, c.jack * 0.3 + 0.3) - seg(t, 0.85, 1.1)); }
@@ -191,7 +193,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
         pg.userData.cineAnim = k > 0.5 ? 'Driving_Loop' : 'Idle_Loop';
       }
     } else {
-      local(g, -0.42, 0.24 + 0.15, 0.15, P0);
+      local(g, sx, 0.24 + 0.15, 0.15, P0);
       local(g, -hw - 0.75, 0, 0.1, P1);
       local(g, -2.4, 0, 0, P2);
       if (door) { door.visible = true; door.rotation.y = 1.1 * (seg(c.t, 0, 0.25) - seg(c.t, 0.7, 0.95)); }

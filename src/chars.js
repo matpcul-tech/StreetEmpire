@@ -9,7 +9,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { kitCharacter } from './kit.js';
-import { retarget, canonical } from './retarget.js';
+import { retarget } from './retarget.js';
 import { measureGrip, applyGrip, gripAmount, gripForFile } from './grip.js';
 
 let tmpl = null, potatoPeople = false;
@@ -562,38 +562,4 @@ export function animate(g, e, dt, sitting) {
   u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol'; u.shotgun.visible = e.weapon === 'shotgun'; u.knux.visible = e.weapon === 'knuckles';
   u.mixer.update(dt);
   if (u.grip) applyGrip(u.root, u.grip, gripAmount(u.cur, e.weapon));
-}
-
-// ---- motorcycle rider ----
-// The seated clip is a car driver's: hands together on a steering wheel, knees together. On a bike the
-// hands go out to the two grips and the knees open around the tank. Runs after animate() every frame:
-// a two-bone reach per arm (bend the elbow to the right length, then swing the arm onto the grip), and
-// each thigh turned outward. gripL and gripR are world positions. Works on the game rig and on kit rigs
-// (bones are found by their game rig names); a rig missing an arm bone keeps the clip's pose for that arm.
-const _S = new THREE.Vector3(), _E = new THREE.Vector3(), _H = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _ax = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _w = new THREE.Quaternion(), _pw = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0);
-function turnWorld(bone, q) { // apply a world space rotation to a bone, about its own origin
-  bone.getWorldQuaternion(_w); bone.parent.getWorldQuaternion(_pw);
-  bone.quaternion.copy(_pw.invert().multiply(q).multiply(_w)); bone.updateWorldMatrix(false, true);
-}
-function riderBones(g) {
-  const u = g.userData; if (u.rideBones) return u.rideBones;
-  const B = {}; g.traverse((o) => { if (!o.isBone) return; const n = canonical(o.name); if (n && !B[n]) B[n] = o; });
-  return (u.rideBones = B);
-}
-export function ridePose(g, gripL, gripR, splay = 0.3) {
-  const B = riderBones(g);
-  g.updateWorldMatrix(true, true);
-  for (const [side, T] of [['l', gripL], ['r', gripR]]) {
-    const up = B['upperarm_' + side], lo = B['lowerarm_' + side], hand = B['hand_' + side]; if (!up || !lo || !hand || !T) continue;
-    up.getWorldPosition(_S); lo.getWorldPosition(_E); hand.getWorldPosition(_H);
-    const a = _S.distanceTo(_E), b = _E.distanceTo(_H), d = Math.max(Math.abs(a - b) + 1e-3, Math.min((a + b) * 0.995, _S.distanceTo(T)));
-    _a.subVectors(_S, _E).normalize(); _b.subVectors(_H, _E).normalize();
-    const now = Math.acos(THREE.MathUtils.clamp(_a.dot(_b), -1, 1)), want = Math.acos(THREE.MathUtils.clamp((a * a + b * b - d * d) / (2 * a * b), -1, 1));
-    _ax.crossVectors(_a, _b); if (_ax.lengthSq() < 1e-8) _ax.set(side === 'l' ? -1 : 1, 0, 0); _ax.normalize();
-    turnWorld(lo, _q.setFromAxisAngle(_ax, want - now));
-    hand.getWorldPosition(_H);
-    turnWorld(up, _q.setFromUnitVectors(_a.subVectors(_H, _S).normalize(), _b.subVectors(T, _S).normalize()));
-  }
-  for (const [side, sgn] of [['l', 1], ['r', -1]]) { const th = B['thigh_' + side]; if (th) turnWorld(th, _q.setFromAxisAngle(UP, sgn * splay)); }
 }

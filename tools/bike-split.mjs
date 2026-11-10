@@ -9,8 +9,7 @@
 //   node tools/bike-split.mjs in.glb out.glb [--front -x|+x|-z|+z] [--drop-floaters]
 //
 // The output faces +z (the glTF and build kit convention) and has three nodes:
-// body, wheel_front and wheel_rear. Import it as a finished model:
-//   node tools/kit-import.mjs add car cruiser out.glb --keep --no-paint --yaw 0
+// body, wheel_front and wheel_rear. See docs/build-kit.md, Motorcycles, for installing it.
 //
 // What turns with a wheel: the tire, and every shell inside the tire that is
 // centered on the axle (rim, hub, brake disc) or runs from the hub outward (a

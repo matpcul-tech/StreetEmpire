@@ -14,7 +14,6 @@ The build kit swaps the built-in cars, buildings and people for downloaded model
 | Kind | Slots | In game |
 | --- | --- | --- |
 | car | sedan, muscle, suv, van, taxi, police, lowrider, pickup | scaled to 4.4 m long (set `len`), sits on the road, wheels spin and steer, paint changes per car, police get the light bar, headlight beams and brake glow are added |
-| motorcycle | cruiser (uploaded to `kit-inbox/cars` like a car) | scaled to 2.35 m long, leans into turns, rests on its side stand when parked, one headlight beam and one tail glow, the rider sits in the open with hands on the grips. Seats one. See Motorcycles below |
 | building | house, store, apt, tower, shed | fitted into the 13 m corner lot, turned to face a street, the hustle sign is added; a slot can hold variants (`house`, `house-2`, `house-3`) and the city mixes them |
 
 Which buildings each district uses: Eastside is store, house and apt. Downtown is tower and apt. Harbor is shed.
@@ -64,21 +63,6 @@ Meshy buildings sometimes ship with normals pointing into the model, which shows
 
 Other commands: `list`, `remove car sedan`, `remove building house house-2`, `inbox`.
 
-## Motorcycles
-
-A raw Meshy bike is one mesh, so nothing can turn. `tools/bike-split.mjs` separates the two wheels without remodeling anything: it finds the tires, fits the axles, and moves each tire with its rim, spokes, hub and brake disc under its own node. Fork, fenders and brake calipers stay on the frame.
-
-```
-node tools/bike-split.mjs raw.glb split.glb            # add --front +x (or +z, -z) when the bike does not face -x
-node tools/kit-import.mjs add car cruiser split.glb --keep --no-paint --yaw 0 --name cruiser-v2
-```
-
-The split prints the axle positions, wheel sizes and triangle counts; check them, then look at the bike in kit.html. The front wheel spins but does not turn with the bars (fork and fender are one piece with the frame), which the lean hides in play. To get real steering, the modeler has to deliver the fork, front fender and front wheel as one separate part.
-
-Where the rider sits, where the hands go and where the lamps glow are worked out from the model's size. If a new bike has a different shape, set them in its kit.json entry in meters: `"seat": [y, z]`, `"grip": [y, z]`, `"gripX": 0.44`, `"head": [y, z]`, `"tail": [y, z]`.
-
-`node tools/bike-test.mjs` checks the riding rules. `node tools/bike-shots.mjs <url> <dir>` shoots the bike parked, ridden, leaning and at night.
-
 ## Checking a model for flaws
 
 `node tools/kit-check.mjs model.glb` (slot read from the file name) reports:
@@ -108,6 +92,50 @@ The same author's Riverside '88 (a late 80s American sedan) is also worth checki
 ### Finding more
 
 On Sketchfab, search for the vehicle or building, then filter Downloadable, License (CC0 or CC Attribution) and Face count (up to 50k). Good search words: "low poly", "game ready", "PBR", plus an era or type ("80s sedan", "corner store", "stucco house", "warehouse").
+
+## Motorcycles
+
+The city has parked sport bikes you can ride: get on with the same button as a car, the rider is visible, the bike leans into turns, the bars and front wheel turn, and both wheels spin. They are listed under `bikes` in kit.json:
+
+```json
+"bikes": { "sportbike": { "file": "bikes/sportbike.glb", "yaw": 0, "length": 2.1 } }
+```
+
+Bikes do not go through kit-inbox yet. A raw Meshy bike is one fused mesh, so it is rigged first and the finished file is committed to `public/models/kit/bikes/`. The file needs:
+
+| Node | Tag in extras | What it is |
+| --- | --- | --- |
+| `wheel_rear` | `kitWheel: true` | rear tire, rim and disc, origin on the axle |
+| `steer` | `kitSteer: true`, `kitSteerAxis: [x, y, z]` | origin on the steering head; holds the fork, fender, calipers, bars and levers, and the front wheel under it. The game turns it around the axis (the fork's rake) |
+| `wheel_front` | `kitWheel: true` | child of `steer`, origin on the axle |
+| `body` | none | everything else |
+
+Same rules as cars otherwise: faces +z, tires on y=0, one material, 1024 px WebP textures, quantized and meshopt compressed. The sport bike is 30,862 triangles in 4 draw calls. Paint is changed per bike the same way single-texture cars are repainted (the body's main hue is swapped, chrome, tires and lamps stay).
+
+If the bike file is missing or fails to load, the game draws a plain block bike instead, so it never breaks.
+
+### A second bike: the cruiser
+
+A parked bike picks its model with `model` on the car (`model: 'cruiser'`; none means the sport bike). Both models share the bike type, stats and rules. The cruiser's kit.json entry carries what differs from the sport bike, all in meters in the model's space (x across, y up, z forward):
+
+| Key | Meaning |
+| --- | --- |
+| `head`, `tail` | `[y, z]` of the headlamp and tail lamp glow |
+| `rider` | overrides for `BIKE_SEAT`: `y`, `z` (where the rider sits), `lean` (0.04 is upright), `thigh`, `calf`, `spread` |
+| `grips` | `[x, y, z]` of the left grip; the right one is mirrored. When set, the rider's hands are put on the grips |
+| `paint` | `false` keeps the model's own color on every copy |
+
+The cruiser has no `steer` node: its fork and front fender are one piece with the frame, so the bars do not turn and the lean carries the turn. `tools/bike-split.mjs` made its two wheel nodes from the one-piece Meshy file without remodeling anything (it finds the tires, fits the axles, and moves each tire with its rim, spokes, hub and brake disc under its own node):
+
+```
+node tools/bike-split.mjs raw.glb split.glb      # add --front +x (or +z, -z) when the bike does not face -x
+```
+
+The split file is then compressed like any kit model (textures to 1024 px WebP, quantize, meshopt) with its wheel nodes tagged `kitWheel`, and committed as `public/models/kit/bikes/cruiser.glb`.
+
+`npm run test:bike` checks the riding rules for both models. `node tools/bike-shots.mjs <url> <dir>` shoots the cruiser parked, ridden, leaning and at night.
+
+In the game: `makeBike` in `src/vehicles.js`, `prepBike` and `cloneKitBike` in `src/kit.js`, the rider pose in `src/main.js` (`BIKE_SEAT`, `bikePose`), stats and parked spots in `src/state.js` (`CAR_TYPES.bike`, `addBikes`).
 
 ## Characters
 

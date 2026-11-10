@@ -33,7 +33,8 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | car: sedan | no credit given (add a .txt next to the upload) |
 | car: taxi | no credit given (add a .txt next to the upload) |
 | car: pickup | no credit given (add a .txt next to the upload) |
-| car: cruiser | no credit given (add a .txt next to the upload) |
+| bike: cruiser | Original Street Empire motorcycle made for this project in Meshy. Not a third-party download. |
+| bike: sportbike | Original Street Empire motorcycle made for this project in Meshy. Not a third-party download. |
 | building: apt (apt-01-stucco) | Original Street Empire town building made for this project. Not a third-party download. |
 | building: apt (apt-02-brick) | Original Street Empire town building made for this project. Not a third-party download. |
 | building: house (house-01-bungalow) | Original Street Empire town building made for this project. Not a third-party download. |

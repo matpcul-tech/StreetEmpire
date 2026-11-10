@@ -12,10 +12,10 @@ const setup = (t) => p.evaluate((t) => {
   const g = window.__game, s = g.state, pl = s.ents.find((e) => e.kind === 'player');
   s.opening = { done: true, beat: 'done', ids: [] };
   for (const e of s.ents) if (e.kind === 'npc' || e.kind === 'ped' || e.kind === 'cop') { e.x += 400; }
-  const bike = s.cars.filter((c) => c.type === 'cruiser').sort((a, b) => Math.hypot(a.x - pl.x, a.z - pl.z) - Math.hypot(b.x - pl.x, b.z - pl.z))[0];
+  const bike = s.cars.filter((c) => c.model === 'cruiser').sort((a, b) => Math.hypot(a.x - pl.x, a.z - pl.z) - Math.hypot(b.x - pl.x, b.z - pl.z))[0];
   window.__bike = bike; window.__t = t;
   clearInterval(window.__hold); window.__hold = setInterval(() => { s.t = window.__t; pl.heat = 0; }, 16);
-  return bike ? { n: s.cars.filter((c) => c.type === 'cruiser').length, d: Math.hypot(bike.x - pl.x, bike.z - pl.z) } : null;
+  return bike ? { n: s.cars.filter((c) => c.model === 'cruiser').length, d: Math.hypot(bike.x - pl.x, bike.z - pl.z) } : null;
 }, t);
 const cam = (side, back, up, ly = 0.8) => p.evaluate(({ side, back, up, ly }) => {
   clearInterval(window.__camHold);

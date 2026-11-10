@@ -47,12 +47,42 @@
       "yaw": 0,
       "length": 5.2,
       "paint": true
+    }
+  },
+  "bikes": {
+    "sportbike": {
+      "file": "bikes/sportbike.glb",
+      "yaw": 0,
+      "length": 2.1,
+      "credit": "Original Street Empire motorcycle made for this project in Meshy. Not a third-party download."
     },
     "cruiser": {
-      "file": "cars/cruiser-v1.glb",
+      "file": "bikes/cruiser.glb",
       "yaw": 0,
       "length": 2.35,
-      "paint": false
+      "paint": false,
+      "head": [
+        0.95,
+        0.72
+      ],
+      "tail": [
+        0.57,
+        -1.2
+      ],
+      "rider": {
+        "y": 0.29,
+        "z": -0.08,
+        "lean": 0.04,
+        "thigh": 0,
+        "calf": 0,
+        "spread": 0.3
+      },
+      "grips": [
+        0.44,
+        1.11,
+        0.265
+      ],
+      "credit": "Original Street Empire motorcycle made for this project in Meshy. Not a third-party download."
     }
   },
   "buildings": {

@@ -1,12 +1,11 @@
 // Cars from Kenney's Car Kit (CC0): sedan, sports (muscle), SUV, van, taxi and
 // police. Wheels are separate nodes so they spin and steer. Lights, beams,
-// sirens and damage smoke are added in code. Motorcycles (kit slot cruiser) lean
-// into turns, carry one headlight and one tail lamp, and seat the rider in the open.
+// sirens and damage smoke are added in code.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { kitCar, cloneKitCar } from './kit.js';
+import { kitCar, cloneKitCar, kitBike, cloneKitBike } from './kit.js';
 
 // lowrider: Street Empire pack kitbash (tools/build-se-cars.mjs)
 const FILES = { sedan: 'sedan', muscle: 'sedanSports', suv: 'suv', van: 'van', taxi: 'taxi', police: 'police', lowrider: '../se-pack/cars/lowrider', pickup: 'suv' }; // pickup falls back to the SUV body when no kit model loads
@@ -243,7 +242,49 @@ function carGeometry(type, paint) {
 // paint for a car, shared by the built-in and kit paths
 function paintHexFor(c) { return c.type === 'police' ? 0x1c1c22 : c.type === 'taxi' ? 0xd8a818 : c.type === 'lowrider' ? PAINT_LOW[c.paint % PAINT_LOW.length] : PAINT[c.paint % PAINT.length]; }
 
+// ---------- motorcycles ----------
+// One headlamp and one tail lamp: glow flares and a single beam, same shared materials as the cars.
+const BIKE_PAINT = [0x9a1c16, 0x1c1c1e, 0x1e3a6a, 0xc8c2b4, 0xc2560e, 0x2a4a34];
+let bikeBeam = null;
+// spec.head and spec.tail ([y, z] in meters, from kit.json) move the lamps for a bike shaped unlike the sport bike
+function addBikeLights(g, spec = {}) {
+  const P = parts(), head = spec.head || [0.95, 1.02], tail = spec.tail || [0.86, -1.02];
+  bikeBeam ||= P.beam.clone().rotateX(0.08).translate(0, 0.92, 1.0);
+  const tails = new THREE.Mesh(P.lamp, P.tailDim); tails.visible = false; g.add(tails); // the model has its own lamp; kept so the brake logic has a mesh to drive
+  const flares = new THREE.Group();
+  const f = new THREE.Sprite(P.flare); f.position.set(0, head[0], head[1]); f.scale.setScalar(0.7); flares.add(f);
+  const r = new THREE.Sprite(P.flareR); r.position.set(0, tail[0], tail[1]); r.scale.setScalar(0.6); r.userData.tail = true; flares.add(r);
+  g.add(flares);
+  const beams = new THREE.Mesh(bikeBeam, P.beamMat); beams.position.set(0, head[0] - 0.95, head[1] - 1.02); beams.userData.beam = true; g.add(beams);
+  return { tails, flares };
+}
+// A motorcycle: the rigged kit model (wheels on their axles, fork and bars on the steering head).
+// With no kit bike installed it falls back to a plain block bike, so a missing file never breaks the game.
+function makeBike(c) {
+  const g = new THREE.Group(), KT = kitBike(c.model || 'sportbike') || kitBike(); // c.model picks the bike (sportbike, cruiser); a missing one falls back to the sport bike
+  const paintHex = BIKE_PAINT[c.paint % BIKE_PAINT.length], spec = KT ? KT.spec : {};
+  let model, wheels = [], steer = null, wheelR = 0.31, seat = 0.8;
+  if (KT) { ({ model, wheels, steer } = cloneKitBike(KT, paintHex)); wheelR = KT.wheelR; }
+  else {
+    model = new THREE.Group();
+    const dark = new THREE.MeshLambertMaterial({ color: 0x18181a }), body = new THREE.MeshLambertMaterial({ color: paintHex });
+    const tire = new THREE.CylinderGeometry(wheelR, wheelR, 0.14, 14); tire.rotateZ(Math.PI / 2);
+    for (const z of [0.72, -0.72]) { const w = new THREE.Mesh(tire, dark); w.position.set(0, wheelR, z); w.castShadow = true; model.add(w); wheels.push(w); }
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.5, 1.25), body); b.position.set(0, 0.72, 0.05); b.castShadow = true; model.add(b);
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.6), dark); s.position.set(0, 0.86, -0.45); model.add(s);
+    const bars = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.05, 0.05), dark); bars.position.set(0, 1.0, 0.45); model.add(bars);
+  }
+  model.rotation.order = 'YXZ';
+  g.add(model);
+  const L = addBikeLights(g, spec);
+  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex,
+    rider: spec.rider || null, // kit.json: seat position and pose for this bike, see BIKE_SEAT in main.js
+    grips: spec.grips ? [new THREE.Vector3(spec.grips[0], spec.grips[1], spec.grips[2]), new THREE.Vector3(-spec.grips[0], spec.grips[1], spec.grips[2])] : null }; // left and right handlebar grip, in the model's space
+  return g;
+}
+
 export function makeCar(c) {
+  if (c.type === 'bike') return makeBike(c);
   const KT = kitCar(c.type);
   if (KT) return makeKitCar(c, KT);
   const P = parts(), T = templates[c.type] || templates.sedan;
@@ -280,35 +321,11 @@ function makeKitCar(c, KT) {
   const { model, wheels } = cloneKitCar(KT, paintHex);
   model.rotation.order = 'YXZ';
   g.add(model);
-  if (KT.bike) return makeKitBike(g, c, KT, model, wheels);
   const roof = new THREE.Box3().setFromObject(model, true).max.y;
   const L = addLights(g, c, roof + 0.08);
   L.heads.visible = false; L.tails.visible = false; // the model has its own lamps; only the glow flares and beams are added
   g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true, roof };
   g.userData.paintHex = paintHexFor(c);
-  return g;
-}
-
-// A motorcycle: the kit model, one headlight beam and glow, one tail glow. The glows and the beam hang
-// off the model so they lean with it. Lamp and seat spots are fractions of the model's box (length z, height y),
-// overridable per model in kit.json ("head", "tail", "seat", "grip": [y, z] and "gripX", in meters).
-const BIKE_SPOTS = { head: [0.77, 0.29], tail: [0.46, -0.485], seat: [0.68, -0.035], grip: [0.897, 0.113] }; // seat: where the rider's seat point goes; grip: the handlebar grips
-const BIKE_GRIP_X = 0.415; // each grip's distance from the centerline, as a fraction of the model's width
-let bikeBeam = null;
-function makeKitBike(g, c, KT, model, wheels) {
-  const P = parts(), S = KT.size, spot = (k) => KT.spec[k] || [BIKE_SPOTS[k][0] * S.y, BIKE_SPOTS[k][1] * S.z];
-  const head = spot('head'), tail = spot('tail'), seat = spot('seat');
-  const flares = new THREE.Group();
-  const f = new THREE.Sprite(P.flare); f.position.set(0, head[0], head[1] + 0.12); f.scale.setScalar(0.8); flares.add(f);
-  const r = new THREE.Sprite(P.flareR); r.position.set(0, tail[0], tail[1] - 0.06); r.scale.setScalar(0.7); r.userData.tail = true; flares.add(r);
-  model.add(flares);
-  bikeBeam ||= P.beam.clone().rotateX(0.06);
-  const beam = new THREE.Mesh(bikeBeam, P.beamMat); beam.position.set(0, head[0], head[1] + 0.1); beam.userData.beam = true; g.add(beam);
-  const tails = new THREE.Mesh(new THREE.BufferGeometry(), P.tailDim); g.add(tails); // the model has its own tail lamp; this only carries the brake state
-  const grip = spot('grip'), gx = KT.spec.gripX || BIKE_GRIP_X * S.x;
-  g.userData = { wheels, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails, flares, kit: true, bike: true, seat, roof: S.y, halfW: 0.45,
-    grips: [new THREE.Vector3(gx, grip[0], grip[1]), new THREE.Vector3(-gx, grip[0], grip[1])] }; // left, right, in the model's space
-  g.userData.paintHex = 0x1a1a1c;
   return g;
 }
 
@@ -345,8 +362,13 @@ function lampGeos(grp) {
 
 export function updateCar(g, c, dt, night, now) {
   const u = g.userData;
-  u.spinA += (c.v * dt) / (u.bike ? 0.33 : 0.37);
-  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front && !u.bike) w.node.rotation.y = c.steer; } // a bike's fork and fender are one piece with the frame, so its front wheel only spins
+  u.spinA += (c.v * dt) / (u.bike ? u.wheelR : 0.37);
+  for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
+  if (u.bike) {
+    for (const w of u.bikeWheels) w.rotation.x = u.spinA;
+    // the bars turn less the faster it goes; at speed a bike turns by leaning
+    if (u.steer) u.steer.node.quaternion.setFromAxisAngle(u.steer.axis, -c.steer * (0.75 - 0.45 * Math.min(1, Math.abs(c.v) / 16)));
+  }
   let d = c.ry - g.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
   g.rotation.y += Math.abs(d) > 0.01 ? d * Math.min(1, dt * (c.ai ? 6 : 30)) : d;
   g.position.x += (c.x - g.position.x) * Math.min(1, dt * (c.ai ? 8 : 40));
@@ -354,17 +376,12 @@ export function updateCar(g, c, dt, night, now) {
   // suspension: springy pitch under throttle and brakes, body roll in turns and
   // slides, and a vertical bounce kicked by crashes (u.bounce)
   const acc = dt > 0 ? (c.v - (u.lastV ?? c.v)) / dt : 0; u.lastV = c.v;
-  // cars roll out of a turn; a bike leans into it by the angle that balances the turn (v squared over g r),
-  // and rests a little to the left on its side stand when nobody is on it
-  const tPitch = THREE.MathUtils.clamp(-acc * (u.bike ? 0.006 : 0.0035), u.bike ? -0.1 : -0.07, 0.07);
-  const tRoll = u.bike
-    ? (c.wrecked ? -1.25 : c.driver == null && !c.ai ? -0.13 : THREE.MathUtils.clamp(Math.atan(c.v * c.v * Math.tan(c.steer) / (1.9 * 9.8)) * 0.85 + (c.slip || 0) * Math.sign(c.steer || 0) * 0.25, -0.72, 0.72))
-    : -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
+  const tPitch = THREE.MathUtils.clamp(-acc * 0.0035, -0.07, 0.07), tRoll = u.bike ? THREE.MathUtils.clamp(c.steer * Math.abs(c.v) * 0.085, -0.62, 0.62) : -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
   u.pv = ((u.pv || 0) + ((tPitch - (u.pitch || 0)) * 90 - (u.pv || 0) * 9) * dt); u.pitch = (u.pitch || 0) + u.pv * dt;
-  u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * (u.bike ? 60 : 80) - (u.rv || 0) * (u.bike ? 13 : 8)) * dt); u.roll = (u.roll || 0) + u.rv * dt;
+  u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * 80 - (u.rv || 0) * 8) * dt); u.roll = (u.roll || 0) + u.rv * dt;
   u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
   u.model.rotation.x = u.pitch; u.model.rotation.z = u.roll; u.model.position.y = u.baseY + by;
-  for (const ch of g.children) if (ch.userData.beam) { ch.visible = night && !c.wrecked; if (u.bike) ch.rotation.z = u.roll || 0; }
+  for (const ch of g.children) if (ch.userData.beam) ch.visible = night && !c.wrecked;
   // brake lights glow when slowing hard or stopped in traffic, flares at night
   const braking = !c.wrecked && (acc < -2.5 || (c.ai && Math.abs(c.v) < 0.5));
   u.tails.material = braking ? parts().tailBrake : night && !c.wrecked ? parts().tail : parts().tailDim;

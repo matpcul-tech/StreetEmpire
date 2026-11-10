@@ -3,7 +3,6 @@
 Upload a model here from your phone and the Build kit import workflow installs it in the game.
 
 - Cars go in `cars/`, named after their slot: sedan, muscle, suv, van, taxi, police, lowrider, pickup (`sedan.glb`, `police.zip`).
-- Motorcycles also go in `cars/`, as `cruiser.glb`. Split the wheels first (docs/build-kit.md, Motorcycles) or they will not spin.
 - Buildings go in `buildings/`: house, store, apt, tower, shed. Variants: `house-2.glb`, `house-3.zip`.
 - Characters go in `characters/`, rigged (Meshy: Rigging, Humanoid): player, unc, crew, reds, blues, golds, locals, cop, ped. Variants: `reds-2.glb`. Height: `reds@h1.9.glb`.
 - Wrong way round? Add `@yaw180` before the extension (`van@yaw180.glb`). More settings in docs/build-kit.md.

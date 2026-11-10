@@ -38,9 +38,9 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
 const KIT = path.join(ROOT, 'public/models/kit');
 const MANIFEST = path.join(KIT, 'kit.json');
 const INBOX = path.join(ROOT, 'kit-inbox');
-export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup', 'cruiser'];
+export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'];
 // real-world lengths in meters, so kit cars match the people (a 4.4 m lowrider put the driver's head through the roof)
-export const CAR_LENGTH = {'sedan':  4.9, 'muscle':  4.8, 'suv':  4.8, 'van':  5.1, 'taxi':  4.9, 'police':  5.2, 'lowrider':  5.4, 'pickup':  5.2, 'cruiser': 2.35};
+export const CAR_LENGTH = {'sedan':  4.9, 'muscle':  4.8, 'suv':  4.8, 'van':  5.1, 'taxi':  4.9, 'police':  5.2, 'lowrider':  5.4, 'pickup':  5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
 const SLOTS = { car: CAR_SLOTS, building: BUILDING_SLOTS, character: CHAR_SLOTS };
@@ -69,6 +69,7 @@ function writeCredits(m) {
   const START = '<!-- kit-credits:start -->', END = '<!-- kit-credits:end -->';
   const rows = [];
   for (const [slot, e] of Object.entries(m.cars || {})) rows.push(`| car: ${slot} | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
+  for (const [slot, e] of Object.entries(m.bikes || {})) rows.push(`| bike: ${slot} | ${e.credit || 'no credit given'} |`);
   for (const [slot, list] of Object.entries(m.buildings || {})) for (const e of [].concat(list)) rows.push(`| building: ${slot} (${path.basename(e.file, '.glb')}) | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
   for (const [slot, list] of Object.entries(m.characters || {})) for (const e of [].concat(list)) rows.push(`| character: ${slot} (${path.basename(e.file, '.glb')}) | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
   const block = `${START}\n## Build kit models\n\nInstalled through tools/kit-import.mjs (generated from public/models/kit/kit.json).\n\n${rows.length ? '| Slot | Credit and license |\n|---|---|\n' + rows.join('\n') : 'None installed.'}\n${END}`;
