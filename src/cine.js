@@ -71,7 +71,7 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
       const away = Math.atan2(H.x - C.x, H.z - C.z);
       const pts = [V(F.x + 22, 30, F.z + 26), V(F.x + (C.x - F.x) * 0.55 + 8, 40, F.z + (C.z - F.z) * 0.55 + 8), V(C.x + (H.x - C.x) * 0.5, 36, C.z + (H.z - C.z) * 0.5), V(P.x + Math.sin(away) * 18, 14, P.z + Math.cos(away) * 18), V(P.x + Math.sin(away) * 7, 3.2, P.z + Math.cos(away) * 7)];
       const looks = [V(F.x, 4, F.z), V(C.x, 8, C.z), V(H.x, 4, H.z), V(P.x, 1.6, P.z), V(P.x, 1.4, P.z)];
-      cur = { kind: 'open', t: 0, dur: 8.4, path: new THREE.CatmullRomCurve3(pts, false, 'centripetal'), look: new THREE.CatmullRomCurve3(looks, false, 'centripetal'), locs: o.locs || [], li: -1, onDone: o.onDone };
+      cur = { kind: 'open', t: 0, dur: o.dur || 8.4, path: new THREE.CatmullRomCurve3(pts, false, 'centripetal'), look: new THREE.CatmullRomCurve3(looks, false, 'centripetal'), locs: o.locs || [], li: -1, onDone: o.onDone };
       document.body.classList.add('cine-on', 'cine-bars');
     },
     skip() { if (cur) cur.t = cur.dur; if (cardT > 0) cardT = Math.min(cardT, 0.3); },

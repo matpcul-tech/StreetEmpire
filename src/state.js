@@ -6,7 +6,7 @@
 export const BLOCK = 40;       // block footprint
 export const STREET = 18;      // street width
 export const PITCH = BLOCK + STREET;
-export const GRID = 5;         // 5 x 5 blocks
+export const GRID = 9;         // 9 x 9 blocks, about 520 m across
 export const ZONE_R = 7;       // capture zone radius at block center
 export const CAPTURE_TIME = 6; // seconds to hold a zone
 export const RECRUIT_COST = 100;
@@ -17,10 +17,18 @@ export const LANE = 3;         // lane offset from street centerline
 export const DAY_SECONDS = 480; // one full day and night
 export const SIGNAL_CYCLE = 20;
 
+// one hustle name per block (81), so a message that names a block means one place
 const HUSTLES = ['Corner Store Deals', 'Car Wash', 'Sneaker Resale', 'Bootleg DVDs', 'Barbershop Bets', 'Chop Shop', 'Pawn Counter', 'Food Truck', 'Card Games',
-  'Phone Repair', 'Laundromat', 'Tire Shop', 'Pool Hall', 'Record Store', 'Check Cashing', 'Taco Stand', 'Scrap Yard', 'Gym', 'Arcade', 'Night Club', 'Liquor Store', 'Dice Games', 'Bodega', 'Wing Spot', 'Tattoo Parlor'];
-export const DISTRICTS = ['Eastside', 'Downtown', 'Harbor'];
-export function districtOf(b) { const d = b.gx + b.gz; return d <= 2 ? 0 : d <= 5 ? 1 : 2; }
+  'Phone Repair', 'Laundromat', 'Tire Shop', 'Pool Hall', 'Record Store', 'Check Cashing', 'Taco Stand', 'Scrap Yard', 'Gym', 'Arcade', 'Night Club', 'Liquor Store', 'Dice Games', 'Bodega', 'Wing Spot', 'Tattoo Parlor',
+  'Swap Meet', 'Hubcap Stand', 'Smoke Shop', 'Nail Salon', 'Donut Shop', 'Flower Stall', 'Fight Gym', 'Burger Window', 'Stereo Shop', 'Thrift Store', 'Bail Bonds', 'Juice Bar', 'Tow Yard', 'Body Shop', 'Fish Market',
+  'Print Shop', 'Dry Cleaner', 'Used Tires', 'Bike Shop', 'Mattress Outlet', 'Parking Lot', 'Billiards Back Room', 'Karaoke Bar', 'Noodle Cart', 'Ticket Resale', 'Furniture Rental', 'Storage Units', 'Rim Shop', 'Corner Bar', 'Lotto Counter',
+  'Paint Shop', 'Video Rental', 'Jewelry Counter', 'Coin Laundry', 'Fruit Stand', 'Loading Dock', 'Cold Storage', 'Bait Shop', 'Boat Yard', 'Freight Office', 'Net Loft', 'Fuel Dock', 'Crab Shack', 'Customs Shed', 'Ice House',
+  'Salvage Yard', 'Welding Shop', 'Truck Stop', 'Pier Cafe', 'Rope Works', 'Container Lot', 'Union Hall', 'Dockside Bar', 'Ship Chandler', 'Canning Line', 'Dry Dock'];
+// Districts run in diagonal bands from the player's corner to the water: Eastside (houses), Midtown (apartments
+// and shops), Downtown (towers), Harbor (warehouses). Midtown was added with the 9 x 9 map and keeps index 3 so
+// the three original districts keep theirs.
+export const DISTRICTS = ['Eastside', 'Downtown', 'Harbor', 'Midtown'];
+export function districtOf(b) { const e = (b.gx + b.gz) / (2 * (GRID - 1)); return e <= 0.25 ? 0 : e <= 0.44 ? 3 : e <= 0.69 ? 1 : 2; }
 
 export const CREWS = {
   neutral: { name: 'Locals', color: 0x9a9a9a, css: '#aaa', model: 'Casual_Female', shirt: 0x6b6458, pants: 0x3a3a40 },
@@ -67,7 +75,9 @@ const R = (s) => { s.rng = (s.rng * 1664525 + 1013904223) % 4294967296; return s
 
 export function createState(seed = 1, cfg = {}) {
   const s = { t: 0, nextId: 1, seed, rng: seed % 4294967296, cfg: { traffic: cfg.traffic ?? 10, peds: cfg.peds ?? 14 }, blocks: [], crews: {}, ents: [], cars: [], pickups: [], events: [], fx: [], over: null, mission: null, missionIdx: 0, calls: { cd: CALLS.first, n: 0, active: null, grace: 0, ready: false, capped: false } };
-  const starts = { '0,0': 'player', '4,0': 'reds', '4,1': 'reds', '0,4': 'blues', '1,4': 'blues', '4,4': 'golds', '3,4': 'golds' };
+  // you start with one corner block; each rival crew holds a 2 x 2 corner of its own
+  const L = GRID - 1, starts = { '0,0': 'player' };
+  for (const [crew, cx, cz] of [['reds', L, 0], ['blues', 0, L], ['golds', L, L]]) for (const ox of [0, 1]) for (const oz of [0, 1]) starts[Math.abs(cx - ox) + ',' + Math.abs(cz - oz)] = crew;
   for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
     const id = gz * GRID + gx;
     s.blocks.push({ id, gx, gz, owner: starts[gx + ',' + gz] || 'neutral', hustle: HUSTLES[id % HUSTLES.length], rate: 3 + ((id * 7) % 4), capBy: null, capT: 0, stash: 0 });
@@ -88,8 +98,9 @@ export function createState(seed = 1, cfg = {}) {
     if (i % 2 === 0) s.cars.push(makeCar(s, bc.x - 8 + (i % 4) * 3, bc.z - PITCH / 2 + 5.6, Math.PI / 2, types[(i + 2) % types.length], false));
   });
   // pickups in alleys
-  [[1, 'bat'], [6, 'pistol'], [12, 'knuckles'], [18, 'shotgun'], [8, 'bat'], [16, 'pistol'], [3, 'knuckles'], [22, 'shotgun']].forEach(([bi, type], k) => {
-    const bc = blockCenter(s.blocks[bi]); s.pickups.push({ id: 'pk' + k, type, x: bc.x + (k % 2 ? 10 : -10), z: bc.z, respawnT: 0 });
+  [[1, 0, 'bat'], [1, 1, 'pistol'], [2, 2, 'knuckles'], [3, 3, 'shotgun'], [3, 1, 'bat'], [1, 3, 'pistol'], [3, 0, 'knuckles'], [2, 4, 'shotgun'],
+    [5, 1, 'bat'], [1, 5, 'pistol'], [5, 4, 'knuckles'], [4, 6, 'shotgun'], [6, 2, 'pistol'], [2, 7, 'bat'], [6, 6, 'shotgun'], [7, 4, 'knuckles'], [4, 8, 'pistol'], [8, 5, 'bat']].forEach(([gx, gz, type], k) => {
+    const bc = blockCenter(s.blocks[gz * GRID + gx]); s.pickups.push({ id: 'pk' + k, type, x: bc.x + (k % 2 ? 10 : -10), z: bc.z, respawnT: 0 });
   });
   for (let i = 0; i < s.cfg.traffic; i++) spawnTraffic(s, true);
   for (let i = 0; i < s.cfg.peds; i++) spawnPed(s, null);
@@ -299,6 +310,21 @@ function hostile(a, b) {
   return false;
 }
 const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+// Spatial buckets, rebuilt once per step: who is alive in each 30 m cell. A fighter looking for a foe
+// (at most 30 m away) or for neighbors to step clear of reads its own cell and the eight around it,
+// so the search no longer grows with the square of the city's population.
+const CELL = 30;
+function bucketEnts(s) {
+  const g = new Map();
+  for (const o of s.ents) { if (!(o.hp > 0)) continue; const k = (Math.floor(o.x / CELL) + 512) * 1024 + Math.floor(o.z / CELL) + 512; const a = g.get(k); if (a) a.push(o); else g.set(k, [o]); }
+  return g;
+}
+function nearbyEnts(g, x, z, out) {
+  out.length = 0; const cx = Math.floor(x / CELL) + 512, cz = Math.floor(z / CELL) + 512;
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = g.get((cx + i) * 1024 + cz + j); if (a) for (const o of a) out.push(o); }
+  return out;
+}
+const nbFoe = [], nbSep = [];
 function log(s, text) { s.events.push({ t: s.t, text }); }
 function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math.min(100, p.heat + n); p.calmT = 0; }
 
@@ -608,13 +634,14 @@ function clampWorld(o) { o.x = Math.max(-HALF, Math.min(HALF, o.x)); o.z = Math.
 // Buildings: each block has 4 corner buildings leaving a plus-shaped open lot
 // (the alleys and courtyard) through the middle.
 export function buildingsFor(b) {
-  // kind drives the look: store, house, apt (Eastside), tower (Downtown), shed (Harbor)
+  // kind drives the look: store, house, apt (Eastside), mostly apt (Midtown), tower (Downtown), shed (Harbor)
   const c = blockCenter(b), h = BLOCK / 2, w = 13, out = [], d = districtOf(b);
   let i = 0;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     const r = (b.id * 13 + sx * 3 + sz * 5 + 20) % 4;
     let kind, height;
     if (d === 0) { kind = i === 0 ? 'store' : i === 3 && b.id % 2 ? 'apt' : 'house'; height = kind === 'apt' ? 11 : kind === 'store' ? 6 : 6.5; }
+    else if (d === 3) { kind = i === 0 ? 'store' : r === 0 ? 'house' : 'apt'; height = kind === 'apt' ? 11 + r : kind === 'store' ? 6 : 6.5; }
     else if (d === 1) { kind = r === 0 ? 'apt' : 'tower'; height = kind === 'apt' ? 18 + r * 2 : 22 + r * 9; }
     else { kind = 'shed'; height = 9 + r * 1.2; }
     out.push({ x: c.x + sx * (h - w / 2), z: c.z + sz * (h - w / 2), w, d: w, h: height, sx, sz, kind });
@@ -725,7 +752,9 @@ function trafficStep(s, c, dt) {
   const idx = along / PITCH + GRID / 2, nextI = sg > 0 ? Math.floor(idx + 1e-6) + 1 : Math.ceil(idx - 1e-6) - 1;
   const toStop = (lineCoord(nextI) - along) * sg;
   const sig = signal(s), axis = dx === 0 ? 'z' : 'x';
-  if (sig !== axis && toStop > 9 && toStop < 15 && nextI >= 0 && nextI <= GRID) blocked = true;
+  // the Loop: the ring road around the city. Traffic on it runs faster and does not stop for the lights.
+  const onLoop = Math.abs(Math.abs(nearestLine(dx !== 0 ? c.z : c.x)) - (GRID * PITCH) / 2) < 1;
+  if (!onLoop && sig !== axis && toStop > 9 && toStop < 15 && nextI >= 0 && nextI <= GRID) blocked = true;
   if (!blocked) for (const o of s.cars) {
     if (o === c) continue;
     const rx = o.x - c.x, rz = o.z - c.z, ahead = rx * dx + rz * dz, side = Math.abs(rx * dz - rz * dx);
@@ -738,7 +767,7 @@ function trafficStep(s, c, dt) {
   }
   c.waitT = blocked && toStop > 15 ? (c.waitT || 0) + dt : 0;
   if (c.waitT > 4) { blocked = false; if (c.waitT > 5.5) c.waitT = 0; }
-  const target = blocked ? 0 : c.cruise;
+  const target = blocked ? 0 : c.cruise * (onLoop ? 1.6 : 1);
   c.v += Math.sign(target - c.v) * Math.min(Math.abs(target - c.v), (blocked ? 22 : 6) * dt);
   c.x += dx * c.v * dt; c.z += dz * c.v * dt;
   c.steer *= 0.9;
@@ -918,7 +947,7 @@ function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t +=
 // the client shows (beacon, radar icon and edge arrow).
 export const MISSIONS = [
   { title: 'Bag Back', intro: 'Unc: "He dropped your bag up the street. Grab it and bring it back. Then we talk real work."', kind: 'hook', time: 90, reward: 120, rep: 12, gift: 'follower' },
-  { title: 'Package Run', intro: 'Unc: "Grab my package from the Harbor drop and bring it back. You got 120 seconds."', kind: 'fetch', time: 120, reward: 250, rep: 20 },
+  { title: 'Package Run', intro: 'Unc: "Grab my package from the Harbor drop and bring it back. You got 170 seconds."', kind: 'fetch', time: 170, reward: 250, rep: 20 },
   { title: 'Send a Message', intro: 'Unc: "The Red Kings been testing us. Knock out 3 of them."', kind: 'beat', crew: 'reds', need: 3, reward: 300, rep: 30 },
   { title: 'Chop Job', intro: 'Unc: "Find a muscle car and drop it at the chop shop on the marker."', kind: 'chop', reward: 400, rep: 30 },
   { title: 'Take Over', intro: 'Unc: "Time to grow. Take the block on the marker."', kind: 'take', reward: 600, rep: 50 },
@@ -1028,7 +1057,7 @@ export function step(s, dt) {
   for (const c of traffic) if (dist2(c, p) > 180 * 180) c.remove = true;
   if (traffic.length < s.cfg.traffic && R(s) < dt) spawnTraffic(s, false);
   // entities
-  const chasers = new Map();
+  const chasers = new Map(), cells = bucketEnts(s);
   for (const e of s.ents) {
     if (e.cd > 0) e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.swing > 0) e.swing -= dt; if (e.stun > 0) e.stun -= dt; if (e.pathT > 0) e.pathT -= dt; if (e.jumpT > 0) e.jumpT -= dt; if (e.dodgeCd > 0) e.dodgeCd -= dt;
     if (e.kind === 'player' && e.dodgeBuf > 0) { e.dodgeBuf -= dt; if (e.dodgeCd <= 0 && e.dodgeT <= 0 && e.hp > 0 && !e.car && !(e.downT > 0)) startDodge(s, e, e.dodgeDx, e.dodgeDz); }
@@ -1053,7 +1082,7 @@ export function step(s, dt) {
     // raid party holds on its own block until the gather timer runs out
     if (e.gather > 0) { e.gather = Math.max(0, e.gather - dt); continue; }
     let foe = null, fd = (e.guard ? 30 : e.scout ? 18 : 12) ** 2;
-    for (const o of s.ents) if (o.hp > 0 && hostile(e, o) && !o.car) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
+    for (const o of nearbyEnts(cells, e.x, e.z, nbFoe)) if (o.hp > 0 && hostile(e, o) && !o.car) { const d = dist2(o, e); if (d < fd) { fd = d; foe = o; } }
     let goal, followSpeed = 0;
     if (e.role === 'follower') {
       // recruits walk in a loose formation behind you and only fight foes right next to you
@@ -1112,7 +1141,7 @@ export function step(s, dt) {
         const dx = wp.x - e.x, dz = wp.z - e.z, dd = Math.hypot(dx, dz) || 1;
         const sp = followSpeed || 4;
         let sx = 0, sz = 0;
-        for (const o of s.ents) if (o !== e && o.hp > 0 && o.kind === 'npc') { const q = dist2(o, e); if (q < 1 && q > 0) { sx += (e.x - o.x) / q; sz += (e.z - o.z) / q; } }
+        for (const o of nearbyEnts(cells, e.x, e.z, nbSep)) if (o !== e && o.hp > 0 && o.kind === 'npc') { const q = dist2(o, e); if (q < 1 && q > 0) { sx += (e.x - o.x) / q; sz += (e.z - o.z) / q; } }
         e.x += (dx / dd * sp + sx * 0.6) * dt; e.z += (dz / dd * sp + sz * 0.6) * dt;
         const want = Math.atan2(dx, dz); let r = want - e.ry; r = Math.atan2(Math.sin(r), Math.cos(r)); e.ry += r * Math.min(1, dt * 10);
         e.moving = sp / 5;
@@ -1127,15 +1156,18 @@ export function step(s, dt) {
   const peds = s.ents.filter((e) => e.kind === 'ped').length;
   if (peds < s.cfg.peds && R(s) < dt * 2) spawnPed(s, p);
   // capture
+  // Who stands on which block, in one pass over the fighters: a fighter can only be within half a block
+  // pitch of its nearest block center, so each one counts for that block alone.
+  const onBlock = new Map();
+  for (const e of s.ents) if (e.hp > 0 && COMBAT.has(e.kind) && !e.car) {
+    const b = blockAt(s, e.x, e.z); if (!b) continue;
+    const d = dist2(e, blockCenter(b));
+    let r = onBlock.get(b.id); if (!r) onBlock.set(b.id, r = { defenders: 0, inZone: {} });
+    if (e.crew === b.owner && d < (PITCH / 2) ** 2) r.defenders++;
+    if (e.crew !== b.owner && e.role !== 'brawler' && d < ZONE_R ** 2) r.inZone[e.crew] = (r.inZone[e.crew] || 0) + 1;
+  }
   for (const b of s.blocks) {
-    const c = blockCenter(b);
-    if (Math.abs(c.x - p.x) > PITCH * 4 && b.capT === 0) { /* far blocks still capture, cheap check below */ }
-    const inZone = {}; let defenders = 0;
-    for (const e of s.ents) if (e.hp > 0 && COMBAT.has(e.kind) && !e.car) {
-      const d = dist2(e, c);
-      if (e.crew === b.owner && d < (PITCH / 2) ** 2) defenders++;
-      if (e.crew !== b.owner && e.role !== 'brawler' && d < ZONE_R ** 2) inZone[e.crew] = (inZone[e.crew] || 0) + 1;
-    }
+    const here = onBlock.get(b.id), inZone = here ? here.inZone : {}, defenders = here ? here.defenders : 0;
     const claimers = Object.keys(inZone);
     if (defenders === 0 && claimers.length === 1) {
       const k = claimers[0];
@@ -1473,7 +1505,9 @@ function aiThink(s, k, dt) {
   cr.aiT = 9 + R(s) * 6;
   // rivals live on their blocks, so they bank the hustle stash into crew cash
   for (const b of own) if (b.stash > 0) { cr.cash += b.stash; b.stash = 0; }
-  const cap = Math.min(14, 4 + own.length * 2);
+  // room for three guards on every block plus a raid party; with the old cap a crew holding four blocks was
+  // already full and never expanded
+  const cap = Math.min(22, 6 + own.length * 4);
   let units = s.ents.filter((e) => e.crew === k && e.hp > 0).length;
   if (units >= cap) return;
   for (const b of own) {
