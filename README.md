@@ -37,6 +37,8 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **Side activities.** Three street races (`R` on the radar): stop a car on the yellow ring and the clock runs, with gold, silver and bronze times. Three garages (`G`): pull in slowly with $150 for a fix and a respray, which also clears your heat unless an officer saw you go in. Twenty hidden stashes in the alleys, not on the radar; find them all for a bonus and more health. `npm run test:side` covers the rules.
+
 - **The radio talks.** Between songs a DJ line, an ad for a made-up business, or news about what you just did shows on screen. Stations can also play recorded drops between songs (see `docs/radio.md`). Each contact now has something to say when a job comes back done or blown.
 
 - **Fire and explosions.** A car beaten or shot down to a sixth of its health catches fire and blows a few seconds later. The blast hurts everything near it, other cars included, so a row of parked cars goes up one after another. Guns now hit cars.

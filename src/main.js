@@ -16,7 +16,7 @@ import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
-import { routeTo, RAMPS } from './state.js';
+import { routeTo, RAMPS, RACES, GARAGES, STASHES, sideText } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -423,15 +423,19 @@ $('shopClose').onclick = closeShop;
 const spotMarks = [];
 { const ringG = new THREE.RingGeometry(1.5, 1.9, 28), boxG = new THREE.BoxGeometry(0.55, 0.55, 0.55);
   const add = (kind, i, q) => {
-    const mat = new THREE.MeshBasicMaterial({ color: kind === 'shop' ? 0x39d98a : 0x4aa3ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false });
+    const mat = new THREE.MeshBasicMaterial({ color: kind === 'shop' ? 0x39d98a : kind === 'race' ? 0xffcc33 : kind === 'garage' ? 0xff5fa2 : 0x4aa3ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false });
     const ring = new THREE.Mesh(ringG, mat); ring.rotation.x = -Math.PI / 2; ring.position.set(q.x, 0.27, q.z);
     const box = new THREE.Mesh(boxG, mat); box.position.set(q.x, 2.9, q.z); box.rotation.set(0.6, 0, 0.6);
     ring.visible = box.visible = false; scene.add(ring, box); spotMarks.push({ kind, i, q, ring, box, mat });
   };
-  SHOPS.forEach((_, i) => add('shop', i, shopSpot(i))); HOUSES.forEach((_, i) => add('house', i, houseSpot(i))); }
+  SHOPS.forEach((_, i) => add('shop', i, shopSpot(i))); HOUSES.forEach((_, i) => add('house', i, houseSpot(i)));
+  RACES.forEach((r, i) => add('race', i, r.start)); GARAGES.forEach((g, i) => add('garage', i, g)); }
+// Hidden stashes: a small orange bag in an alley, seen only from close by
+const stashMarks = (() => { const g = new THREE.BoxGeometry(0.7, 0.45, 0.4), m = new THREE.MeshStandardMaterial({ color: 0xff8a1a, emissive: 0xff6a00, emissiveIntensity: 0.9, roughness: 0.6 }); return STASHES.map((q) => { const b = new THREE.Mesh(g, m); b.position.set(q.x, 0.6, q.z); b.visible = false; scene.add(b); return b; }); })();
 let lastSpot = '';
 const route = { pts: null, at: 0, tx: 0, tz: 0 };
 function updateSpots(s, p, now) {
+  { const found = s.stashes || []; stashMarks.forEach((b, k) => { b.visible = !found.includes(k) && (b.position.x - p.x) ** 2 + (b.position.z - p.z) ** 2 < 70 * 70; if (b.visible) { b.rotation.y = now / 500; b.position.y = 0.6 + Math.sin(now / 350 + k) * 0.12; } }); }
   for (const m of spotMarks) {
     const near = (m.q.x - p.x) ** 2 + (m.q.z - p.z) ** 2 < 110 * 110;
     m.ring.visible = m.box.visible = near; if (!near) continue;
@@ -503,7 +507,7 @@ function drawRadar(now) {
     } }
   // shops ($) and safehouses (H) on the radar, upright whatever way the map is turned
   const tag = (q, ch, col) => { if (Math.abs(q.x - p.x) > 130 || Math.abs(q.z - p.z) > 130) return; dot(q.x, q.z, '#000', 8); dot(q.x, q.z, col, 6.5); ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(ch, 0, 0.5); ctx.restore(); };
-  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
+  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); RACES.forEach((r) => tag(r.start, 'R', '#ffcc33')); GARAGES.forEach((g) => tag(g, 'G', '#ff5fa2')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
   for (const e of s.ents) {
     if (e.hp <= 0 || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
     if (e.kind === 'npc') dot(e.x, e.z, CREWS[e.crew].css, 3);
@@ -556,7 +560,7 @@ function streetTarget(s) {
   return { x: a.x, z: a.z, label: 'CALL' };
 }
 function missionTarget(s) {
-  const m = s.mission; if (!m) return null;
+  const m = s.mission; if (!m) return s.side ? s.side.target : null;
   if (m.target) return m.target;
   if (m.kind === 'chop' && m.stage === 0) { const p = player(s); let best = null, bd = 1e12; for (const c of s.cars) if (c.type === 'muscle' && !c.wrecked) { const d = (c.x - p.x) ** 2 + (c.z - p.z) ** 2; if (d < bd) { bd = d; best = c; } } return best; }
   if (m.kind === 'beat') { const p = player(s); let best = null, bd = 1e12; for (const e of s.ents) if (e.crew === m.crew && e.hp > 0) { const d = (e.x - p.x) ** 2 + (e.z - p.z) ** 2; if (d < bd) { bd = d; best = e; } } return best; }
@@ -637,6 +641,9 @@ function handleFx(list) {
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
+    else if (f.type === 'found') { pop(`+$${f.pay} stash ${f.n} of ${f.of}`); sfx.chime(true); if (f.all) showBig('EVERY STASH FOUND'); parts.burst(f.x, 0.8, f.z, 14, 3, { color: 0xffb040, life: 0.6, g: 3, s: 0.08, up: 1.2 }); }
+    else if (f.type === 'garage') { if (f.ok) { pop(`-$150 ${GARAGES[f.k].name}`); showBig(f.seen ? 'RESPRAYED' : 'RESPRAYED: HEAT GONE'); sfx.chime(true); const g = carViz.get(f.car); if (g) { scene.remove(g); carViz.delete(f.car); } } else { pop(`${GARAGES[f.k].name}: $150`, 'bad'); sfx.chime(false); } }
+    else if (f.type === 'race') { if (f.state === 'go') { showBig(f.name.toUpperCase() + ': GO'); sfx.sting(); } else if (f.state === 'win') { showBig(`${f.medal === 'none' ? 'FINISHED' : f.medal.toUpperCase()} ${f.time.toFixed(1)} S`); pop(`+$${f.pay}${f.record ? ' new best' : ''}`); sfx.chime(true); } else { showBig('RACE OVER', true); sfx.chime(false); } }
     else if (f.type === 'boom') {
       if (d < 60) radio.news(`News: a car just went up in ${hood()}. Police would like a word with a man in orange.`);
       sfx.boom(Math.max(0.15, 1 - d / 120));
@@ -1141,8 +1148,8 @@ function frame(now) {
   else if (raidB) { capEl.textContent = `${CREWS[raidB.raid.crew].name} raid on ${raidB.hustle}: ${Math.ceil(raidB.raid.eta)}s`; capEl.classList.add('raid'); }
   else { capEl.textContent = ''; capEl.classList.remove('raid'); }
   const m = s.mission;
-  $('mtitle').textContent = m ? m.title + ':' : '';
-  $('mtext').textContent = missionText(s);
+  $('mtitle').textContent = m ? m.title + ':' : s.side ? 'Race:' : '';
+  $('mtext').textContent = missionText(s) || sideText(s);
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
   if (started && here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
@@ -1199,6 +1206,6 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { RAMPS, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
+window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
