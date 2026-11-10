@@ -202,10 +202,10 @@ const anyCar = (s, p, type) => s.cars.filter((c) => !c.driver && !c.wrecked && !
   check(`top speed: sport bike, then cruiser, then dirt bike (${models.map((m) => run[m][1].toFixed(0)).join(', ')})`, run.sportbike[1] > run.cruiser[1] && run.cruiser[1] > run.dirtbike[1] && run.dirtbike[1] > 25);
   check(`off the line: dirt bike quickest, cruiser slowest (${models.map((m) => run[m][0].toFixed(0)).join(', ')} after 0.8 s)`, run.dirtbike[0] > run.sportbike[0] && run.sportbike[0] > run.cruiser[0]);
   check('the cruiser takes the most punishment, the dirt bike the least', G.BIKE_MODELS.cruiser.hp > G.BIKE_MODELS.sportbike.hp && G.BIKE_MODELS.sportbike.hp > G.BIKE_MODELS.dirtbike.hp); }
-{ // a save from when every bike was a sport bike
-  const { s } = world(), full = s.cars.filter((c) => c.type === 'bike').length; s.cars = s.cars.filter((c) => c.type !== 'bike' || /^bike\d+$/.test(c.id)); // only the first eight existed then for (const c of s.cars) if (c.type === 'bike') { delete c.model; c.hp = c.max = 90; } delete s.bikesV;
+{ // a save from when every bike was a sport bike (only the first eight existed then)
+  const { s } = world(), full = s.cars.filter((c) => c.type === 'bike').length; s.cars = s.cars.filter((c) => c.type !== 'bike' || /^bike\d+$/.test(c.id)); for (const c of s.cars) if (c.type === 'bike') { delete c.model; c.hp = c.max = 90; } delete s.bikesV;
   const s2 = G.migrate(JSON.parse(JSON.stringify(s))); G.step(s2, DT); G.step(s2, DT); const b = s2.cars.filter((c) => c.type === 'bike');
-  check('an old save gets all three models, the two extra bikes at the start and the bikes across the city, once', b.length === full && b.every((c) => c.model && c.hp === G.BIKE_MODELS[c.model].hp) && new Set(b.map((c) => c.model)).size === 3); }
+  check(`an old save gets all three models, the two extra bikes at the start and the bikes across the city, once (${b.length} of ${full})`, b.length === full && b.every((c) => c.model && c.hp === G.BIKE_MODELS[c.model].hp) && new Set(b.map((c) => c.model)).size === 3); }
 
 // ---- police escalation ----
 { const { s, p } = world(); const cops = () => s.ents.filter((e) => e.kind === 'cop' && e.hp > 0);
