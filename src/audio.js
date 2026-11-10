@@ -155,3 +155,18 @@ export function setSkid(v) {
 }
 
 export function boom(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thump(t, 75, 22, 1.1 * vol, 0.9); burst(t, { freq: 420, q: 0.5, type: 'lowpass', vol: 1 * vol, len: 0.9 }); burst(t, { freq: 2600, q: 0.8, vol: 0.4 * vol, len: 0.14 }); burst(t + 0.25, { freq: 180, q: 0.6, type: 'lowpass', vol: 0.5 * vol, len: 1.2 }); }
+
+// Police helicopter: low noise chopped at blade rate. One looping source, started on first use.
+let heliGain = null;
+export function setHeli(vol) {
+  if (!ctx) return;
+  if (!heliGain) {
+    if (vol <= 0) return;
+    const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const n = ctx.createBufferSource(); n.buffer = buf; n.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260;
+    const chop = ctx.createGain(); chop.gain.value = 0.5; const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.type = 'sawtooth'; lfo.frequency.value = 11; lg.gain.value = 0.5; lfo.connect(lg).connect(chop.gain); lfo.start();
+    heliGain = ctx.createGain(); heliGain.gain.value = 0; n.connect(f).connect(chop).connect(heliGain).connect(master); n.start();
+  }
+  heliGain.gain.setTargetAtTime(0.5 * vol, ctx.currentTime, 0.3);
+}

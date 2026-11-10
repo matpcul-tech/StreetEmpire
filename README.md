@@ -37,6 +37,10 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **Drive-bys.** FIRE in a car (or click, or F) shoots the pistol from the driver's seat at the nearest rival or officer, or straight ahead at a car.
+- **Police helicopter.** Four stars brings one overhead with a light on you. While it watches, heat does not cool. Outrun it, respray at a garage, or wait for it to break off and refuel.
+- **Progress.** The pause screen shows percent complete across jobs, turf, ramps, stashes, races and safehouses.
+
 - **Side activities.** Three street races (`R` on the radar): stop a car on the yellow ring and the clock runs, with gold, silver and bronze times. Three garages (`G`): pull in slowly with $150 for a fix and a respray, which also clears your heat unless an officer saw you go in. Twenty hidden stashes in the alleys, not on the radar; find them all for a bonus and more health. `npm run test:side` covers the rules.
 
 - **The radio talks.** Between songs a DJ line, an ad for a made-up business, or news about what you just did shows on screen. Stations can also play recorded drops between songs (see `docs/radio.md`). Each contact now has something to say when a job comes back done or blown.

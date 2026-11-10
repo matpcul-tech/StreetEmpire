@@ -248,3 +248,5 @@ body.cine-on #lcol{visibility:hidden}
   #steer button{width:62px;height:62px}
 }
 .pop.bad{color:#ff7a66}
+#prog{margin:8px 0;font:13px Arial,sans-serif;color:#e8dcc8;display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center}#prog b{flex-basis:100%;text-align:center;color:#ff8a1a;font-size:16px}
+#bFire{background:rgba(190,60,40,.6)!important}

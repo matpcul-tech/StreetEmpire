@@ -64,4 +64,16 @@ const mount = (s, p, c) => { p.x = c.x - 1.5; p.z = c.z; G.applyAction(s, p.id, 
   seen.length = 0; pass(1.5); check('hitting the car is not a near miss', got('nearmiss').length === 0 && got('crash').length > 0);
   seen.length = 0; pass(9); check('passing wide is not one either', got('nearmiss').length === 0);
 }
+{ // police helicopter
+  seen.length = 0; const { s, p } = world(); s.policeT = 1e9; p.heat = 75; run(s, 0.2);
+  check('four stars brings a helicopter', !!s.heli && got('heli').some((f) => f.state === 'in'));
+  for (let i = 0; i < 12 / DT; i++) { p.heat = 75; G.step(s, DT); drain(s); }
+  check(`it gets overhead and stays there (${Math.hypot(s.heli.x - p.x, s.heli.z - p.z).toFixed(0)} m off)`, Math.hypot(s.heli.x - p.x, s.heli.z - p.z) < 20 && s.heli.on);
+  s.ents = s.ents.filter((e) => e.kind === 'player'); p.calmT = 0; const h0 = p.heat; run(s, 15);
+  check('while it watches, the heat does not cool', p.heat === h0);
+  for (let i = 0; i < 40 / DT && s.heli && !s.heli.leave; i++) { G.step(s, DT); drain(s); }
+  check('it breaks off to refuel', !!s.heli && s.heli.leave && got('heli').some((f) => f.state === 'out' && f.fuel));
+  s.ents = s.ents.filter((e) => e.kind === 'player'); for (const c of s.cars) c.cops = false; run(s, 28);
+  check(`and the heat cools in the gap (${h0} to ${p.heat.toFixed(0)})`, p.heat < h0 && !s.heli);
+}
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nCHAOS TESTS PASSED'); process.exit(fails.length ? 1 : 0);

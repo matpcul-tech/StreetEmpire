@@ -376,7 +376,8 @@ export function applyAction(s, playerId, a) {
   if (a && a.type === 'streetReady') { ensureCalls(s); s.calls.ready = true; return; }
   const p = s.ents.find((e) => e.id === playerId);
   if (!p || p.hp <= 0) return;
-  if (a.type === 'attack' && p.cd <= 0 && !p.car && !p.block && p.dodgeT <= 0) attack(s, p, a.target);
+  if (a.type === 'attack' && p.cd <= 0 && p.car) driveBy(s, p, a.target);
+  else if (a.type === 'attack' && p.cd <= 0 && !p.car && !p.block && p.dodgeT <= 0) attack(s, p, a.target);
   else if (a.type === 'block') p.block = !!a.on && !p.car;
   else if (a.type === 'dodge' && !p.car && !(p.downT > 0)) {
     const dx = a.dx ?? -Math.sin(p.ry), dz = a.dz ?? -Math.cos(p.ry);
@@ -469,6 +470,28 @@ function startDodge(s, p, dx, dz) {
   s.fx.push({ type: 'dodge', x: p.x, z: p.z, to: p.id });
 }
 const meleeFallback = (p) => (p.hasBat ? 'bat' : p.hasKnux ? 'knuckles' : 'fists');
+// Shooting from the driver's seat: pistol only. It picks the nearest crew fighter or officer in the open within
+// range, in any direction; with nobody to shoot at, the round goes straight ahead and hits a car if one is there.
+export const DRIVEBY_RANGE = 22;
+function driveBy(s, p, targetId) {
+  const car = s.cars.find((c) => c.id === p.car); if (!car || car.wrecked) return;
+  p.cd = 0.34;
+  if (!(p.ammo > 0)) { if ((s.dryT || 0) <= s.t) { s.dryT = s.t + 3; log(s, 'No pistol rounds. Buy some at a shop.'); s.fx.push({ type: 'broke' }); } return; }
+  const W = WEAPONS.pistol, ok = (e) => e && e !== p && e.hp > 0 && !e.car && (e.kind === 'npc' || e.kind === 'cop') && hostile(p, e) && dist2(e, p) < DRIVEBY_RANGE ** 2 && clearLine(p, e);
+  let best = s.ents.find((e) => e.id === targetId); if (!ok(best)) { best = null; let bd = Infinity; for (const e of s.ents) if (ok(e)) { const d = dist2(e, p); if (d < bd) { bd = d; best = e; } } }
+  p.ammo--;
+  let ang = car.ry, tx, tz, shotCar = null;
+  if (best) { ang = Math.atan2(best.x - p.x, best.z - p.z); tx = best.x; tz = best.z; }
+  else {
+    const fx = Math.sin(ang), fz = Math.cos(ang); let bd = DRIVEBY_RANGE;
+    for (const c of s.cars) { if (c === car) continue; const rx = c.x - p.x, rz = c.z - p.z, ahead = rx * fx + rz * fz; if (ahead > 2 && ahead < bd && Math.abs(rx * fz - rz * fx) < 1.4) { bd = ahead; shotCar = c; } }
+    tx = shotCar ? shotCar.x : p.x + fx * DRIVEBY_RANGE; tz = shotCar ? shotCar.z : p.z + fz * DRIVEBY_RANGE;
+  }
+  s.fx.push({ type: 'shot', x: p.x, z: p.z, tx, tz, by: p.id, gun: 'pistol', ry: ang, driveby: true });
+  addHeat(s, p, 8); panic(s, p.x, p.z, 30, true, true);
+  if (best) damage(s, best, Math.round(W.dmg * 0.8), p, true, W.kb);
+  else if (shotCar) { shotCar.byP = true; s.fx.push({ type: 'scrape', x: shotCar.x, z: shotCar.z, by: 0, n: 6 }); carHurt(s, shotCar, 14); }
+}
 function attack(s, p, targetId) {
   if (p.weapon === 'pistol' && p.ammo <= 0) p.weapon = meleeFallback(p);
   if (p.weapon === 'shotgun' && !(p.shells > 0)) p.weapon = meleeFallback(p);
@@ -1017,8 +1040,24 @@ function roadblockStep(s, p, st, dt) {
   }
   s.fx.push({ type: 'roadblock', x: alongX ? mid : line, z: alongX ? line : mid });
 }
+// Police helicopter: at four stars one flies in and circles overhead with a light on the player. While it is on
+// station the heat does not cool. It can be outrun (it does 24 m/s), it leaves when the stars drop under three,
+// and it has to break off to refuel after 45 seconds, which gives a 30 second window.
+export const HELI = { speed: 24, see: 45, fuel: 45, away: 30 };
+function heliStep(s, p, st, dt) {
+  let h = s.heli;
+  if (!h) { if (st < 4 || (s.heliCd || 0) > s.t || p.hp <= 0) return; const a = (s.t * 1.7) % (Math.PI * 2); h = s.heli = { x: p.x + Math.sin(a) * 160, z: p.z + Math.cos(a) * 160, a: 0, fuel: HELI.fuel, leave: false }; s.fx.push({ type: 'heli', state: 'in' }); log(s, 'Police helicopter inbound.'); }
+  const d = Math.hypot(p.x - h.x, p.z - h.z), on = d < HELI.see && !h.leave;
+  if (on) { h.fuel -= dt; p.calmT = 0; }
+  if (!h.leave && (st < 3 || h.fuel <= 0 || p.hp <= 0)) { h.leave = true; h.a = Math.atan2(h.x - p.x, h.z - p.z); s.heliCd = s.t + (h.fuel <= 0 ? HELI.away : 8); s.fx.push({ type: 'heli', state: 'out', fuel: h.fuel <= 0 }); if (h.fuel <= 0) log(s, 'The helicopter is breaking off to refuel.'); }
+  if (h.leave) { h.x += Math.sin(h.a) * HELI.speed * dt; h.z += Math.cos(h.a) * HELI.speed * dt; if (d > 220) s.heli = null; return; }
+  // fly to a point on a 14 m circle around the player and keep turning around it
+  h.a += dt * 0.7; const gx = p.x + Math.sin(h.a) * 14, gz = p.z + Math.cos(h.a) * 14, dx = gx - h.x, dz = gz - h.z, l = Math.hypot(dx, dz) || 1, sp = Math.min(HELI.speed, l / dt);
+  h.x += dx / l * sp * dt; h.z += dz / l * sp * dt; h.on = on;
+}
 function policeStep(s, dt) {
   const p = player(s), st = stars(p);
+  heliStep(s, p, st, dt);
   const cops = s.ents.filter((e) => e.kind === 'cop' && e.hp > 0);
   s.policeT = (s.policeT || 0) - dt;
   // Escalation: four stars brings tactical units (more officers, three to a tougher cruiser, sent faster),
@@ -1238,6 +1277,18 @@ export const GARAGES = [{ name: 'Midtown Garage', i: 3, j: 3 }, { name: 'Harbor 
 // Hidden stashes: twenty bags in the alleys behind the buildings. Not on the radar. Find them all for a bigger body.
 export const STASH_PAY = 100, STASH_ALL = 2500;
 export const STASHES = Array.from({ length: 20 }, (_, k) => { const id = (k * 4 + 2) % (GRID * GRID), c = blockCenter({ gx: id % GRID, gz: Math.floor(id / GRID) }), o = [[0, 13], [13, 0], [0, -13], [-13, 0]][k % 4]; return { x: c.x + o[0], z: c.z + o[1] }; });
+// How much of the game is done, as one number and its parts.
+export function progress(s) {
+  const parts = [
+    ['Jobs', Math.min(s.missionIdx || 0, MISSIONS.length), MISSIONS.length],
+    ['Turf', s.blocks.filter((b) => b.owner === 'player').length, s.blocks.length],
+    ['Stunt ramps', (s.jumps || []).length, RAMPS.length],
+    ['Hidden stashes', (s.stashes || []).length, STASHES.length],
+    ['Races won in gold time', RACES.filter((r, i) => s.best && s.best[i] != null && s.best[i] <= r.gold).length, RACES.length],
+    ['Safehouses', HOUSES.filter((_, i) => ownsHouse(s, i)).length, HOUSES.length],
+  ];
+  return { parts, pct: Math.floor(100 * parts.reduce((a, [, n, of]) => a + n / of, 0) / parts.length) };
+}
 export function sideText(s) { const r = s.side; if (!r) return ''; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
 function sideStep(s, p, dt) {
   const cash = s.crews.player, car = p.car ? s.cars.find((c) => c.id === p.car) : null;
