@@ -101,6 +101,14 @@ The city has parked sport bikes you can ride: get on with the same button as a c
 "bikes": { "sportbike": { "file": "bikes/sportbike.glb", "yaw": 0, "length": 2.1 } }
 ```
 
+There are three models: `sportbike`, `cruiser` and `dirtbike`. A parked bike carries its model, which picks the file here and its numbers in `BIKE_MODELS` (src/state.js): the sport bike is fastest, the cruiser is slower and tougher, the dirt bike is slowest and quickest off the line. Optional keys per model:
+
+- `"seat": { "y": 0.7, "z": -0.3, "lean": 0.1 }`: where the rider sits (height in meters, how far behind the middle, how far he leans forward). Without it the sport bike's seat is used.
+- `"axle": "z"`: for a file built sideways (long axis on x, turned here with `"yaw": 90`), the axis its wheel nodes spin on.
+- `"paint": false`: keep the model's own colors.
+
+The cruiser and the dirt bike have no steer node: their forks are one piece with the frame, so the front wheel spins but does not turn with the bars.
+
 Bikes do not go through kit-inbox yet. A raw Meshy bike is one fused mesh, so it is rigged first and the finished file is committed to `public/models/kit/bikes/`. The file needs:
 
 | Node | Tag in extras | What it is |

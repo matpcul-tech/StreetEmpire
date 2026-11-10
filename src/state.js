@@ -111,14 +111,31 @@ export function createState(seed = 1, cfg = {}) {
 // Parked sport bikes: one by the starting corner, the rest spread over the city. They take no ids and
 // no random numbers, so adding them leaves everything else in a new game exactly as it was.
 const BIKE_BLOCKS = [0, 6, 20, 34, 40, 52, 64, 78];
+// Three motorcycles share the bike rules and differ in the numbers: the sport bike is the fastest and
+// lightest, the cruiser is slower and takes more punishment, the dirt bike is the slowest and the quickest
+// to get moving. A bike's model picks its look (kit.json "bikes") and these numbers.
+export const BIKE_MODELS = {
+  sportbike: CAR_TYPES.bike,
+  cruiser: { max: 34, acc: 19, hp: 115 },
+  dirtbike: { max: 31, acc: 27, hp: 75 },
+};
+const BIKE_ORDER = ['sportbike', 'cruiser', 'dirtbike'];
+// the numbers a car or bike drives by
+const statsOf = (c) => (c.type === 'bike' && BIKE_MODELS[c.model]) || CAR_TYPES[c.type];
 function addBikes(s) {
-  if (s.cars.some((c) => c.type === 'bike')) return;
-  const T = CAR_TYPES.bike;
-  BIKE_BLOCKS.forEach((bi, k) => {
+  const park = (id, model, x, z, paint) => { const T = BIKE_MODELS[model]; s.cars.push({ id, type: 'bike', model, x, z, ry: 0, v: 0, steer: 0, driver: null, ai: false, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: 0, paint }); };
+  if (!s.cars.some((c) => c.type === 'bike')) BIKE_BLOCKS.forEach((bi, k) => {
     const b = s.blocks[bi % s.blocks.length]; if (!b) return;
     const bc = blockCenter(b);
-    s.cars.push({ id: 'bike' + k, type: 'bike', x: bc.x + PITCH / 2 - 5.6, z: bc.z + 9.5 + (k % 2) * 1.5, ry: 0, v: 0, steer: 0, driver: null, ai: false, hp: T.hp, max: T.hp, wrecked: false, siren: false, cruise: 0, paint: k });
+    park('bike' + k, BIKE_ORDER[k % 3], bc.x + PITCH / 2 - 5.6, bc.z + 9.5 + (k % 2) * 1.5, k);
   });
+  if (s.bikesV === 2) return; s.bikesV = 2;
+  // saves from when every bike was a sport bike: the parked ones take their model by position
+  for (const c of s.cars) if (c.type === 'bike' && !c.model) { const k = +String(c.id).replace('bike', '') || 0; c.model = BIKE_ORDER[k % 3]; if (!c.driver && c.hp === c.max) c.hp = c.max = BIKE_MODELS[c.model].hp; }
+  // one of each by the starting corner, so all three can be tried from the first minute
+  const home = blockCenter(s.blocks[0]);
+  if (!s.cars.some((c) => c.id === 'bikeH1')) park('bikeH1', 'cruiser', home.x + PITCH / 2 - 5.6, home.z + 12.6, 1);
+  if (!s.cars.some((c) => c.id === 'bikeH2')) park('bikeH2', 'dirtbike', home.x + PITCH / 2 - 5.6, home.z + 14.2, 4);
 }
 function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
 function makeCar(s, x, z, ry, type, ai) {
@@ -576,7 +593,7 @@ function respawnPlayer(s, p) {
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   if (c.wrecked) { c.v *= 1 - 3 * dt; return; }
-  const T = CAR_TYPES[c.type];
+  const T = statsOf(c);
   if (c.mh == null || Math.abs(c.v) < 1) c.mh = c.ry;
   const sp = Math.abs(c.v) / T.max;
   const lock = 0.6 * (1 - Math.min(0.5, sp * 0.55)) * (handbrake ? 1.25 : 1);
