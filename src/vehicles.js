@@ -352,7 +352,7 @@ export function updateCar(g, c, dt, night, now) {
   const acc = dt > 0 ? (c.v - (u.lastV ?? c.v)) / dt : 0; u.lastV = c.v;
   // a car's body rolls away from the turn; a bike and its rider lean into it, harder with speed
   const tPitch = THREE.MathUtils.clamp(-acc * (u.bike ? 0.006 : 0.0035), u.bike ? -0.12 : -0.07, 0.07);
-  const tRoll = u.bike ? c.steer * Math.min(1, Math.abs(c.v) / 16) * 1.5 : -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
+  const tRoll = u.bike ? THREE.MathUtils.clamp(c.steer * Math.min(1, Math.abs(c.v) / 16) * 1.05, -0.5, 0.5) : -c.steer * Math.min(1, Math.abs(c.v) / 18) * 0.13 - (c.slip || 0) * Math.sign(c.steer || 0) * 0.05;
   u.pv = ((u.pv || 0) + ((tPitch - (u.pitch || 0)) * 90 - (u.pv || 0) * 9) * dt); u.pitch = (u.pitch || 0) + u.pv * dt;
   u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * 80 - (u.rv || 0) * 8) * dt); u.roll = (u.roll || 0) + u.rv * dt;
   u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
@@ -363,7 +363,7 @@ export function updateCar(g, c, dt, night, now) {
   u.tails.material = braking ? parts().tailBrake : night && !c.wrecked ? parts().tail : parts().tailDim;
   u.flares.visible = !c.wrecked && (night || braking);
   for (const f of u.flares.children) f.visible = f.userData.tail ? (braking || night) : night;
-  for (const f of u.flares.children) if (f.userData.tail) f.scale.setScalar(braking ? 1.3 : 0.8);
+  for (const f of u.flares.children) if (f.userData.tail) f.scale.setScalar((braking ? 1.3 : 0.8) * (u.bike ? 0.45 : 1)); // one small lamp on a bike
   if (u.siren) { const on = c.siren && Math.floor(now / 180) % 2 === 0; u.siren[0].visible = !c.siren || on; u.siren[1].visible = !c.siren || !on; }
   if (c.wrecked && !u.burnt && u.driver && u.driver.parent === u.model) { u.model.remove(u.driver); u.driver = null; } // a bike's rider leans with it: take him off before the paint burns
   if (c.wrecked && !u.burnt) { u.burnt = true; u.model.traverse((o) => { if (o.isMesh) o.material = parts().burnt; }); }

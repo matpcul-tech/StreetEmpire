@@ -33,12 +33,14 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
     const s = window.__game.state, b = s.cars.find((c) => c.id === window.__bike);
     clearInterval(window.__hold); window.__hold = setInterval(() => { s.t = 424; b.v = 0; window.__camOv = { x: b.x + 1.6, y: 1.9, z: b.z - 3.2, lx: b.x, ly: 0.95, lz: b.z }; }, 16);
   });
-  // held in a turn at speed, seen from the front: bike and rider lean together
-  await shot('lean', () => {
+  // held in a turn at speed, seen from the front: bike and rider lean together (a real key, so desktop only)
+  if (name === 'desktop') await page.keyboard.down('KeyD');
+  if (name === 'desktop') await shot('lean', () => {
     const g = window.__game, s = g.state, b = s.cars.find((c) => c.id === window.__bike), x0 = b.x, z0 = b.z;
     clearInterval(window.__hold);
-    window.__hold = setInterval(() => { s.t = 424; b.x = x0; b.z = z0; b.ry = 0; b.mh = 0; b.v = 15; g.input(1, 0.3, false, 0.016); b.x = x0; b.z = z0; b.ry = 0; b.mh = 0; window.__camOv = { x: x0 + 0.3, y: 1.2, z: z0 + 4.4, lx: x0, ly: 0.9, lz: z0 }; }, 4);
+    window.__hold = setInterval(() => { s.t = 424; b.x = x0; b.z = z0; b.ry = 0; b.mh = 0; b.v = 15; b.x = x0; b.z = z0; b.ry = 0; b.mh = 0; window.__camOv = { x: x0 + 0.3, y: 1.2, z: z0 + 4.4, lx: x0, ly: 0.9, lz: z0 }; }, 4);
   }, () => Math.abs(window.__dbg.carViz.get(window.__bike).userData.model.rotation.z) > 0.15);
+  if (name === 'desktop') await page.keyboard.up('KeyD');
   // the game's own chase camera, by day and at night
   await shot('riding', () => {
     const g = window.__game, s = g.state;
