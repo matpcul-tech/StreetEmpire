@@ -193,7 +193,7 @@ const anyCar = (s, p, type) => s.cars.filter((c) => !c.driver && !c.wrecked && !
 
 // ---- motorcycles ----
 { const { s, p } = world(); const bikes = s.cars.filter((c) => c.type === 'bike'), models = ['sportbike', 'cruiser', 'dirtbike'];
-  check(`ten parked bikes, all three models (${bikes.length})`, bikes.length === 10 && models.every((m) => bikes.some((c) => c.model === m)) && bikes.every((c) => c.hp === G.BIKE_MODELS[c.model].hp));
+  check(`bikes parked all over the city, all three models (${bikes.length})`, bikes.length >= 30 && models.every((m) => bikes.some((c) => c.model === m)) && bikes.every((c) => c.hp === G.BIKE_MODELS[c.model].hp));
   const home = G.blockCenter(s.blocks[0]); check('one of each within 30 m of the starting corner', models.every((m) => bikes.some((c) => c.model === m && Math.hypot(c.x - home.x, c.z - home.z) < 30)));
   check('no two bikes parked on top of each other, none on a parked car', bikes.every((a) => s.cars.every((b) => a === b || Math.hypot(a.x - b.x, a.z - b.z) > 1.2)));
   // each one from a standstill on an empty stretch of the Loop: 0.8 seconds, then flat out
@@ -202,10 +202,10 @@ const anyCar = (s, p, type) => s.cars.filter((c) => !c.driver && !c.wrecked && !
   check(`top speed: sport bike, then cruiser, then dirt bike (${models.map((m) => run[m][1].toFixed(0)).join(', ')})`, run.sportbike[1] > run.cruiser[1] && run.cruiser[1] > run.dirtbike[1] && run.dirtbike[1] > 25);
   check(`off the line: dirt bike quickest, cruiser slowest (${models.map((m) => run[m][0].toFixed(0)).join(', ')} after 0.8 s)`, run.dirtbike[0] > run.sportbike[0] && run.sportbike[0] > run.cruiser[0]);
   check('the cruiser takes the most punishment, the dirt bike the least', G.BIKE_MODELS.cruiser.hp > G.BIKE_MODELS.sportbike.hp && G.BIKE_MODELS.sportbike.hp > G.BIKE_MODELS.dirtbike.hp); }
-{ // a save from when every bike was a sport bike
-  const { s } = world(); s.cars = s.cars.filter((c) => !String(c.id).startsWith('bikeH')); for (const c of s.cars) if (c.type === 'bike') { delete c.model; c.hp = c.max = 90; } delete s.bikesV;
+{ // a save from when every bike was a sport bike (only the first eight existed then)
+  const { s } = world(), full = s.cars.filter((c) => c.type === 'bike').length; s.cars = s.cars.filter((c) => c.type !== 'bike' || /^bike\d+$/.test(c.id)); for (const c of s.cars) if (c.type === 'bike') { delete c.model; c.hp = c.max = 90; } delete s.bikesV;
   const s2 = G.migrate(JSON.parse(JSON.stringify(s))); G.step(s2, DT); G.step(s2, DT); const b = s2.cars.filter((c) => c.type === 'bike');
-  check('an old save gets all three models and the two extra bikes, once', b.length === 10 && b.every((c) => c.model && c.hp === G.BIKE_MODELS[c.model].hp) && new Set(b.map((c) => c.model)).size === 3); }
+  check(`an old save gets all three models, the two extra bikes at the start and the bikes across the city, once (${b.length} of ${full})`, b.length === full && b.every((c) => c.model && c.hp === G.BIKE_MODELS[c.model].hp) && new Set(b.map((c) => c.model)).size === 3); }
 
 // ---- police escalation ----
 { const { s, p } = world(); const cops = () => s.ents.filter((e) => e.kind === 'cop' && e.hp > 0);

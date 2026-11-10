@@ -1,3 +1,10 @@
 {
-  "stations": []
+  "stations": [
+    {
+      "name": "King Rando Radio",
+      "tracks": [
+        { "title": "Bounce That Ass Bitch", "file": "king-rando/bounce-that-ass-bitch.mp3" }
+      ]
+    }
+  ]
 }

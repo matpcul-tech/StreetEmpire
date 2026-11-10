@@ -129,7 +129,8 @@ function addBikes(s) {
     const bc = blockCenter(b);
     park('bike' + k, BIKE_ORDER[k % 3], bc.x + PITCH / 2 - 5.6, bc.z + 9.5 + (k % 2) * 1.5, k);
   });
-  if (s.bikesV === 2) return; s.bikesV = 2;
+  if (s.bikesV >= 3) return;
+  if (s.bikesV !== 2) {
   // saves from when every bike was a sport bike: the parked ones take their model by position
   for (const c of s.cars) if (c.type === 'bike' && !c.model) { const k = +String(c.id).replace('bike', '') || 0; c.model = BIKE_ORDER[k % 3]; if (!c.driver && c.hp === c.max) c.hp = c.max = BIKE_MODELS[c.model].hp; }
   // one of each by the starting corner, so all three can be tried from the first minute
@@ -137,6 +138,16 @@ function addBikes(s) {
   // (parked nose out, side by side: end to end along the curb they would overlap)
   if (!s.cars.some((c) => c.id === 'bikeH1')) park('bikeH1', 'cruiser', home.x + PITCH / 2 - 5.6, home.z + 12.5, 1, Math.PI / 2);
   if (!s.cars.some((c) => c.id === 'bikeH2')) park('bikeH2', 'dirtbike', home.x + PITCH / 2 - 5.6, home.z + 14.0, 4, Math.PI / 2);
+  }
+  // Bikes on the street everywhere, not only at the start: one on every third block, the three models in turn,
+  // at the same stretch of curb the first eight use (parked cars never reach it). Saves get them on load.
+  s.blocks.forEach((b, i) => {
+    if (i % 3 !== 1 || BIKE_BLOCKS.includes(i) || s.cars.some((c) => c.id === 'bikeC' + i)) return;
+    const bc = blockCenter(b), x = bc.x + PITCH / 2 - 5.6, z = bc.z + 9.5 + (i % 2) * 1.5;
+    if (s.cars.some((c) => dist2(c, { x, z }) < 6.25)) return; // something already stands there
+    park('bikeC' + i, BIKE_ORDER[(Math.floor(i / 3) + Math.floor(i / GRID)) % 3], x, z, i); // shifted a step each row, so every district gets all three
+  });
+  s.bikesV = 3;
 }
 function newEnt(s, o) { return { id: s.nextId++, ry: 0, max: o.hp ?? 60, hp: 60, cd: 0, hitT: 0, combo: 0, kx: 0, kz: 0, stun: 0, swing: 0, moving: 0, jumpT: 0, car: null, windup: 0, tell: '', ...o }; }
 function makeCar(s, x, z, ry, type, ai) {

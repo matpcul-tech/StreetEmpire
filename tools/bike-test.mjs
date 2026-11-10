@@ -9,7 +9,7 @@ const ride = (s, p, mx, mz, n, brake = false) => { for (let i = 0; i < n; i++) {
 
 { // the world
   const { s, p } = world(), bikes = s.cars.filter(isBike);
-  check(`bikes are parked around the city (${bikes.length}, ${bikes.filter(isCruiser).length} of them cruisers)`, bikes.length === 10 && bikes.filter(isCruiser).length >= 3 && ['sportbike', 'cruiser', 'dirtbike'].every((m) => bikes.some((c) => c.model === m)));
+  check(`bikes are parked around the city (${bikes.length}, ${bikes.filter(isCruiser).length} of them cruisers)`, bikes.length >= 30 && bikes.filter(isCruiser).length >= 8 && ['sportbike', 'cruiser', 'dirtbike'].every((m) => bikes.some((c) => c.model === m)));
   check('a sport bike and a cruiser both stand by the start', [true, false].every((cr) => bikes.some((c) => isCruiser(c) === cr && Math.hypot(c.x - p.x, c.z - p.z) < 25)));
   check('no bike is parked inside a building or on another car', bikes.every((c) => !G.insideBuilding(c.x, c.z, 0.5) && !s.cars.some((o) => o !== c && Math.hypot(o.x - c.x, o.z - c.z) < 1.4)));
 }
@@ -43,6 +43,16 @@ const ride = (s, p, mx, mz, n, brake = false) => { for (let i = 0; i < n; i++) {
   check('a save from before the cruiser gets them on load', m.cars.some(isCruiser));
   const n = m.cars.length; G.migrate(m);
   check('and only once', m.cars.length === n);
+}
+{ // bikes all over the city, and saves from when there were ten get the rest
+  const { s } = world(), bikes = s.cars.filter(isBike), half = G.GRID * G.PITCH / 4;
+  const quad = (c) => (c.x > 0 ? 1 : 0) + (c.z > 0 ? 2 : 0);
+  check('every quarter of the city has at least five bikes', [0, 1, 2, 3].every((q) => bikes.filter((c) => quad(c) === q).length >= 5));
+  check('each quarter has all three models', [0, 1, 2, 3].every((q) => ['sportbike', 'cruiser', 'dirtbike'].every((m) => bikes.some((c) => quad(c) === q && c.model === m))));
+  const old = world().s; old.cars = old.cars.filter((c) => !String(c.id).startsWith('bikeC')); old.bikesV = 2;
+  const m = G.migrate(JSON.parse(JSON.stringify(old)));
+  check(`a save with ten bikes gets the rest on load (${m.cars.filter(isBike).length})`, m.cars.filter(isBike).length === bikes.length);
+  const n = m.cars.length; G.migrate(m); check('and only once', m.cars.length === n);
 }
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nBIKE TESTS PASSED');
 process.exit(fails.length ? 1 : 0);

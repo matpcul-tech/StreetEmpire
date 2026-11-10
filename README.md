@@ -41,7 +41,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - Three motorcycles to ride: a sport bike (fastest), a cruiser (slower, tougher) and a dirt bike (quickest off the line). One of each is parked by the starting corner.
 - A route line on the radar: the way along the streets to the job marker, or to the contact with the next job.
 - Police escalation: four stars brings tactical units (more officers, three to a tougher cruiser), five stars puts roadblocks on the street ahead of your car.
-- Car radio: RADIO on a phone or M on a keyboard steps through the stations. Three built-in stations are made in code; your own tracks go in `public/radio/` (see docs/radio.md).
+- Car radio: RADIO on a phone or M on a keyboard steps through the stations. King Rando Radio plays the game's own tracks and comes first on the dial; three more stations are made in code. Tracks go in `public/radio/` (see docs/radio.md). The radio plays on bikes too.
 - Shops (green markers, $ on the radar): pistol, shotgun, bat, brass knuckles and a patch up, for cash.
 - Safehouses (blue markers, H on the radar): four to buy, one per district. You come back at your nearest one when you go down, you heal and the heat cools while you stand at it, and a car of your own waits at the curb.
 - A 9 by 9 block city (81 blocks, about 520 m across) in four districts: Eastside, Midtown, Downtown and the Harbor. Each rival crew starts with a 2 by 2 corner.
