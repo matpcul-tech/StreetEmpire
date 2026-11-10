@@ -37,6 +37,8 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **The city reacts.** Every pedestrian has a temper. Most run from trouble; some freeze with their hands up, some stop to watch a fist fight, some swing back, and some phone it in (knock them off the phone before the call goes through or your heat jumps). People dive out of the way of a fast car and have something to say as you walk past. Drivers floor it through the lights when a gun goes off, or leave the car and run. Rear-end someone and they may get out swinging, take off, or lean on the horn. One driver in five comes back for a jacked car. `npm run test:city` covers it.
+
 - A 19 job chain across four contacts: Unc (Eastside), Dee (Midtown), Rook (Downtown) and Sal (Harbor). Job types: fetch, pickups, car theft, block takeover, clean delivery, tailing, a lap of the Loop, a car chase, crew fights, block defense, losing the police, and marked targets.
 - Three motorcycles to ride: a sport bike (fastest), a cruiser (slower, tougher) and a dirt bike (quickest off the line). One of each is parked by the starting corner.
 - A route line on the radar: the way along the streets to the job marker, or to the contact with the next job.

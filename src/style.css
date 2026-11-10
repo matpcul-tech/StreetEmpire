@@ -159,6 +159,7 @@ body.cine-on #bPause,body.cine-on #onb,body.cine-on #prompt,body.cine-on #pops{v
 #streetIn{background:#e8914a;color:#1a0f08}
 #streetOff{background:#2a2622;color:#eee;border:1px solid rgba(255,255,255,.35)!important}
 .hitn{position:fixed;z-index:7;pointer-events:none;font:bold 15px Arial,sans-serif;text-shadow:1px 1px 2px #000;transform:translate(-50%,-50%)}
+.hitn.say{font:bold 12px Arial,sans-serif;color:#fff;background:rgba(0,0,0,.55);padding:2px 7px;border-radius:9px;white-space:nowrap;text-shadow:none}.hitn.say.call{color:#ffe14a}.hitn.say.mad{color:#ff8a70}
 #onb i{font-style:normal;color:#ffcc33;margin-right:4px}
 #capture{font:bold 13px Arial,sans-serif;text-shadow:1px 1px 2px #000}#capture:empty{display:none}
 /* toasts: a top band between the radar and the HUD (desktop and landscape), end of the left strip in portrait */
@@ -246,3 +247,4 @@ body.cine-on #lcol{visibility:hidden}
   #steer{gap:10px}
   #steer button{width:62px;height:62px}
 }
+.pop.bad{color:#ff7a66}

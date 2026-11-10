@@ -535,6 +535,7 @@ export function animate(g, e, dt, sitting) {
   else if (e.downT > 0 && e.downBusted) want = 'Punch_Enter'; // hands up, held still
   else if (e.hp <= 0) want = 'Death01';
   else if (e.dodgeT > 0) want = 'Roll';
+  else if (e.cower > 0) want = 'Punch_Enter'; // frozen with hands up
   else if (e.block === true) want = 'Punch_Enter'; // peds keep their home block id in e.block, so only a real true is the block button
   else if (e.swing > 0) { const w = e.weapon; want = w === 'pistol' || w === 'shotgun' ? 'Pistol_Shoot' : w === 'bat' ? 'Sword_Attack' : (u.punchN % 2 ? 'Punch_Cross' : 'Punch_Jab'); }
   else if (e.hitT > 0.05) want = e.hitT > 0.2 ? 'Hit_Head' : 'Hit_Chest';
