@@ -54,6 +54,10 @@ const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 45
 const sky = new Sky(); sky.scale.setScalar(1000);
 const su = sky.material.uniforms;
 su.turbidity.value = 9; su.rayleigh.value = 2.6; su.mieCoefficient.value = 0.008; su.mieDirectionalG.value = 0.88;
+// daytime sky gain: the Sky shader's midday output is far past white even after tone mapping, which washed the
+// whole frame out to cream. The gain pulls the day sky back to a hazy blue; dusk and night are left as they were.
+su.uGain = { value: 1 };
+sky.material.fragmentShader = sky.material.fragmentShader.replace('void main() {', 'uniform float uGain;\nvoid main() {').replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uGain, 1.0 );');
 scene.add(sky);
 // twilight glow (v0.8.1): warm sunset band toward the sun plus a city light haze, so dusk never reads as a black sky
 const glowU = { uSun: { value: new THREE.Vector3(1, 0, 0) }, uDusk: { value: 0 }, uNight: { value: 0 } };
@@ -119,6 +123,7 @@ function updateDay() {
   const elev = Math.sin(ang);
   sunDir.set(Math.cos(ang) * 0.8, elev, 0.45).normalize();
   su.sunPosition.value.copy(sunDir);
+  su.uGain.value = 1 - 0.7 * THREE.MathUtils.smoothstep(elev, 0.1, 0.5);
   const day = THREE.MathUtils.smoothstep(elev, -0.08, 0.25);
   const dusk = 1 - Math.abs(THREE.MathUtils.clamp(elev / 0.25, -1, 1));
   night = 1 - THREE.MathUtils.smoothstep(elev, -0.12, 0.05);
@@ -126,9 +131,11 @@ function updateDay() {
   // night (v0.8): blue purple moonlight plus a strong sky fill so nothing goes black
   sun.intensity = 2.0 * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8c96e0); }
-  hemi.intensity = 0.3 + 0.45 * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x8088d0 : dusk > 0.5 ? 0x8c90b8 : 0xc8a888);
-  hemi.groundColor.setHex(night > 0.5 ? 0x5a4434 : dusk > 0.4 ? 0x3a4258 : 0x4a3226); // cool bounce in shadows at dusk
-  scene.environmentIntensity = 0.1 + 0.3 * day + 0.2 * night;
+  hemi.intensity = 0.3 + 0.85 * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x9094c8 : dusk > 0.5 ? 0x9a94b4 : 0xc8a888);
+  hemi.groundColor.setHex(night > 0.5 ? 0x9a6c44 : dusk > 0.4 ? 0x6a5a58 : 0x6e5c4c); // warm bounce off lit streets at night, so brick and dark walls do not drop to black // cool bounce in shadows at dusk
+  // sky reflection is kept very low by day: the midday sky is so bright that a fuller reflection turned the road,
+  // sidewalks and walls pale and flat; the hemisphere fill above stands in for it
+  scene.environmentIntensity = 0.1 + 0.02 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 45 - 15 * night;
   const baseExp = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark, bump = (composer ? 0 : 0.26) * (dark + 0.5 * dusk);
