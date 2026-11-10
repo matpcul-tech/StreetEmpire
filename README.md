@@ -37,6 +37,11 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **Fire and explosions.** A car beaten or shot down to a sixth of its health catches fire and blows a few seconds later. The blast hurts everything near it, other cars included, so a row of parked cars goes up one after another. Guns now hit cars.
+- **Stunt ramps.** Eight orange ramps sit in the middle of streets around the city (a `^` on the radar). Hit one fast and straight and the car flies in slow motion. The first clean jump off each pays a bonus.
+- **Near misses.** Pass moving traffic close and fast without touching it for a small payout that grows with a streak.
+- Feel: slow motion on a hard crash, and the engine note now climbs through four gears. `npm run test:chaos` covers the rules.
+
 - **The city reacts.** Every pedestrian has a temper. Most run from trouble; some freeze with their hands up, some stop to watch a fist fight, some swing back, and some phone it in (knock them off the phone before the call goes through or your heat jumps). People dive out of the way of a fast car and have something to say as you walk past. Drivers floor it through the lights when a gun goes off, or leave the car and run. Rear-end someone and they may get out swinging, take off, or lean on the horn. One driver in five comes back for a jacked car. `npm run test:city` covers it.
 
 - A 19 job chain across four contacts: Unc (Eastside), Dee (Midtown), Rook (Downtown) and Sal (Harbor). Job types: fetch, pickups, car theft, block takeover, clean delivery, tailing, a lap of the Loop, a car chase, crew fights, block defense, losing the police, and marked targets.

@@ -426,7 +426,7 @@ export function applyAction(s, playerId, a) {
       }
     }
   } else if (a.type === 'car') {
-    if (p.car) exitCar(s, p);
+    if (p.car) { const cur = s.cars.find((c) => c.id === p.car); if (!cur || !(cur.y > 0)) exitCar(s, p); }
     else {
       const c = nearestCar(s, p, 5);
       if (c) {
@@ -492,8 +492,12 @@ function attack(s, p, targetId) {
     hits.sort((a2, b2) => b2[0] - a2[0]);
     const best = hits[0] ? hits[0][1] : null;
     if (best && gun === 'pistol') p.ry = Math.atan2(best.x - p.x, best.z - p.z);
-    const tx = best ? best.x : p.x + Math.sin(p.ry) * 22, tz = best ? best.z : p.z + Math.cos(p.ry) * 22;
+    // nobody in the sights: the nearest car down the barrel takes the round
+    let shotCar = null;
+    if (!best) { let bd = w.range; for (const c of s.cars) { if (c.id === p.car) continue; const rx = c.x - p.x, rz = c.z - p.z, ahead = rx * fx + rz * fz; if (ahead > 1 && ahead < bd && Math.abs(rx * fz - rz * fx) < 1.3 && clearLine(p, c)) { bd = ahead; shotCar = c; } } }
+    const tx = best ? best.x : shotCar ? shotCar.x : p.x + Math.sin(p.ry) * 22, tz = best ? best.z : shotCar ? shotCar.z : p.z + Math.cos(p.ry) * 22;
     s.fx.push({ type: 'shot', x: p.x, z: p.z, tx, tz, by: p.id, gun, ry: p.ry });
+    if (shotCar) { shotCar.byP = true; s.fx.push({ type: 'scrape', x: shotCar.x, z: shotCar.z, by: 0, n: 6 }); carHurt(s, shotCar, gun === 'shotgun' ? 34 : 14); }
     addHeat(s, p, gun === 'shotgun' ? 10 : 8); panic(s, p.x, p.z, 30, true, true);
     if (gun === 'pistol') { if (best) damage(s, best, w.dmg, p, true, w.kb); }
     else for (const [, e, d] of hits.slice(0, 3)) damage(s, e, Math.round(w.dmg * (1.6 - d / w.range)), p, true, w.kb * (1.3 - d / w.range));
@@ -666,6 +670,7 @@ function respawnPlayer(s, p) {
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   if (c.wrecked) { c.v *= 1 - 3 * dt; return; }
+  if (c.y > 0) { airStep(s, c, steerIn, dt, driverEnt); return; }
   const T = statsOf(c);
   if (c.mh == null || Math.abs(c.v) < 1) c.mh = c.ry;
   const sp = Math.abs(c.v) / T.max;
@@ -689,8 +694,13 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
     if (c.scrapeT <= 0 && n > 3) { c.scrapeT = 0.15; s.fx.push({ type: n > 10 ? 'crash' : 'scrape', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0, n }); }
     carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 0.85; c.mh = c.ry;
   });
-  for (const o of s.cars) if (o !== c && dist2(o, c) < 9) {
-    const d = Math.sqrt(dist2(o, c)) || 1, push = (3 - d) / 2;
+  if (rampStep(s, c, driverEnt)) return;
+  const byPlayer = driverEnt && driverEnt.kind === 'player';
+  for (const o of s.cars) if (o !== c) {
+    const d2o = dist2(o, c);
+    if (d2o >= 9) { if (byPlayer && (o.nm || d2o < 22)) nearMiss(s, c, o, d2o, driverEnt); continue; }
+    o.nm = 0; c.crashT = s.t; if (byPlayer) o.byP = true;
+    const d = Math.sqrt(d2o) || 1, push = (3 - d) / 2;
     c.x -= (o.x - c.x) / d * push; c.z -= (o.z - c.z) / d * push; o.x += (o.x - c.x) / d * push; o.z += (o.z - c.z) / d * push;
     if (Math.abs(c.v) > 4) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') { addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); if (Math.abs(c.v) > 6) rammed(s, o, c); } }
     c.v *= 0.5;
@@ -702,10 +712,86 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
     c.v *= 0.6;
   }
 }
+// ---------- fire, explosions, stunt jumps, near misses ----------
+export const BURN_TIME = 4.5, BLAST_R = 8;
+// A car beaten down to a sixth of its health catches fire. A burning car explodes a few seconds later, and the
+// blast hurts everything near it, other cars included, so one can set off the next.
+function ignite(s, c, sec = BURN_TIME) { if (c.burn > 0 || c.exploded) return; c.burn = sec; s.fx.push({ type: 'fire', car: c.id, x: c.x, z: c.z }); const d = s.ents.find((e) => e.car === c.id && e.kind === 'player'); if (d) log(s, 'The engine is on fire. Get out!'); }
+function explode(s, c) {
+  c.burn = 0; c.exploded = true; c.hp = 0;
+  const p = player(s), inside = s.ents.filter((e) => e.car === c.id);
+  if (!c.wrecked) { c.wrecked = true; c.v = 0; c.ai = false; c.siren = false; }
+  for (const e of inside) { if (e.kind === 'player') exitCar(s, e); else { e.car = null; e.x = c.x + 2; e.z = c.z; } }
+  s.fx.push({ type: 'boom', x: c.x, z: c.z, car: c.id });
+  const at = { x: c.x, z: c.z };
+  for (const e of s.ents) if (e.hp > 0 && e.kind !== 'giver') {
+    const d = Math.sqrt(dist2(e, c)); if (d > BLAST_R) continue;
+    const k = 1 - d / BLAST_R; damage(s, e, Math.round((inside.includes(e) ? 70 : 20 + 60 * k) * (e.car ? 0.4 : 1)), at, true, 8 + 10 * k, 1);
+  }
+  for (const o of s.cars) if (o !== c && !o.exploded) { const d = Math.sqrt(dist2(o, c)); if (d < BLAST_R) { if (c.byP) o.byP = true; carHurt(s, o, 25 + 70 * (1 - d / BLAST_R)); } }
+  panic(s, c.x, c.z, 40, !!c.byP, true);
+  if (c.byP && p) addHeat(s, p, 14);
+}
+function fireStep(s, c, dt) { if (c.burn > 0) { c.burn -= dt; if (c.burn <= 0) explode(s, c); } if (c.y > 0 && !c.driver) { c.y = 0; c.vy = 0; } }
+
+// Stunt ramps: a wedge in the middle of the street, between the two traffic lanes. Hit one fast and straight and the
+// car flies. Each ramp pays once for a clean first jump and a little every time after, by distance.
+export const RAMPS = (() => {
+  const mid = (g) => (g - (GRID - 1) / 2) * PITCH, out = [];
+  // [street line, block, runs along z, direction]
+  for (const [i, g, alongZ, dir] of [[1, 4, true, 1], [GRID - 1, 4, true, -1], [4, 0, false, -1], [4, GRID - 1, false, 1], [3, 2, true, 1], [6, 6, true, -1], [2, 6, false, 1], [7, 2, false, -1]]) {
+    const line = lineCoord(i), m = mid(g);
+    out.push(alongZ ? { x: line, z: m, ry: dir > 0 ? 0 : Math.PI } : { x: m, z: line, ry: dir > 0 ? Math.PI / 2 : -Math.PI / 2 });
+  }
+  return out;
+})();
+function rampStep(s, c, driverEnt) {
+  if (!driverEnt || driverEnt.kind !== 'player' || Math.abs(c.v) < 12 || c.v < 0) return false;
+  for (let i = 0; i < RAMPS.length; i++) {
+    const r = RAMPS[i], fx = Math.sin(r.ry), fz = Math.cos(r.ry), rx = c.x - r.x, rz = c.z - r.z;
+    if (Math.abs(rx) > 5 || Math.abs(rz) > 5) continue;
+    const along = rx * fx + rz * fz, side = Math.abs(rx * fz - rz * fx);
+    if (along > -2.4 && along < 1.2 && side < 1.7 && Math.abs(angDiff(c.mh, r.ry)) < 0.45) {
+      c.vy = Math.min(11, c.v * 0.34); c.y = 0.05; c.jump = { i, x: c.x, z: c.z, t: 0 };
+      s.fx.push({ type: 'launch', x: c.x, z: c.z, car: c.id, i }); return true;
+    }
+  }
+  return false;
+}
+function airStep(s, c, steerIn, dt, driverEnt) {
+  c.vy -= 20 * dt; c.y += c.vy * dt; c.skid = 0; c.slip = 0; if (c.jump) c.jump.t += dt;
+  c.ry -= steerIn * 0.5 * dt; // a little spin in the air, no grip
+  c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt; clampWorld(c);
+  collideBuildings(c, 1.6, () => { c.v *= 0.3; });
+  if (c.y > 0) return;
+  c.y = 0; const hard = Math.abs(c.vy); c.vy = 0; c.mh = c.ry;
+  const j = c.jump; c.jump = null;
+  const dist = j ? Math.hypot(c.x - j.x, c.z - j.z) : 0;
+  s.fx.push({ type: 'land', x: c.x, z: c.z, car: c.id, n: hard, dist, by: driverEnt ? driverEnt.id : 0 });
+  carHurt(s, c, hard * 0.8);
+  if (j && dist > 12 && !c.wrecked && driverEnt && driverEnt.kind === 'player') {
+    s.jumps = s.jumps || []; const first = !s.jumps.includes(j.i); if (first) s.jumps.push(j.i);
+    const pay = Math.round(dist) * 2 + (first ? 150 : 0); s.crews.player.cash += pay;
+    s.fx.push({ type: 'stunt', dist, t: j.t, pay, first, done: s.jumps.length, of: RAMPS.length });
+    log(s, `Stunt jump: ${Math.round(dist)} m. +$${pay}${first ? ` (${s.jumps.length} of ${RAMPS.length} found)` : ''}`);
+  }
+}
+// Passing moving traffic close and fast without touching it. A streak pays a little more each time.
+function nearMiss(s, c, o, d2, p) {
+  if (d2 < 22 && o.ai && !o.wrecked && Math.abs(c.v) > 14 && Math.abs(o.v) > 2) { if (!o.nm) o.nm = s.t; return; }
+  if (!o.nm || d2 < 40) return;
+  const clean = s.t - (c.crashT ?? -9) > 1.2 && s.t - o.nm < 2 && Math.abs(c.v) > 12; o.nm = 0;
+  if (!clean) return;
+  p.nmN = s.t - (p.nmT ?? -9) < 6 ? (p.nmN || 0) + 1 : 1; p.nmT = s.t;
+  const pay = Math.min(40, 5 * p.nmN); s.crews.player.cash += pay;
+  s.fx.push({ type: 'nearmiss', n: p.nmN, pay, x: c.x, z: c.z });
+}
+
 function carHurt(s, c, n) {
-  if (c.wrecked || n < 3) return;
+  if (c.wrecked || n < 3) { if (c.wrecked && n >= 12 && !c.exploded) ignite(s, c, 2.5); return; }
   c.hp -= n;
-  if (c.hp <= 0) {
+  if (c.hp > 0 && c.hp <= c.max * 0.16) ignite(s, c);
+  if (c.hp <= 0) { ignite(s, c, 3);
     c.hp = 0; c.wrecked = true; c.v = 0; c.ai = false; c.siren = false; s.fx.push({ type: 'wreck', x: c.x, z: c.z });
     const d = s.ents.find((e) => e.car === c.id);
     if (d && d.kind === 'player') { exitCar(s, d); log(s, 'That ride is done. Get out and find another.'); }
@@ -1554,6 +1640,7 @@ export function step(s, dt) {
   for (const c of s.cars) {
     if (c.ai && !c.driver && !c.wrecked) trafficStep(s, c, dt);
     else if (!c.driver && !c.cops && c.v) { c.v *= 1 - 3 * dt; if (Math.abs(c.v) < 0.2) c.v = 0; c.x += Math.sin(c.ry) * c.v * dt; c.z += Math.cos(c.ry) * c.v * dt; }
+    fireStep(s, c, dt);
     if (c.wrecked) { c.wreckT = (c.wreckT || 0) + dt; if (c.wreckT > 60 && dist2(c, p) > 100 * 100) c.remove = true; }
   }
   policeStep(s, dt);

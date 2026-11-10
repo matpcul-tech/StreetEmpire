@@ -38,7 +38,9 @@ export function initAudio() {
 
 export function setEngine(on, speed) {
   if (!ctx) return;
-  const t = ctx.currentTime, f = 38 + Math.abs(speed) * 4.2;
+  // four gears: the note climbs through each one and drops back at the shift
+  const v = Math.abs(speed), gear = Math.min(3, Math.floor(v / 9)), rev = (v - gear * 9) / (gear === 3 ? 18 : 9);
+  const t = ctx.currentTime, f = 40 + gear * 12 + Math.min(1.2, rev) * 52;
   engineGain.gain.setTargetAtTime(on ? 0.09 : 0, t, 0.15);
   engineOsc.frequency.setTargetAtTime(f, t, 0.1); engineOsc2.frequency.setTargetAtTime(f * 0.5, t, 0.1);
   engineFilter.frequency.setTargetAtTime(300 + Math.abs(speed) * 40, t, 0.1);
@@ -151,3 +153,5 @@ export function setSkid(v) {
   if (!skidGain) { const n = noiseSrc(true), f = ctx.createBiquadFilter(); skidGain = ctx.createGain(); f.type = 'bandpass'; f.frequency.value = 1100; f.Q.value = 4; skidGain.gain.value = 0; n.connect(f).connect(skidGain).connect(master); n.start(); }
   skidGain.gain.setTargetAtTime(0.16 * v, ctx.currentTime, 0.05);
 }
+
+export function boom(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thump(t, 75, 22, 1.1 * vol, 0.9); burst(t, { freq: 420, q: 0.5, type: 'lowpass', vol: 1 * vol, len: 0.9 }); burst(t, { freq: 2600, q: 0.8, vol: 0.4 * vol, len: 0.14 }); burst(t + 0.25, { freq: 180, q: 0.6, type: 'lowpass', vol: 0.5 * vol, len: 1.2 }); }
