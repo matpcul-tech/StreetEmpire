@@ -260,7 +260,7 @@ function addBikeLights(g) {
 // A motorcycle: the rigged kit model (wheels on their axles, fork and bars on the steering head).
 // With no kit bike installed it falls back to a plain block bike, so a missing file never breaks the game.
 function makeBike(c) {
-  const g = new THREE.Group(), KT = kitBike();
+  const g = new THREE.Group(), KT = kitBike(c.model || 'sportbike') || kitBike();
   const paintHex = BIKE_PAINT[c.paint % BIKE_PAINT.length];
   let model, wheels = [], steer = null, wheelR = 0.31, seat = 0.8;
   if (KT) { ({ model, wheels, steer } = cloneKitBike(KT, paintHex)); wheelR = KT.wheelR; }
@@ -273,10 +273,11 @@ function makeBike(c) {
     const s = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.6), dark); s.position.set(0, 0.86, -0.45); model.add(s);
     const bars = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.05, 0.05), dark); bars.position.set(0, 1.0, 0.45); model.add(bars);
   }
+  const axle = (KT && KT.spec.axle) || 'x', seatAt = (KT && KT.spec.seat) || null; // per model, from kit.json
   model.rotation.order = 'YXZ';
   g.add(model);
   const L = addBikeLights(g);
-  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex };
+  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, seatAt, axle, paintHex };
   return g;
 }
 
@@ -362,7 +363,7 @@ export function updateCar(g, c, dt, night, now) {
   u.spinA += (c.v * dt) / (u.bike ? u.wheelR : 0.37);
   for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
   if (u.bike) {
-    for (const w of u.bikeWheels) w.rotation.x = u.spinA;
+    for (const w of u.bikeWheels) w.rotation[u.axle] = u.spinA; // a model built sideways in its file spins its wheels on its own axle axis
     // the bars turn less the faster it goes; at speed a bike turns by leaning
     if (u.steer) u.steer.node.quaternion.setFromAxisAngle(u.steer.axis, -c.steer * (0.75 - 0.45 * Math.min(1, Math.abs(c.v) / 16)));
   }

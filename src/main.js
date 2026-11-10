@@ -928,7 +928,7 @@ function frame(now) {
       const look = riding ? lookFor(p, CREWS) : c.cops ? lookFor({ kind: 'cop', look: 1 }, CREWS) : lookFor({ kind: 'ped', look: c.paint * 13 + c.id.length }, CREWS);
       if (modelReady(look.model)) {
         u.driver = makeCharacter(look, false);
-        if (u.bike) { u.driver.position.set(0, BIKE_SEAT.y, BIKE_SEAT.z); u.driver.rotation.set(BIKE_SEAT.lean, 0, 0); u.model.add(u.driver); } // on the model, so he leans with the bike
+        if (u.bike) { const sa = u.seatAt || {}; u.driver.position.set(0, sa.y != null ? sa.y - DRIVER_DROP : BIKE_SEAT.y, sa.z ?? BIKE_SEAT.z); u.driver.rotation.set(sa.lean ?? BIKE_SEAT.lean, 0, 0); u.model.add(u.driver); } // each model can set its own seat (kit.json "seat") // on the model, so he leans with the bike
         else { u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
       }
     } else if (!wantDriver && u.driver) { u.driver.removeFromParent(); u.driver = null; }
