@@ -14,6 +14,7 @@ import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charN
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
+import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
@@ -254,13 +255,16 @@ function context() {
   const s = S(), p = player(s);
   if (p.car) return 'EXIT';
   if (!s.mission) for (const g of s.ents) if (g.kind === 'giver' && (g.x - p.x) ** 2 + (g.z - p.z) ** 2 < 16) return 'TALK';
+  if (shopAt(p) >= 0) return 'SHOP';
+  { const h = houseAt(p); if (h >= 0 && !ownsHouse(s, h)) return 'BUY'; }
   if (nearestCar(s, p, 5)) return 'CAR';
   const b = blockAt(s, p.x, p.z);
   if (b && b.owner === p.crew && !b.upgraded) return 'UPGRADE';
   return null;
 }
 function doContext() {
-  const c = context(); if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c === 'UPGRADE') { session.send({ type: 'upgrade' }); return; } if (c) { session.send({ type: 'car' }); return; }
+  const c = context(); if (c === 'SHOP') { openShop(); return; } if (c === 'BUY') { session.send({ type: 'house' }); return; }
+  if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c === 'UPGRADE') { session.send({ type: 'upgrade' }); return; } if (c) { session.send({ type: 'car' }); return; }
   // nothing in reach: say why and where to go instead of silently ignoring the key
   const s = S(), p = player(s), g = contactFor(s);
   if (g && s.mission) { const d = Math.hypot(g.x - p.x, g.z - p.z); showMsg(d < 4 ? `Finish ${s.mission.title} first.` : 'Nothing here. Follow the marker.'); }
@@ -370,6 +374,54 @@ const $ = (id) => document.getElementById(id);
 const radar = $('radar').getContext('2d');
 let msgT = 0, bigT = 0, dtagT = 0, lastHere = null;
 let incT = 0, starWant = 0, starShown = 0, starHold = 0;
+// ---------- shops and safehouses ----------
+// The shop is a small panel over the game: the street keeps running behind it, and it closes if you step away.
+let shopOpen = -1;
+function renderShop() {
+  const s = S(), p = player(s), cash = Math.floor(s.crews.player.cash);
+  $('shopName').textContent = SHOPS[shopOpen].name.toUpperCase(); $('shopCash').textContent = `Cash $${cash.toLocaleString('en-US')}`;
+  const box = $('shopItems'); box.textContent = '';
+  for (const [key, it] of Object.entries(SHOP_ITEMS)) {
+    const have = (key === 'bat' && p.hasBat) || (key === 'knuckles' && p.hasKnux), full = key === 'patch' && p.hp >= p.max;
+    const b = document.createElement('button'); b.type = 'button';
+    const name = document.createElement('span'); name.textContent = it.name + (key === 'pistol' && p.ammo > 0 ? ` (have ${p.ammo})` : key === 'shotgun' && p.shells > 0 ? ` (have ${p.shells})` : '');
+    const cost = document.createElement('b'); cost.textContent = have ? 'OWNED' : full ? 'NOT HURT' : '$' + it.cost;
+    b.append(name, cost); b.classList.toggle('no', have || full || cash < it.cost);
+    b.onclick = () => { session.send({ type: 'buy', item: key }); handleFx(session.drainFx()); renderShop(); };
+    box.appendChild(b);
+  }
+}
+function openShop() { const i = shopAt(player(S())); if (i < 0) return; shopOpen = i; renderShop(); $('shop').classList.remove('hidden'); if (document.pointerLockElement) document.exitPointerLock(); }
+function closeShop() { shopOpen = -1; $('shop').classList.add('hidden'); }
+$('shopClose').onclick = closeShop;
+// markers: a ring on the pavement and a slow turning block over it. Green is a shop, blue a safehouse for sale, orange one you own.
+const spotMarks = [];
+{ const ringG = new THREE.RingGeometry(1.5, 1.9, 28), boxG = new THREE.BoxGeometry(0.55, 0.55, 0.55);
+  const add = (kind, i, q) => {
+    const mat = new THREE.MeshBasicMaterial({ color: kind === 'shop' ? 0x39d98a : 0x4aa3ff, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false });
+    const ring = new THREE.Mesh(ringG, mat); ring.rotation.x = -Math.PI / 2; ring.position.set(q.x, 0.27, q.z);
+    const box = new THREE.Mesh(boxG, mat); box.position.set(q.x, 2.9, q.z); box.rotation.set(0.6, 0, 0.6);
+    ring.visible = box.visible = false; scene.add(ring, box); spotMarks.push({ kind, i, q, ring, box, mat });
+  };
+  SHOPS.forEach((_, i) => add('shop', i, shopSpot(i))); HOUSES.forEach((_, i) => add('house', i, houseSpot(i))); }
+let lastSpot = '';
+function updateSpots(s, p, now) {
+  for (const m of spotMarks) {
+    const near = (m.q.x - p.x) ** 2 + (m.q.z - p.z) ** 2 < 110 * 110;
+    m.ring.visible = m.box.visible = near; if (!near) continue;
+    if (m.kind === 'house') m.mat.color.setHex(ownsHouse(s, m.i) ? 0xff8a1a : 0x4aa3ff);
+    m.box.rotation.y = now / 700; m.box.position.y = 2.9 + Math.sin(now / 400 + m.i) * 0.15;
+  }
+  // say what the place is once, as you step up to it
+  const si = p.car ? -1 : shopAt(p), hi = p.car ? -1 : houseAt(p), key = si >= 0 ? 's' + si : hi >= 0 ? 'h' + hi + ownsHouse(s, hi) : '';
+  if (key !== lastSpot) {
+    lastSpot = key;
+    if (si >= 0) showMsg(`${SHOPS[si].name}. ${isTouch ? 'Tap SHOP' : 'Press E'} to buy.`);
+    else if (hi >= 0) showMsg(ownsHouse(s, hi) ? `Home: ${HOUSES[hi].name}. You heal here and the heat cools off.` : `${HOUSES[hi].name}: $${HOUSES[hi].price.toLocaleString('en-US')}. ${isTouch ? 'Tap BUY' : 'Press E'} to make it yours.`);
+  }
+  if (shopOpen >= 0 && si !== shopOpen) closeShop();
+}
+
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
 function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = isTouch ? 1.6 : 2.2; }
@@ -414,6 +466,9 @@ function drawRadar(now) {
   }
   ctx.globalAlpha = 1;
   const dot = (x, z, col, r = 3.5) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, z, r / sc, 0, 7); ctx.fill(); };
+  // shops ($) and safehouses (H) on the radar, upright whatever way the map is turned
+  const tag = (q, ch, col) => { if (Math.abs(q.x - p.x) > 130 || Math.abs(q.z - p.z) > 130) return; dot(q.x, q.z, '#000', 8); dot(q.x, q.z, col, 6.5); ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(ch, 0, 0.5); ctx.restore(); };
+  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff'));
   for (const e of s.ents) {
     if (e.hp <= 0 || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
     if (e.kind === 'npc') dot(e.x, e.z, CREWS[e.crew].css, 3);
@@ -548,6 +603,9 @@ function handleFx(list) {
     else if (f.type === 'lost') { showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'pickup') sfx.chime(true);
+    else if (f.type === 'bought') { pop(`-$${f.cost} ${SHOP_ITEMS[f.item].name}`); sfx.chime(true); }
+    else if (f.type === 'house') { showBig('SAFEHOUSE BOUGHT'); pop(f.name); sfx.chime(true); }
+    else if (f.type === 'broke') sfx.chime(false);
     else if (f.type === 'checkpoint') { pop(`Marker ${f.n} of ${f.of}`); sfx.chime(true); }
     else if (f.type === 'gift') pop('A recruit is with you.');
     else if (f.type === 'wasted') { showBig('KNOCKED OUT', true); cine.down(false); }
@@ -846,6 +904,7 @@ function frame(now) {
     else if ((pendingBrief.wait -= rdt) <= 0) { showBig(pendingBrief.title.toUpperCase()); pendingBrief = null; }
   }
   if (wasDown && !(p.downT > 0)) cine.up();
+  if (started) updateSpots(s, p, now);
   wasDown = p.downT > 0;
   smoke.update(rdt);
   sfx.setEngine(!!pcar, pcar ? pcar.v : 0);
