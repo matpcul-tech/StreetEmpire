@@ -16,7 +16,7 @@ import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
-import { routeTo, RAMPS, RACES, GARAGES, STASHES, sideText } from './state.js';
+import { routeTo, RAMPS, RACES, GARAGES, STASHES, sideText, progress } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -354,7 +354,7 @@ const endTouch = (e) => { for (const t of e.changedTouches) { if (t.identifier =
 addEventListener('touchend', endTouch); addEventListener('touchcancel', endTouch);
 const btn = (id, fn) => document.getElementById(id).addEventListener('pointerdown', (e) => { e.preventDefault(); fn(); });
 const hold = (id, key) => { const el = document.getElementById(id); el.addEventListener('pointerdown', (e) => { e.preventDefault(); drive[key] = true; el.classList.add('on'); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => { drive[key] = false; el.classList.remove('on'); }); };
-btn('bAttack', () => queueAttack());
+btn('bAttack', () => queueAttack()); btn('bFire', () => queueAttack());
 btn('streetIn', () => session.send({ type: 'street', choice: 'in' }));
 btn('streetOff', () => session.send({ type: 'street', choice: 'off' }));
 btn('bJump', () => session.send({ type: 'jump' }));
@@ -430,11 +430,36 @@ const spotMarks = [];
   };
   SHOPS.forEach((_, i) => add('shop', i, shopSpot(i))); HOUSES.forEach((_, i) => add('house', i, houseSpot(i)));
   RACES.forEach((r, i) => add('race', i, r.start)); GARAGES.forEach((g, i) => add('garage', i, g)); }
+// Police helicopter: a dark body, a rotor disc, a light cone down to the player and a pool of light on the ground
+const heliViz = (() => {
+  const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: 0x1b2330, roughness: 0.6, metalness: 0.3 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, 2.4, 4, 8), dark); body.rotation.x = Math.PI / 2;
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 3.4), dark); tail.position.set(0, 0.2, -3.2);
+  const rotor = new THREE.Mesh(new THREE.CircleGeometry(4.4, 18), new THREE.MeshBasicMaterial({ color: 0x15181c, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false })); rotor.rotation.x = -Math.PI / 2; rotor.position.y = 1.25;
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff6d8, toneMapped: false })); lamp.position.set(0, -0.8, 1);
+  g.add(body, tail, rotor, lamp); g.visible = false; scene.add(g);
+  const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false, toneMapped: false };
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(4.5, 1, 18, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff0c0, opacity: 0.05, ...add })); beam.visible = false; scene.add(beam);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(4.5, 24), new THREE.MeshBasicMaterial({ color: 0xfff0c0, opacity: 0.16, ...add })); pool.rotation.x = -Math.PI / 2; pool.visible = false; scene.add(pool);
+  const up = new THREE.Vector3(0, 1, 0), dir = new THREE.Vector3();
+  return (s, p, dt) => {
+    const h = s.heli; g.visible = !!h; beam.visible = pool.visible = !!h && !!h.on;
+    if (!h) { sfx.setHeli(0); return; }
+    const Y = 30, px = g.position.x, pz = g.position.z; g.position.set(h.x, Y, h.z); rotor.rotation.z += dt * 30;
+    if (Math.hypot(h.x - px, h.z - pz) > 0.01) g.rotation.y = Math.atan2(h.x - px, h.z - pz);
+    sfx.setHeli(Math.max(0, 1 - Math.hypot(h.x - p.x, h.z - p.z) / 150));
+    if (!h.on) return;
+    dir.set(h.x - p.x, Y - 1, h.z - p.z); const len = dir.length(); dir.normalize();
+    beam.position.set((h.x + p.x) / 2, (Y + 1) / 2, (h.z + p.z) / 2); beam.quaternion.setFromUnitVectors(up, dir); beam.scale.set(1, len, 1);
+    pool.position.set(p.x, 0.32, p.z);
+  };
+})();
 // Hidden stashes: a small orange bag in an alley, seen only from close by
 const stashMarks = (() => { const g = new THREE.BoxGeometry(0.7, 0.45, 0.4), m = new THREE.MeshStandardMaterial({ color: 0xff8a1a, emissive: 0xff6a00, emissiveIntensity: 0.9, roughness: 0.6 }); return STASHES.map((q) => { const b = new THREE.Mesh(g, m); b.position.set(q.x, 0.6, q.z); b.visible = false; scene.add(b); return b; }); })();
 let lastSpot = '';
 const route = { pts: null, at: 0, tx: 0, tz: 0 };
 function updateSpots(s, p, now) {
+  heliViz(s, p, 1 / 60);
   { const found = s.stashes || []; stashMarks.forEach((b, k) => { b.visible = !found.includes(k) && (b.position.x - p.x) ** 2 + (b.position.z - p.z) ** 2 < 70 * 70; if (b.visible) { b.rotation.y = now / 500; b.position.y = 0.6 + Math.sin(now / 350 + k) * 0.12; } }); }
   for (const m of spotMarks) {
     const near = (m.q.x - p.x) ** 2 + (m.q.z - p.z) ** 2 < 110 * 110;
@@ -507,7 +532,7 @@ function drawRadar(now) {
     } }
   // shops ($) and safehouses (H) on the radar, upright whatever way the map is turned
   const tag = (q, ch, col) => { if (Math.abs(q.x - p.x) > 130 || Math.abs(q.z - p.z) > 130) return; dot(q.x, q.z, '#000', 8); dot(q.x, q.z, col, 6.5); ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(ch, 0, 0.5); ctx.restore(); };
-  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); RACES.forEach((r) => tag(r.start, 'R', '#ffcc33')); GARAGES.forEach((g) => tag(g, 'G', '#ff5fa2')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
+  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); if (s.heli) tag(s.heli, '+', '#7ad7ff'); RACES.forEach((r) => tag(r.start, 'R', '#ffcc33')); GARAGES.forEach((g) => tag(g, 'G', '#ff5fa2')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
   for (const e of s.ents) {
     if (e.hp <= 0 || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
     if (e.kind === 'npc') dot(e.x, e.z, CREWS[e.crew].css, 3);
@@ -573,6 +598,7 @@ let hitStop = 0, shake = 0;
 let paused = false;
 function setPaused(on) {
   if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
+  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); }
   if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
 }
@@ -641,6 +667,7 @@ function handleFx(list) {
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
+    else if (f.type === 'heli') { if (f.state === 'in') { showBig('HELICOPTER INBOUND', true); radio.news('Police have a helicopter up tonight. Wave if you see it.'); } else if (f.fuel) pop('The helicopter is refueling: 30 s'); }
     else if (f.type === 'found') { pop(`+$${f.pay} stash ${f.n} of ${f.of}`); sfx.chime(true); if (f.all) showBig('EVERY STASH FOUND'); parts.burst(f.x, 0.8, f.z, 14, 3, { color: 0xffb040, life: 0.6, g: 3, s: 0.08, up: 1.2 }); }
     else if (f.type === 'garage') { if (f.ok) { pop(`-$150 ${GARAGES[f.k].name}`); showBig(f.seen ? 'RESPRAYED' : 'RESPRAYED: HEAT GONE'); sfx.chime(true); const g = carViz.get(f.car); if (g) { scene.remove(g); carViz.delete(f.car); } } else { pop(`${GARAGES[f.k].name}: $150`, 'bad'); sfx.chime(false); } }
     else if (f.type === 'race') { if (f.state === 'go') { showBig(f.name.toUpperCase() + ': GO'); sfx.sting(); } else if (f.state === 'win') { showBig(`${f.medal === 'none' ? 'FINISHED' : f.medal.toUpperCase()} ${f.time.toFixed(1)} S`); pop(`+$${f.pay}${f.record ? ' new best' : ''}`); sfx.chime(true); } else { showBig('RACE OVER', true); sfx.chime(false); } }
@@ -1140,6 +1167,7 @@ function frame(now) {
   const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : '';
   if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
+  $('bFire').textContent = p.ammo > 0 ? 'FIRE ' + p.ammo : 'NO AMMO';
   const here = blockAt(s, p.x, p.z);
   let raidB = null;
   for (const b of s.blocks) if (b.owner === 'player' && b.raid && b.raid.eta > 0 && (!raidB || b.raid.eta < raidB.raid.eta)) raidB = b;

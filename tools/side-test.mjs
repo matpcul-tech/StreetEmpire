@@ -58,6 +58,24 @@ const put = (c, q) => { c.x = q.x; c.z = q.z; c.v = 0; };
   const w = world(), c3 = mount(w.s, w.p); c3.x = R.start.x; c3.z = R.start.z - 25; c3.ry = c3.mh = 0; for (let i = 0; i < 60; i++) { c3.v = 20; G.movePlayer(w.s, w.p, 0, 1, false, DT); G.step(w.s, DT); }
   check('driving through the ring at speed does not start one', !w.s.side);
 }
+{ // shooting from the car
+  seen.length = 0; const { s, p } = world(), c = mount(s, p); put(c, { x: G.lineCoord(5), z: G.lineCoord(5) + 20 }); c.ry = 0; tick(s, p, 2);
+  const foe = G.spawnUnit(s, 'reds', 'defender', s.blocks[0].id, c.x - 9, c.z - 4); foe.stun = 99; const hp0 = foe.hp;
+  p.ammo = 0; p.cd = 0; G.applyAction(s, p.id, { type: 'attack' }); drain(s);
+  check('no rounds, no shot', got('shot').length === 0 && foe.hp === hp0);
+  p.ammo = 6; p.cd = 0; G.applyAction(s, p.id, { type: 'attack' }); drain(s);
+  check(`a drive-by hits a rival beside and behind the car (${hp0} to ${foe.hp}), spends a round and brings heat`, foe.hp < hp0 && p.ammo === 5 && p.heat > 0 && got('shot').length === 1 && p.car === c.id);
+  G.applyAction(s, p.id, { type: 'attack' }); check('it has a fire rate', p.ammo === 5);
+  foe.x += 300; const o = s.cars.find((q) => q !== c && !q.driver && q.type !== 'bike'); o.x = c.x; o.z = c.z + 10; o.hp = o.max; const oh = o.hp; p.cd = 0; G.applyAction(s, p.id, { type: 'attack' }); drain(s);
+  check('with nobody to shoot, the round goes ahead and hits a car', o.hp < oh);
+  const ped = { n: 0 }; const w = world(), c2 = mount(w.s, w.p); const civ = G.spawnUnit(w.s, 'reds', 'defender', w.s.blocks[0].id, c2.x + 6, c2.z); civ.kind = 'ped'; civ.crew = 'civ'; civ.look = 1; civ.block = 0; civ.pt = 0; const ch = civ.hp; w.p.ammo = 5; w.p.cd = 0; G.applyAction(w.s, w.p.id, { type: 'attack' });
+  check('it does not pick bystanders as targets', civ.hp === ch);
+}
+{ // progress
+  const { s, p } = world(), a = G.progress(s);
+  p.x = G.STASHES[5].x; p.z = G.STASHES[5].z; tick(s, p, 2); s.jumps = [0, 1]; s.best = { 0: 10 }; const b = G.progress(s);
+  check(`progress adds up (${a.pct}% to ${b.pct}%: ${b.parts.map(([n, x, of]) => `${n} ${x}/${of}`).join(', ')})`, b.pct > a.pct && b.pct < 100 && b.parts.length === 6 && b.parts.every(([, x, of]) => x >= 0 && x <= of));
+}
 { // saves
   const { s, p } = world(); p.x = G.STASHES[2].x; p.z = G.STASHES[2].z; tick(s, p, 2);
   const s2 = G.migrate(JSON.parse(JSON.stringify(s))); G.step(s2, DT);
