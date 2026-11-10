@@ -15,6 +15,7 @@ import * as sfx from './audio.js';
 import { createCine } from './cine.js';
 import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { createRadio } from './radio.js';
+import { routeTo } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -411,6 +412,7 @@ const spotMarks = [];
   };
   SHOPS.forEach((_, i) => add('shop', i, shopSpot(i))); HOUSES.forEach((_, i) => add('house', i, houseSpot(i))); }
 let lastSpot = '';
+const route = { pts: null, at: 0, tx: 0, tz: 0 };
 function updateSpots(s, p, now) {
   for (const m of spotMarks) {
     const near = (m.q.x - p.x) ** 2 + (m.q.z - p.z) ** 2 < 110 * 110;
@@ -472,6 +474,15 @@ function drawRadar(now) {
   }
   ctx.globalAlpha = 1;
   const dot = (x, z, col, r = 3.5) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, z, r / sc, 0, 7); ctx.fill(); };
+  // route line: the way along the streets to the job marker, or to the contact with the next job when idle.
+  // Worked out again about once a second, and only drawn when the place is more than a block away.
+  { const to = started ? (missionTarget(s) || (!s.mission && s.missionIdx < MISSIONS.length ? contactFor(s) : null)) : null;
+    if (!to || (to.x - p.x) ** 2 + (to.z - p.z) ** 2 < 70 * 70) route.pts = null;
+    else if (!route.pts || now - route.at > 900 || (to.x - route.tx) ** 2 + (to.z - route.tz) ** 2 > 100) { route.at = now; route.tx = to.x; route.tz = to.z; route.pts = routeTo(p, to); }
+    if (route.pts && route.pts.length > 1) {
+      ctx.beginPath(); ctx.moveTo(p.x, p.z); for (const q of route.pts) ctx.lineTo(q.x, q.z);
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 7 / sc; ctx.stroke(); ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 4 / sc; ctx.stroke();
+    } }
   // shops ($) and safehouses (H) on the radar, upright whatever way the map is turned
   const tag = (q, ch, col) => { if (Math.abs(q.x - p.x) > 130 || Math.abs(q.z - p.z) > 130) return; dot(q.x, q.z, '#000', 8); dot(q.x, q.z, col, 6.5); ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(ch, 0, 0.5); ctx.restore(); };
   SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff'));
@@ -612,6 +623,7 @@ function handleFx(list) {
     else if (f.type === 'bought') { pop(`-$${f.cost} ${SHOP_ITEMS[f.item].name}`); sfx.chime(true); }
     else if (f.type === 'house') { showBig('SAFEHOUSE BOUGHT'); pop(f.name); sfx.chime(true); }
     else if (f.type === 'broke') sfx.chime(false);
+    else if (f.type === 'roadblock') { showBig('ROADBLOCK AHEAD', true); sfx.chime(false); }
     else if (f.type === 'checkpoint') { pop(`Marker ${f.n} of ${f.of}`); sfx.chime(true); }
     else if (f.type === 'gift') pop('A recruit is with you.');
     else if (f.type === 'wasted') { showBig('KNOCKED OUT', true); cine.down(false); }

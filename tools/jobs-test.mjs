@@ -191,5 +191,25 @@ const anyCar = (s, p, type) => s.cars.filter((c) => !c.driver && !c.wrecked && !
   G.migrate(s); check('an old save gets the contacts and restarts after Bag Back', s.ents.filter((e) => e.kind === 'giver').length === 4 && s.missionIdx === 1 && !s.mission && s.jobsV === 2);
   G.migrate(s); check('migrating twice changes nothing', s.ents.filter((e) => e.kind === 'giver').length === 4 && s.missionIdx === 1); }
 
+// ---- police escalation ----
+{ const { s, p } = world(); const cops = () => s.ents.filter((e) => e.kind === 'cop' && e.hp > 0);
+  p.heat = 50; for (let i = 0; i < 30 * 30; i++) { p.heat = 50; tick(s, p); } const at3 = cops().length;
+  check(`three stars: up to 6 officers, two to a cruiser (${at3})`, at3 > 0 && at3 <= 6 && cops().every((e) => e.max === 80));
+  for (let i = 0; i < 30 * 40; i++) { p.heat = 75; tick(s, p); }
+  check(`four stars brings tactical units (${cops().length} officers, some at 120 hp)`, G.stars(p) === 4 && cops().length > at3 && cops().length <= 12 && cops().some((e) => e.max === 120) && said(s, /Tactical units/));
+  check('no roadblock below five stars or on foot', !s.cars.some((c) => c.roadblock)); }
+{ const { s, p } = world(); p.heat = 100; const car = anyCar(s, p); board(s, p, car);
+  // on a long straight street, at speed
+  car.x = 0; car.z = G.lineCoord(4); car.ry = Math.PI / 2; car.x = -200; car.mh = car.ry;
+  for (let i = 0; i < 20 && !s.cars.some((c) => c.roadblock); i++) { p.heat = 100; car.v = 20; G.step(s, DT); p.hp = p.max; }
+  const rb = s.cars.filter((c) => c.roadblock);
+  check('five stars in a moving car puts a roadblock on the street ahead', G.stars(p) === 5 && rb.length === 2 && rb.every((c) => c.x > car.x + 50 && c.x < car.x + 160 && Math.abs(c.z - G.lineCoord(4)) < 4) && said(s, /Roadblocks ahead/));
+  check('the roadblock is not in an intersection and has officers on foot', rb.every((c) => Math.abs(((c.x / G.PITCH + G.GRID / 2) % 1) - 0.5) < 0.05) && s.ents.filter((e) => e.kind === 'cop' && !e.car && Math.hypot(e.x - rb[0].x, e.z - rb[0].z) < 9).length >= 2);
+  p.heat = 0; tick(s, p, 30 * 4); check('roadblocks clear when the stars are gone', !s.cars.some((c) => c.roadblock)); }
+// ---- route line ----
+{ const { s, p } = world(); const g = s.ents.find((e) => e.name === 'Sal'), r = G.routeTo(p, g); let len = 0; for (let i = 1; i < r.length; i++) len += Math.hypot(r[i].x - r[i - 1].x, r[i].z - r[i - 1].z);
+  const crow = Math.hypot(g.x - p.x, g.z - p.z), onStreet = r.slice(0, -1).every((q) => !G.insideBuilding(q.x, q.z, 0.5));
+  check(`the route to Sal follows the streets (${Math.round(len)} m against ${Math.round(crow)} m in a straight line)`, r.length > 6 && onStreet && len > crow && len < crow * 1.6 && Math.hypot(r[r.length - 1].x - g.x, r[r.length - 1].z - g.z) < 1); }
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL JOBS PASSED');
 process.exit(fails ? 1 : 0);
