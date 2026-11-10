@@ -49,6 +49,14 @@
       "paint": true
     }
   },
+  "bikes": {
+    "sportbike": {
+      "file": "bikes/sportbike.glb",
+      "yaw": 0,
+      "length": 2.1,
+      "credit": "Original Street Empire motorcycle made for this project in Meshy. Not a third-party download."
+    }
+  },
   "buildings": {
     "apt": [
       {
