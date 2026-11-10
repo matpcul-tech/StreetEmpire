@@ -67,11 +67,9 @@ export async function loadKit(base, { low = false } = {}) {
   }
   for (const [slot, list] of Object.entries(manifest.buildings || {})) {
     if (!BUILDING_SLOTS.includes(slot)) continue;
-    kit.buildings[slot] = [];
-    for (const spec of [].concat(list)) {
-      if (!spec || !spec.file) continue;
-      jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { kit.buildings[slot].push(prepBuilding(g.scene, spec, low)); }).catch((e) => console.warn('kit building', slot, e)));
-    }
+    const got = [], specs = [].concat(list).filter((x) => x && x.file);
+    specs.forEach((spec, i) => jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { got[i] = prepBuilding(g.scene, spec, low); }).catch((e) => console.warn('kit building', slot, e))));
+    kit.buildings[slot] = got; // variants keep the manifest order; empty entries are dropped below
   }
   for (const [slot, list] of Object.entries(manifest.characters || {})) {
     if (!CHAR_SLOTS.includes(slot)) continue;
@@ -80,6 +78,7 @@ export async function loadKit(base, { low = false } = {}) {
     kit.characters[slot] = got; // variants keep the manifest order; empty entries are dropped below
   }
   await Promise.all(jobs);
+  for (const slot in kit.buildings) kit.buildings[slot] = kit.buildings[slot].filter(Boolean);
   for (const slot in kit.characters) kit.characters[slot] = kit.characters[slot].filter(Boolean);
   done = true;
   return kit;
