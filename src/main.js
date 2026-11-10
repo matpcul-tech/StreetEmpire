@@ -13,7 +13,7 @@ import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
-import { DOWN_TIME, MISSIONS, debugDown, openingScuffle } from './state.js';
+import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
@@ -253,8 +253,7 @@ const drive = { left: false, right: false, gas: false, brake: false, drift: fals
 function context() {
   const s = S(), p = player(s);
   if (p.car) return 'EXIT';
-  const g = s.ents.find((e) => e.kind === 'giver');
-  if (g && (g.x - p.x) ** 2 + (g.z - p.z) ** 2 < 16 && !s.mission) return 'TALK';
+  if (!s.mission) for (const g of s.ents) if (g.kind === 'giver' && (g.x - p.x) ** 2 + (g.z - p.z) ** 2 < 16) return 'TALK';
   if (nearestCar(s, p, 5)) return 'CAR';
   const b = blockAt(s, p.x, p.z);
   if (b && b.owner === p.crew && !b.upgraded) return 'UPGRADE';
@@ -263,9 +262,9 @@ function context() {
 function doContext() {
   const c = context(); if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c === 'UPGRADE') { session.send({ type: 'upgrade' }); return; } if (c) { session.send({ type: 'car' }); return; }
   // nothing in reach: say why and where to go instead of silently ignoring the key
-  const s = S(), p = player(s), g = s.ents.find((e) => e.kind === 'giver');
+  const s = S(), p = player(s), g = contactFor(s);
   if (g && s.mission) { const d = Math.hypot(g.x - p.x, g.z - p.z); showMsg(d < 4 ? `Finish ${s.mission.title} first.` : 'Nothing here. Follow the marker.'); }
-  else if (g) { const d = Math.round(Math.hypot(g.x - p.x, g.z - p.z)); showMsg(`Unc is ${d} m away. Follow the UNC arrow.`); }
+  else if (g) { const d = Math.round(Math.hypot(g.x - p.x, g.z - p.z)); showMsg(`${g.name} is ${d} m away. Follow the ${g.name.toUpperCase()} arrow.`); }
 }
 addEventListener('keydown', (e) => {
   keys[e.code] = true;
@@ -422,7 +421,7 @@ function drawRadar(now) {
   }
   for (const c of s.cars) if (c.cops && Math.abs(c.x - p.x) < 110 && Math.abs(c.z - p.z) < 110) dot(c.x, c.z, Math.floor(now / 200) % 2 ? '#26f' : '#f22', 4.5);
   for (const k of s.pickups) if (k.respawnT <= 0) dot(k.x, k.z, '#6cf', 3);
-  const g = s.ents.find((e) => e.kind === 'giver');
+  const g = contactFor(s);
   if (g && !s.mission) { dot(g.x, g.z, '#000', 9); dot(g.x, g.z, '#fc3', 7.5); }
   const gt = !s.mission && started ? guideTarget(s, p) : null;
   if (gt && gt.label === 'RING') { ctx.beginPath(); ctx.arc(gt.x, gt.z, 9 + Math.sin(now / 200) * 2, 0, 7); ctx.strokeStyle = '#fc3'; ctx.lineWidth = 2.5; ctx.stroke(); }
@@ -443,7 +442,7 @@ function drawRadar(now) {
   }
   if (g && !s.mission && s.missionIdx < MISSIONS.length) {
     const dx = g.x - p.x, dz = g.z - p.z, a = Math.atan2(dz, dx) + (yaw - Math.PI), r = Math.min(Math.hypot(dx, dz) * sc, W / 2 - 14);
-    ctx.fillStyle = '#fc3'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.font = 'bold 22px Impact'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.strokeText('U', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r); ctx.fillText('U', W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r);
+    ctx.fillStyle = '#fc3'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3; ctx.font = 'bold 22px Impact'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.strokeText(g.name[0], W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r); ctx.fillText(g.name[0], W / 2 + Math.cos(a) * r, W / 2 + Math.sin(a) * r);
   }
   // player arrow
   ctx.save(); ctx.translate(W / 2, W / 2); ctx.rotate(-(p.ry - yaw)); ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000';
@@ -549,6 +548,7 @@ function handleFx(list) {
     else if (f.type === 'lost') { showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'pickup') sfx.chime(true);
+    else if (f.type === 'checkpoint') { pop(`Marker ${f.n} of ${f.of}`); sfx.chime(true); }
     else if (f.type === 'gift') pop('A recruit is with you.');
     else if (f.type === 'wasted') { showBig('KNOCKED OUT', true); cine.down(false); }
     else if (f.type === 'busted') { showBig('LOCKED UP', true); cine.down(true); }
@@ -700,8 +700,9 @@ function guideTarget(s, p) {
     for (const e of s.ents) if (e.scuffler && e.hp > 0) { const d = (e.x - p.x) ** 2 + (e.z - p.z) ** 2; if (d < bd) { bd = d; best = e; } }
     if (best) return { x: best.x, z: best.z, label: 'LOCAL' };
   }
-  const g = s.ents.find((e) => e.kind === 'giver');
-  if (onb.step <= 1 && g && s.missionIdx < MISSIONS.length && !s.mission) return { x: g.x, z: g.z, label: 'UNC' };
+  const g = contactFor(s);
+  // the tutorial points at Unc; after it, the arrow points at whoever has the next job
+  if ((onb.step <= 1 || onb.step < 0) && g && s.missionIdx < MISSIONS.length && !s.mission) return { x: g.x, z: g.z, label: g.name.toUpperCase() };
   if (onb.step === 2) {
     let best = null, bd = 1e12;
     for (const b of s.blocks) if (b.owner !== 'player') { const c = blockCenter(b); const d = (c.x - p.x) ** 2 + (c.z - p.z) ** 2; if (d < bd) { bd = d; best = c; } }
@@ -840,8 +841,8 @@ function frame(now) {
   }
   // Unc briefing: starts as soon as both characters are drawn
   if (pendingBrief) {
-    const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id);
-    if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, (MISSIONS[pendingBrief.idx] || {}).intro, pendingBrief.title); pendingBrief = null; }
+    const pg = charViz.get(p.id), gv = contactFor(s), ug = gv && charViz.get(gv.id), M = MISSIONS[pendingBrief.idx] || {};
+    if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, M.intro, pendingBrief.title, M.brief); pendingBrief = null; }
     else if ((pendingBrief.wait -= rdt) <= 0) { showBig(pendingBrief.title.toUpperCase()); pendingBrief = null; }
   }
   if (wasDown && !(p.downT > 0)) cine.up();
@@ -890,7 +891,7 @@ function frame(now) {
   const tgt = missionTarget(s) || (started ? alertTarget(s) : null) || (started ? guideTarget(s, p) : null) || (started ? streetTarget(s) : null);
   if (started && !streetReadySent && (onb.step < 0 || onb.step > 2)) { streetReadySent = true; session.send({ type: 'streetReady' }); }
   beacon.visible = !!tgt && tgt.label !== 'LOCAL'; if (tgt) { beacon.position.set(tgt.x, 60, tgt.z); beacon.material.opacity = 0.28 + Math.sin(now / 250) * 0.1; }
-  const isPkg = s.mission && (s.mission.kind === 'fetch' || s.mission.kind === 'hook') && s.mission.stage === 0;
+  const isPkg = s.mission && (s.mission.kind === 'fetch' || s.mission.kind === 'hook' || s.mission.kind === 'collect') && s.mission.stage === 0 && tgt;
   pkgMesh.visible = !!isPkg; if (isPkg) { pkgMesh.position.set(tgt.x, 0.9 + Math.sin(now / 300) * 0.15, tgt.z); pkgMesh.rotation.y = now / 600; }
   objArrow(tgt, p);
   const lk = started ? pickLock() : null; lockId = lk ? lk.id : null;
@@ -963,7 +964,7 @@ function frame(now) {
   else { capEl.textContent = ''; capEl.classList.remove('raid'); }
   const m = s.mission;
   $('mtitle').textContent = m ? m.title + ':' : '';
-  $('mtext').textContent = !m ? '' : m.kind === 'hook' ? (m.stage ? 'Bring the bag back to Unc.' : 'Grab the bag at the yellow marker.') : m.kind === 'fetch' ? (m.stage ? 'Bring the package to Unc.' : 'Get the package at the yellow marker.') : m.kind === 'beat' ? `Knock out Red Kings (${m.count}/${m.need}).` : m.kind === 'chop' ? (m.stage ? 'Drive it to the chop shop marker.' : 'Steal a muscle car (marked).') : 'Take the marked block.';
+  $('mtext').textContent = missionText(s);
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
   if (started && here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
@@ -1019,6 +1020,6 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
+window.__game = session; window.__dbg = { MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

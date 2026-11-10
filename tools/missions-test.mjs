@@ -43,7 +43,17 @@ function driveTo(goal, r = 5, limit = 120) {
   }
   return false;
 }
-const giver = () => s.ents.find((e) => e.kind === 'giver');
+const giver = () => G.contactFor(s);
+// The chain is 19 jobs across four contacts. This bot plays the on-foot and driving ones it was written for
+// in their own order: jump() sets the chain to a job by title and stands the player and squad beside its contact.
+// Every job type, in chain order, is covered by tools/jobs-test.mjs.
+function jump(title) {
+  s.mission = null; s.missionIdx = G.MISSIONS.findIndex((m) => m.title === title);
+  if (p.car) G.applyAction(s, p.id, { type: 'car' });
+  const g = giver(); p.x = g.x + 2; p.z = g.z + 2;
+  followers().forEach((f, i) => { f.x = p.x + 1.5 + i; f.z = p.z + 1.5; });
+  tick();
+}
 function talk() { walkTo(giver(), 3.2); G.applyAction(s, p.id, { type: 'talk' }); return s.mission; }
 function check(name, ok) { console.log((ok ? 'PASS ' : 'FAIL ') + name + `  (t=${t.toFixed(0)}s)`); if (!ok) fails.push(name); }
 const after = (title) => G.MISSIONS.findIndex((m) => m.title === title) + 1;
@@ -74,7 +84,7 @@ const after = (title) => G.MISSIONS.findIndex((m) => m.title === title) + 1;
     if (Math.hypot(g2.x - p2.x, g2.z - p2.z) < 3.2) { G.applyAction(s2, p2.id, { type: 'talk' }); break; }
     const wp = G.navPoint(p2, g2), dx = wp.x - p2.x, dz = wp.z - p2.z, l = Math.hypot(dx, dz) || 1; step2(dx / l, dz / l);
   }
-  check('Bag Back is the hook before Package Run', s2.mission && s2.mission.kind === 'hook' && s2.mission.title === 'Bag Back' && G.MISSIONS[0].title === 'Bag Back' && G.MISSIONS[1].title === 'Package Run');
+  check('Bag Back is the hook that opens the chain', s2.mission && s2.mission.kind === 'hook' && s2.mission.title === 'Bag Back' && G.MISSIONS[0].title === 'Bag Back' && G.MISSIONS[0].by === 'Unc');
   const drop = s2.mission && { ...s2.mission.target };
   check('bag drop is outside buildings', !!drop && !G.insideBuilding(drop.x, drop.z, 0.6));
   if (drop) {
@@ -103,8 +113,8 @@ for (let i = 0; i < 3; i++) G.applyAction(s, p.id, { type: 'recruit' });
 const guards = (b) => s.ents.filter((e) => e.kind === 'npc' && e.crew === 'player' && e.role === 'defender' && e.target === b.id && e.hp > 0);
 check('recruited 3: squad of 2 follows, extras guard a held block', followers().length === 2 && s.blocks.some((b) => b.owner === 'player' && guards(b).some((e) => e.guard)));
 
-// 2. Package Run
-m = talk(); check('Package Run started', m && m.kind === 'fetch');
+// 2. Package Run (Dee)
+jump('Package Run'); m = talk(); check('Package Run started', m && m.kind === 'fetch');
 const pkg = { ...m.target };
 const reachable = !G.insideBuilding(pkg.x, pkg.z, 0.6);
 check('package spot is outside buildings', reachable);
@@ -117,8 +127,8 @@ console.log('followers', s.ents.filter((e) => e.role === 'follower').map((e) => 
 const near = followers().filter((e) => Math.hypot(e.x - p.x, e.z - p.z) < 14).length;
 check(`squad kept up (${near}/2 within 14 m)`, near >= 2);
 
-// 2. Send a Message: knock out 3 Red Kings
-m = talk(); check('Send a Message started', m && m.kind === 'beat');
+// 2. Send a Message: knock out 3 Red Kings (Rook)
+jump('Send a Message'); m = talk(); check('Send a Message started', m && m.kind === 'beat');
 { const end = t + 240; while (s.mission && t < end) {
   const red = s.ents.filter((e) => e.crew === 'reds' && e.kind === 'npc' && e.hp > 0).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
   if (!red) { tick(); continue; }
@@ -132,7 +142,7 @@ check('Send a Message passed', s.missionIdx === after('Send a Message'));
 // two beside the player, so the checks below still test boarding and leaving the car, not the trek.
 while (followers().length < 2 && s.crews.player.cash >= 0) { s.crews.player.cash += 100; G.applyAction(s, p.id, { type: 'recruit' }); }
 for (const f of followers()) if (Math.hypot(f.x - p.x, f.z - p.z) > 8) { f.x = p.x + 1.5; f.z = p.z + 1.5; }
-m = talk(); check('Chop Job started', m && m.kind === 'chop');
+jump('Chop Job'); m = talk(); check('Chop Job started', m && m.kind === 'chop');
 { let car = s.cars.filter((c) => c.type === 'muscle' && !c.wrecked && !c.driver).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
   for (let k = 0; k < 3; k++) { walkTo(car, 1.8 - k * 0.5, 120); G.applyAction(s, p.id, { type: 'car' }); if (p.car === car.id) break; if (p.car) { G.applyAction(s, p.id, { type: 'car' }); tick(); } }
   let rode = 0; for (let i = 0; i < 60; i++) { tick(0, 0, false); rode = followers().filter((e) => e.car === p.car).length; if (rode === 2) break; }
@@ -148,7 +158,7 @@ for (let i = 0; i < 5; i++) tick();
 { const t0 = t; while (t < t0 + 8) tick(1, 0, true); for (let i = 0; i < 60; i++) tick(); const near = followers().filter((e) => Math.hypot(e.x - p.x, e.z - p.z) < 10).length; check(`squad kept up with a sprint (${near}/${followers().length} alive within 10 m)`, near >= 1 && near === followers().length); }
 
 // 4. Take Over: clear the block and hold the ring
-m = talk(); check('Take Over started', m && m.kind === 'take');
+jump('Take Over'); m = talk(); check('Take Over started', m && m.kind === 'take');
 { const b = s.blocks[m.block], c = G.blockCenter(b); walkTo(c, 4, 120);
   const end = t + 240; while (s.mission && t < end) {
     const foe = s.ents.filter((e) => e.kind === 'npc' && e.crew === b.owner && e.hp > 0 && Math.hypot(e.x - c.x, e.z - c.z) < 30).sort((a, x) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(x.x - p.x, x.z - p.z))[0];
