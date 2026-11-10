@@ -75,7 +75,7 @@ function look(o) { return { model: 'ual', female: false, top: 0, trim: 0xffffff,
 
 // Build kit characters (kit.json "characters"): a rigged model in the entity's slot replaces the
 // painted body. Potato quality keeps the light painted people.
-export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'giver' ? 'unc' : e.kind === 'cop' ? 'cop' : e.kind === 'ped' ? 'ped'
+export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'giver' ? (e.slot || 'unc') : e.kind === 'cop' ? 'cop' : e.kind === 'ped' ? 'ped'
   : e.crew === 'player' ? 'crew' : e.crew === 'neutral' ? 'locals' : e.crew;
 export function lookFor(e, CREWS) {
   const L = paintedLook(e, CREWS);
@@ -88,6 +88,8 @@ function paintedLook(e, CREWS) {
   const v = e.look ?? (e.id * 7);
   const skin = SKINS[v % SKINS.length], hairC = HAIR[(v >> 1) % HAIR.length];
   if (e.kind === 'player') return look({ skin: 0x7a4a30, top: 1, topC: 0xd9741c, trim: 0x8a4410, legs: 0x2a3a5a, hairC: 0x111111, beard: 1, acc: { cap: 0x1a1a1e, back: true, neck: 0xd9741c } });
+  // contacts other than Unc dress like the people of their part of town
+  if (e.kind === 'giver' && e.slot) return look({ skin, female: !!e.female, top: e.female ? 1 : 5, topC: e.slot === 'crew' ? 0xd9741c : 0x5a5a62, trim: 0x2a2a30, legs: 0x2a3040, shoes: 0x111111, hair: e.female ? 1 : 0, hairC, beard: e.female ? 0 : 1, grit: 0.2 });
   if (e.kind === 'giver') return look({ skin: 0x5a3825, top: 4, topC: 0x2a2a30, trim: 0x8a1a1a, pants: 1, legs: 0x2a2a30, shoes: 0x111111, hairC: 0x8a8a8a, hair: 0, beard: 2, grit: 0.08, acc: { hat: 0x1a1a1e } });
   if (e.kind === 'cop') return look({ skin, top: 3, topC: 0x2c4a7a, trim: 0xe0c050, pants: 1, legs: 0x1a2438, shoes: 0x101018, hairC, grit: 0.08, acc: { police: 0xffffff } }); // white so peaked cap vertex colors (navy + gold badge) show
   if (e.kind === 'ped') {

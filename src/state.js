@@ -89,7 +89,7 @@ export function createState(seed = 1, cfg = {}) {
   }
   const c = blockCenter(s.blocks[0]);
   s.ents.push(newEnt(s, { kind: 'player', crew: 'player', x: c.x + BLOCK / 2 + 3, z: c.z, hp: 100, weapon: 'fists', ammo: 0, hasBat: false, hasKnux: false, shells: 0, block: false, dodgeT: 0, dodgeCd: 0, heat: 0, calmT: 0, busted: 0 }));
-  s.ents.push(newEnt(s, { kind: 'giver', crew: 'player', name: 'Unc', x: c.x + 6, z: c.z + 6, ry: Math.PI, hp: 999 }));
+  ensureContacts(s); s.jobsV = 2;
   // parked cars along the curbs, one or two per block
   const types = ['sedan', 'muscle', 'suv', 'lowrider', 'van', 'taxi', 'sedan', 'pickup', 'lowrider'];
   s.blocks.forEach((b, i) => {
@@ -398,8 +398,12 @@ export function applyAction(s, playerId, a) {
       } else log(s, 'No car close enough.');
     }
   } else if (a.type === 'talk') {
-    const g = s.ents.find((e) => e.kind === 'giver');
-    if (g && dist2(g, p) < 16) startMission(s, p);
+    let g = null, bd = 16; for (const e of s.ents) if (e.kind === 'giver') { const d = dist2(e, p); if (d < bd) { bd = d; g = e; } }
+    if (!g) return;
+    if (s.mission) log(s, `${g.name}: "Finish ${s.mission.title} first."`);
+    else if (s.missionIdx >= MISSIONS.length) log(s, `${g.name}: "No more work today. Keep the blocks tight."`);
+    else if (g !== contactFor(s)) log(s, `${g.name}: "Nothing for you right now. ${contactFor(s).name} is looking for you."`);
+    else startMission(s, p);
   }
 }
 export function nearestCar(s, p, r) {
@@ -525,6 +529,7 @@ function onPlayerDown(s, p) {
   const cr = s.crews[p.crew]; const lost = Math.floor(cr.cash * (busted ? 0.4 : 0.25)); cr.cash -= lost;
   log(s, busted ? `Bail: -$${lost}` : `Lost $${lost}. Back at your turf.`);
   if (p.car) exitCar(s, p);
+  if (s.mission && DOWN_FAILS.has(s.mission.kind)) failMission(s, busted ? 'Locked up. Job failed.' : 'You went down. Job failed.');
   s.fx.push({ type: busted ? 'busted' : 'wasted', x: p.x, z: p.z });
   // a short down beat (the client plays it in slow motion) before the respawn
   p.downT = DOWN_TIME; p.downBusted = busted;
@@ -754,7 +759,7 @@ function trafficStep(s, c, dt) {
   const sig = signal(s), axis = dx === 0 ? 'z' : 'x';
   // the Loop: the ring road around the city. Traffic on it runs faster and does not stop for the lights.
   const onLoop = Math.abs(Math.abs(nearestLine(dx !== 0 ? c.z : c.x)) - (GRID * PITCH) / 2) < 1;
-  if (!onLoop && sig !== axis && toStop > 9 && toStop < 15 && nextI >= 0 && nextI <= GRID) blocked = true;
+  if (!onLoop && !c.flee && sig !== axis && toStop > 9 && toStop < 15 && nextI >= 0 && nextI <= GRID) blocked = true;
   if (!blocked) for (const o of s.cars) {
     if (o === c) continue;
     const rx = o.x - c.x, rz = o.z - c.z, ahead = rx * dx + rz * dz, side = Math.abs(rx * dz - rz * dx);
@@ -945,37 +950,185 @@ function closestT(e, c) { let bt = 0, bd = Infinity; for (let t = 0; t < 4; t +=
 // each kind lives in startMission (setup), missionCheck (car events) and
 // missionStep (per tick win and fail checks). s.mission.target is the marker
 // the client shows (beacon, radar icon and edge arrow).
-export const MISSIONS = [
-  { title: 'Bag Back', intro: 'Unc: "He dropped your bag up the street. Grab it and bring it back. Then we talk real work."', kind: 'hook', time: 90, reward: 120, rep: 12, gift: 'follower' },
-  { title: 'Package Run', intro: 'Unc: "Grab my package from the Harbor drop and bring it back. You got 170 seconds."', kind: 'fetch', time: 170, reward: 250, rep: 20 },
-  { title: 'Send a Message', intro: 'Unc: "The Red Kings been testing us. Knock out 3 of them."', kind: 'beat', crew: 'reds', need: 3, reward: 300, rep: 30 },
-  { title: 'Chop Job', intro: 'Unc: "Find a muscle car and drop it at the chop shop on the marker."', kind: 'chop', reward: 400, rep: 30 },
-  { title: 'Take Over', intro: 'Unc: "Time to grow. Take the block on the marker."', kind: 'take', reward: 600, rep: 50 },
+// ---------- jobs ----------
+// Contacts hand out the jobs. Unc stands on the home block; the others wait on a street corner of their
+// block, outside the reach of whoever guards it, so talking to one never starts a fight.
+export const CONTACTS = [
+  { name: 'Unc', gx: 0, gz: 0 },
+  { name: 'Dee', gx: 3, gz: 2, slot: 'crew', female: true, look: 0 },
+  { name: 'Rook', gx: 5, gz: 4, slot: 'locals', look: 1 },
+  { name: 'Sal', gx: 6, gz: 7, slot: 'locals', look: 5 },
 ];
+// One chain, in order. by: who gives it. brief: the lines of the sit-down before the intro line.
+// kind: hook, collect, chop, take, fetch, deliver, tail, race, chase, beat, defend, escape, hit, own.
+export const MISSIONS = [
+  { title: 'Bag Back', by: 'Unc', kind: 'hook', time: 90, reward: 120, rep: 12, gift: 'follower',
+    brief: ['Unc: "You still got your feet under you. Sit down."', 'Unc: "A mugger went for your bag, then his boys, then a Red Kings car."', 'You: "I saw the car."'],
+    intro: 'Unc: "He dropped your bag up the street. Grab it and bring it back. Then we talk real work."' },
+  { title: 'Corner Collection', by: 'Unc', kind: 'collect', need: 3, district: 0, time: 150, reward: 200, rep: 15,
+    brief: ['Unc: "Three corners on the Eastside owe me an envelope."', 'You: "And if they are short?"', 'Unc: "They will not be short. Not today."'],
+    intro: 'Unc: "Three envelopes, three corners. Back here before the clock runs out."' },
+  { title: 'Chop Job', by: 'Unc', kind: 'chop', car: 'muscle', reward: 400, rep: 30,
+    brief: ['Unc: "My guy at the chop shop is short one muscle car."', 'You: "Any color?"', 'Unc: "Fast is the only color that matters."'],
+    intro: 'Unc: "Find a muscle car and drop it at the chop shop on the marker."' },
+  { title: 'Take Over', by: 'Unc', kind: 'take', reward: 600, rep: 50,
+    brief: ['Unc: "Look around. This block is ours because we hold it."', 'Unc: "Now we hold one more."'],
+    intro: 'Unc: "Time to grow. Take the block on the marker."' },
+  { title: 'Package Run', by: 'Dee', kind: 'fetch', time: 150, reward: 300, rep: 20,
+    handoff: 'Unc: "Go see Dee in Midtown. She runs the garage, and she needs a driver."',
+    brief: ['Dee: "So you are the one Unc keeps talking about."', 'Dee: "A package came in on the Harbor side. Nobody touches it but you."'],
+    intro: 'Dee: "Harbor drop, then straight back to me. You got 150 seconds."' },
+  { title: 'Clean Delivery', by: 'Dee', kind: 'deliver', car: 'lowrider', district: 1, minHp: 0.7, reward: 450, rep: 25,
+    brief: ['Dee: "That lowrider out front took me six weeks."', 'Dee: "The buyer is Downtown. He pays for paint, not dents."'],
+    intro: 'Dee: "Drive the lowrider to the marker Downtown. Keep it clean."' },
+  { title: 'Shadow', by: 'Dee', kind: 'tail', need: 35, reward: 500, rep: 25,
+    brief: ['Dee: "Somebody is moving product through my streets and not paying."', 'Dee: "Do not stop him. Just see where he goes."'],
+    intro: 'Dee: "Follow the marked car. Stay back, but do not lose it."' },
+  { title: 'Loop Time', by: 'Dee', kind: 'race', time: 170, reward: 550, rep: 30,
+    brief: ['Dee: "You want the fast jobs, I need to know you are fast."', 'Dee: "One lap of the Loop. The whole ring."'],
+    intro: 'Dee: "Get a car, hit every marker around the Loop. 170 seconds."' },
+  { title: 'Repo', by: 'Dee', kind: 'chase', reward: 600, rep: 35,
+    brief: ['Dee: "A customer just drove off without paying."', 'Dee: "Stop that car. Ram it or take it at a light, I do not care which."'],
+    intro: 'Dee: "Stop the marked car before it gets away."' },
+  { title: 'Send a Message', by: 'Rook', kind: 'beat', crew: 'reds', need: 3, reward: 500, rep: 30,
+    handoff: 'Dee: "You drive fine. Rook wants you Downtown. That is the real work."',
+    brief: ['Rook: "You hear what the Red Kings been saying about your people?"', 'You: "I heard."', 'Rook: "Then go make them stop saying it."'],
+    intro: 'Rook: "Knock out 3 Red Kings."' },
+  { title: 'Blue Notice', by: 'Rook', kind: 'beat', crew: 'blues', need: 4, reward: 550, rep: 30,
+    brief: ['Rook: "Blue Hand thinks the Red Kings were a one off."', 'Rook: "Show them it is a policy."'],
+    intro: 'Rook: "Knock out 4 Blue Hand."' },
+  { title: 'Hold the Line', by: 'Rook', kind: 'defend', crew: 'reds', need: 4, reward: 700, rep: 40,
+    brief: ['Rook: "They are coming for one of your blocks. Tonight."', 'Rook: "Lose it and everybody in this city knows you can be pushed."'],
+    intro: 'Rook: "Get to your block on the marker and hold it."' },
+  { title: 'Lose Them', by: 'Rook', kind: 'escape', heat: 55, reward: 600, rep: 35,
+    brief: ['Rook: "Somebody gave the police your name."', 'Rook: "They are already looking. Disappear."'],
+    intro: 'Rook: "You are wanted. Shake the police."' },
+  { title: 'The Lieutenant', by: 'Rook', kind: 'hit', crew: 'reds', who: 'Red Kings lieutenant', reward: 900, rep: 60,
+    brief: ['Rook: "The Red Kings have a lieutenant who plans every raid."', 'Rook: "Put him on the ground and the raids get stupid."'],
+    intro: 'Rook: "Knock out the Red Kings lieutenant on the marker."' },
+  { title: 'Dock Pickup', by: 'Sal', kind: 'collect', need: 4, district: 2, time: 170, reward: 700, rep: 35,
+    handoff: 'Rook: "Sal runs the freight at the Harbor. Tell him I sent you."',
+    brief: ['Sal: "Rook says you are useful. We will see."', 'Sal: "Four crates on the docks. Gold Line does not know they are there yet."'],
+    intro: 'Sal: "Four crates, then back to me. 170 seconds."' },
+  { title: 'Hot Cargo', by: 'Sal', kind: 'deliver', car: 'van', home: true, heat: 50, reward: 900, rep: 45,
+    brief: ['Sal: "The van is loaded and the police know the plate."', 'Sal: "Get it to your side of town anyway."'],
+    intro: 'Sal: "Drive the van to your home block. They will be on you."' },
+  { title: 'Gold Standard', by: 'Sal', kind: 'hit', crew: 'golds', who: 'Gold Line captain', reward: 1000, rep: 70,
+    brief: ['Sal: "Gold Line has a captain on these docks. He taxes every load."', 'Sal: "I am done paying."'],
+    intro: 'Sal: "Knock out the Gold Line captain on the marker."' },
+  { title: 'Six Blocks', by: 'Sal', kind: 'own', need: 6, reward: 1200, rep: 80,
+    brief: ['Sal: "You fight well. Holding ground is different."', 'Sal: "Come back when six blocks answer to you."'],
+    intro: 'Sal: "Hold six blocks at once."' },
+  { title: 'Run the City', by: 'Unc', kind: 'take', rival: true, reward: 2000, rep: 150,
+    handoff: 'Sal: "Go home. Unc has one more thing to say to you."',
+    brief: ['Unc: "One block. That is what we had."', 'Unc: "Now look at the map. One more, and nobody tells you no."'],
+    intro: 'Unc: "Take the rival block on the marker. This is the one that counts."' },
+];
+// jobs that end if you get knocked out or locked up
+const DOWN_FAILS = new Set(['deliver', 'tail', 'race', 'chase', 'defend', 'escape']);
+const curbSpot = (b) => { const c = blockCenter(b); return { x: c.x + PITCH / 2 - 5.6, z: c.z + 14 }; };
+const cornerSpot = (b, sx = -1, sz = -1) => { const c = blockCenter(b); return { x: c.x + sx * (BLOCK / 2 + 1), z: c.z + sz * (BLOCK / 2 + 1) }; };
+// every contact stands in the world; called for new games and for saves made before a contact existed
+export function ensureContacts(s) {
+  for (const C of CONTACTS) {
+    if (s.ents.some((e) => e.kind === 'giver' && e.name === C.name)) continue;
+    const b = s.blocks[C.gz * GRID + C.gx], c = blockCenter(b), at = C.name === 'Unc' ? { x: c.x + 6, z: c.z + 6 } : cornerSpot(b);
+    s.ents.push(newEnt(s, { kind: 'giver', crew: 'player', name: C.name, x: at.x, z: at.z, ry: C.name === 'Unc' ? Math.PI : Math.PI * 1.25, hp: 999, ...(C.slot && { slot: C.slot, female: !!C.female, look: C.look }) }));
+  }
+}
+const giverNamed = (s, name) => s.ents.find((e) => e.kind === 'giver' && e.name === name) || s.ents.find((e) => e.kind === 'giver');
+// who has the next job (or the running one)
+export function contactFor(s) {
+  const idx = s.mission ? s.mission.idx : Math.min(s.missionIdx, MISSIONS.length - 1);
+  return giverNamed(s, (MISSIONS[idx] || MISSIONS[0]).by);
+}
+// Saves from before the job chain: the old five jobs map onto the new list by name where they still exist.
+export function migrate(s) {
+  ensureContacts(s);
+  if (s.jobsV !== 2) { s.jobsV = 2; s.mission = null; s.missionIdx = s.missionIdx > 0 ? 1 : 0; }
+  return s;
+}
+const missionCar = (s, m) => (m.carId ? s.cars.find((c) => c.id === m.carId) : null);
+function nearestBlocks(s, from, pred, n) {
+  return s.blocks.filter(pred).map((b) => ({ b, d: dist2(blockCenter(b), from) })).sort((a, b) => a.d - b.d).slice(0, n).map((o) => o.b);
+}
 function startMission(s, p) {
-  if (s.mission) { log(s, `Unc: "Finish ${s.mission.title} first."`); return; }
-  if (s.missionIdx >= MISSIONS.length) { log(s, 'Unc: "No more work today. Keep the blocks tight."'); return; }
-  const M = MISSIONS[s.missionIdx];
+  const M = MISSIONS[s.missionIdx], g = giverNamed(s, M.by);
   const m = { idx: s.missionIdx, title: M.title, kind: M.kind, stage: 0, timer: M.time || 0, count: 0, need: M.need || 0, crew: M.crew, reward: M.reward, rep: M.rep, gift: M.gift || null, target: null };
-  if (M.kind === 'hook') m.target = hookDrop(s);
+  const notRival = (b) => !RIVALS.has(b.owner);
+  if (M.kind === 'hook') m.target = hookDrop(s, g);
   if (M.kind === 'fetch') {
     // the drop sits in the Harbor parking lane, outside any crew's guard area,
     // preferring a block that is not held by a rival crew
-    const harbor = s.blocks.filter((b) => districtOf(b) === 2);
-    const b = harbor.find((b) => b.owner === 'neutral' || b.owner === 'player') || harbor[0];
+    const harbor = s.blocks.filter((b) => districtOf(b) === 2).sort((a, b) => dist2(blockCenter(a), g) - dist2(blockCenter(b), g));
+    const b = harbor.find(notRival) || harbor[0];
     const c = blockCenter(b); m.target = { x: c.x - BLOCK / 2 - 5, z: c.z + 6 }; m.block = b.id;
   }
-  if (M.kind === 'chop') { m.target = null; }
+  if (M.kind === 'collect') {
+    // one pickup on the street corner of each of the nearest blocks in the district, never on rival turf
+    const gb = blockAt(s, g.x, g.z);
+    let bs = nearestBlocks(s, g, (b) => districtOf(b) === M.district && notRival(b) && b !== gb, M.need);
+    if (bs.length < M.need) bs = nearestBlocks(s, g, (b) => notRival(b) && b !== gb, M.need);
+    m.points = bs.map((b) => cornerSpot(b, 1, 1)); m.need = m.points.length; m.target = m.points[0];
+  }
   if (M.kind === 'take') {
-    const mine = s.blocks.filter((b) => b.owner === 'player');
-    const opts = []; for (const b of mine) for (const n of neighbors(s, b)) if (n.owner !== 'player') opts.push(n);
-    const b = opts[0] || s.blocks.find((b) => b.owner !== 'player');
+    let b = null;
+    if (M.rival) b = nearestBlocks(s, p, (b) => RIVALS.has(b.owner), 1)[0];
+    if (!b) {
+      const mine = s.blocks.filter((b) => b.owner === 'player');
+      const opts = []; for (const o of mine) for (const n of neighbors(s, o)) if (n.owner !== 'player') opts.push(n);
+      b = opts[0] || s.blocks.find((b) => b.owner !== 'player');
+    }
+    if (!b) { log(s, `${g.name}: "There is nothing left to take. It is all yours."`); s.missionIdx++; return; }
     m.block = b.id; const c = blockCenter(b); m.target = { x: c.x, z: c.z };
+  }
+  if (M.kind === 'deliver') {
+    // parked at the curb a few steps from the contact's corner (no parked car is ever placed on that side)
+    const car = makeCar(s, g.x - 2.4, g.z + 7, 0, M.car, false); s.cars.push(car);
+    m.carId = car.id; m.carType = M.car; m.minHp = M.minHp || 0; m.heat = M.heat || 0;
+    const home = s.blocks.find((b) => b.owner === 'player') || s.blocks[0];
+    const to = M.home ? home : nearestBlocks(s, g, (b) => districtOf(b) === M.district && notRival(b), 3).pop() || home;
+    m.dest = curbSpot(to); m.block = to.id;
+  }
+  if (M.kind === 'chop') m.carType = M.car || 'muscle';
+  if (M.kind === 'tail' || M.kind === 'chase') {
+    const car = spawnTraffic(s, false) || spawnTraffic(s, true);
+    if (!car) { log(s, `${g.name}: "Streets are jammed. Come back in a minute."`); return; }
+    car.mark = true; m.carId = car.id; m.lost = 0; m.spook = 0;
+    if (M.kind === 'chase') { car.flee = true; car.cruise = 17; }
+  }
+  if (M.kind === 'race') {
+    // one lap of the ring road: the nearest point on it, the four corners in order, and back to the start
+    const E = (GRID * PITCH) / 2, c = blockCenter(blockAt(s, g.x, g.z) || s.blocks[0]);
+    const start = Math.abs(c.x) > Math.abs(c.z) ? { x: Math.sign(c.x) * E, z: c.z + PITCH / 2 } : { x: c.x + PITCH / 2, z: Math.sign(c.z || -1) * E };
+    const corners = [[-E, -E], [E, -E], [E, E], [-E, E]].map(([x, z]) => ({ x, z }));
+    let k = 0, bd = Infinity; corners.forEach((q, i) => { const d = dist2(q, start); if (d < bd) { bd = d; k = i; } });
+    m.points = [start, ...[0, 1, 2, 3].map((i) => corners[(k + i) % 4]), start]; m.need = m.points.length; m.target = m.points[0];
+  }
+  if (M.kind === 'defend') {
+    const b = nearestBlocks(s, p, (b) => b.owner === 'player', 1)[0];
+    if (!b) return;
+    const from = neighbors(s, b).find((n) => n.owner !== 'player') || b, fc = blockCenter(from), bc = blockCenter(b);
+    m.block = b.id; m.target = { x: bc.x, z: bc.z }; m.ids = [];
+    for (let i = 0; i < M.need; i++) {
+      // they gather on the far side of the next block and move in after a short count
+      const u = spawnUnit(s, M.crew, 'attacker', from.id, fc.x + (fc.x - bc.x) * 0.2 + (i - 1.5) * 1.6, fc.z + (fc.z - bc.z) * 0.2 + (i % 2) * 1.6);
+      u.target = b.id; u.gather = 14; m.ids.push(u.id);
+    }
+    b.raid = { crew: M.crew, eta: 14, from: from.id };
+    s.fx.push({ type: 'raid', block: b.id, eta: 14, crew: M.crew });
+  }
+  if (M.kind === 'escape') { p.heat = Math.max(p.heat, M.heat); p.calmT = 0; }
+  if (M.kind === 'hit') {
+    // the mark stands with two guards on the nearest block his crew holds; with the crew wiped out, on a neutral one
+    const b = nearestBlocks(s, p, (b) => b.owner === M.crew, 1)[0] || nearestBlocks(s, p, (b) => b.owner === 'neutral', 1)[0] || s.blocks[s.blocks.length - 1];
+    const boss = spawnUnit(s, M.crew, 'defender', b.id); boss.hp = boss.max = 170; boss.weapon = 'bat'; boss.boss = true; boss.name = M.who;
+    for (let i = 0; i < 2; i++) spawnUnit(s, M.crew, 'defender', b.id);
+    m.markId = boss.id; m.who = M.who; m.short = M.who.split(' ').pop(); m.block = b.id; m.target = { x: boss.x, z: boss.z };
   }
   s.mission = m; log(s, M.intro); s.fx.push({ type: 'mission', state: 'start', title: M.title, idx: m.idx });
 }
-function hookDrop(s) {
-  const g = s.ents.find((e) => e.kind === 'giver') || player(s);
+function hookDrop(s, g) {
   const spots = [[18, -6], [-16, 14], [22, 10], [8, -22], [20, 16], [-18, -10], [28, -2], [-8, 22]];
   for (const [dx, dz] of spots) {
     const x = g.x + dx, z = g.z + dz;
@@ -999,33 +1152,126 @@ function grantFollower(s) {
   s.fx.push({ type: 'gift', id: u.id });
   return u;
 }
+// called when the player gets into a car
 function missionCheck(s, p) {
   const m = s.mission; if (!m) return;
-  if (m.kind === 'chop' && m.stage === 0 && p.car) {
-    const c = s.cars.find((c) => c.id === p.car);
-    if (c && c.type === 'muscle') { m.stage = 1; const b = s.blocks.find((b) => b.hustle === 'Chop Shop') || s.blocks[5]; const bc = blockCenter(b); m.target = { x: bc.x + PITCH / 2 - 4, z: bc.z + 12 }; log(s, 'Nice ride. Take it to the chop shop marker.'); }
+  const c = s.cars.find((c) => c.id === p.car); if (!c) return;
+  if (m.kind === 'chop' && m.stage === 0 && c.type === m.carType) {
+    m.stage = 1; const b = s.blocks.find((b) => b.hustle === 'Chop Shop') || s.blocks[5]; m.target = curbSpot(b); m.target.z -= 2;
+    log(s, 'Nice ride. Take it to the chop shop marker.');
   }
+  if (m.kind === 'deliver' && m.stage === 0 && c.id === m.carId) {
+    m.stage = 1; m.target = m.dest;
+    if (m.heat) { p.heat = Math.max(p.heat, m.heat); p.calmT = 0; log(s, 'The police have the plate. Drive.'); }
+    else log(s, 'Take it to the marker. Easy on the paint.');
+  }
+  if (m.kind === 'tail' && c.id === m.carId) failMission(s, 'You were meant to follow it, not take it. Job failed.');
+  if (m.kind === 'chase' && c.id === m.carId) { c.mark = false; c.flee = false; passMission(s); }
 }
 function missionStep(s, p, dt) {
   const m = s.mission; if (!m) return;
-  if (m.timer > 0) { m.timer -= dt; if (m.timer <= 0) { failMission(s, 'Out of time. Mission failed.'); return; } }
+  if (m.timer > 0) { m.timer -= dt; if (m.timer <= 0) { failMission(s, 'Out of time. Job failed.'); return; } }
   const near = (r) => m.target && (p.x - m.target.x) ** 2 + (p.z - m.target.z) ** 2 < r * r;
+  const g = giverNamed(s, (MISSIONS[m.idx] || MISSIONS[0]).by), car = missionCar(s, m);
   if (m.kind === 'hook' || m.kind === 'fetch') {
-    if (m.stage === 0 && near(4)) { m.stage = 1; const g = s.ents.find((e) => e.kind === 'giver'); m.target = { x: g.x, z: g.z }; log(s, m.kind === 'hook' ? 'Got the bag. Bring it back to Unc.' : 'Got the package. Bring it back to Unc.'); }
+    if (m.stage === 0 && near(4)) { m.stage = 1; m.target = { x: g.x, z: g.z }; log(s, m.kind === 'hook' ? `Got the bag. Bring it back to ${g.name}.` : `Got the package. Bring it back to ${g.name}.`); }
     else if (m.stage === 1 && near(4)) passMission(s);
+  } else if (m.kind === 'collect') {
+    if (m.stage === 0 && near(4)) {
+      m.count++;
+      if (m.count >= m.need) { m.stage = 1; m.target = { x: g.x, z: g.z }; log(s, `That is all of them. Back to ${g.name}.`); }
+      else { m.target = m.points[m.count]; log(s, `Got it. ${m.need - m.count} to go.`); }
+    } else if (m.stage === 1 && near(4)) passMission(s);
   } else if (m.kind === 'beat') { if (m.count >= m.need) passMission(s); }
   else if (m.kind === 'chop') {
-    missionCheck(s, p);
-    if (m.stage === 1 && near(6) && p.car) { const c = s.cars.find((c) => c.id === p.car); if (c.type === 'muscle') { exitCar(s, p); c.remove = true; passMission(s); } }
+    if (m.stage === 0) { let best = null, bd = Infinity; for (const c of s.cars) if (c.type === m.carType && !c.wrecked && !c.cops) { const d = dist2(c, p); if (d < bd) { bd = d; best = c; } } m.target = best ? { x: best.x, z: best.z } : null; }
+    else if (near(6) && p.car) { const c = s.cars.find((c) => c.id === p.car); if (c.type === m.carType) { exitCar(s, p); c.remove = true; passMission(s); } }
   } else if (m.kind === 'take') { if (s.blocks[m.block].owner === 'player') passMission(s); }
+  else if (m.kind === 'deliver') {
+    if (!car || car.wrecked) { failMission(s, 'The car is wrecked. Job failed.'); return; }
+    if (m.minHp && car.hp < car.max * m.minHp) { failMission(s, 'Too much damage. The buyer walked. Job failed.'); return; }
+    if (m.stage === 0 || p.car !== car.id) { m.stage = p.car === car.id ? 1 : m.stage; m.target = p.car === car.id ? m.dest : { x: car.x, z: car.z }; }
+    else if (near(6)) { exitCar(s, p); car.remove = true; passMission(s); }
+  } else if (m.kind === 'tail') {
+    if (!car || car.wrecked) { failMission(s, 'The car is wrecked. Job failed.'); return; }
+    m.target = { x: car.x, z: car.z };
+    const d = Math.sqrt(dist2(car, p));
+    if (m.stage === 0) { if (d < 50) { m.stage = 1; log(s, 'There it is. Stay back and keep it in sight.'); } }
+    else {
+      if (d > 9 && d < 60) m.count += dt;
+      m.spook = d < 7 ? m.spook + dt : Math.max(0, m.spook - dt);
+      m.lost = d > 85 ? m.lost + dt : 0;
+      if (m.spook > 3) failMission(s, 'Too close. He made you. Job failed.');
+      else if (m.lost > 8) failMission(s, 'You lost him. Job failed.');
+      else if (m.count >= m.need) { car.mark = false; passMission(s); }
+    }
+  } else if (m.kind === 'chase') {
+    if (!car) { failMission(s, 'He got away. Job failed.'); return; }
+    m.target = { x: car.x, z: car.z };
+    const d = Math.sqrt(dist2(car, p));
+    if (d < 60) m.stage = 1;
+    m.lost = m.stage === 1 && d > 150 ? m.lost + dt : 0;
+    if (car.wrecked || car.hp <= car.max * 0.4) { car.mark = false; car.flee = false; car.ai = false; car.v = 0; passMission(s); }
+    else if (m.lost > 10) { car.mark = false; car.flee = false; failMission(s, 'He got away. Job failed.'); }
+  } else if (m.kind === 'race') {
+    if (near(11) && p.car) {
+      m.count++;
+      if (m.count >= m.need) passMission(s);
+      else { m.target = m.points[m.count]; s.fx.push({ type: 'checkpoint', n: m.count, of: m.need }); }
+    }
+  } else if (m.kind === 'defend') {
+    const b = s.blocks[m.block];
+    if (b.owner !== 'player') { failMission(s, `${b.hustle} fell. Job failed.`); return; }
+    const up = s.ents.filter((e) => m.ids.includes(e.id) && e.hp > 0).length;
+    m.count = m.need - up;
+    if (up === 0) passMission(s);
+  } else if (m.kind === 'escape') {
+    m.count += dt;
+    if (stars(p) === 0 && m.count > 3) passMission(s);
+  } else if (m.kind === 'hit') {
+    const e = s.ents.find((e) => e.id === m.markId);
+    if (!e || e.hp <= 0) passMission(s);
+    else m.target = { x: e.x, z: e.z };
+  } else if (m.kind === 'own') {
+    m.count = s.blocks.filter((b) => b.owner === 'player').length;
+    if (m.count >= m.need) passMission(s);
+  }
+}
+// the one line under the job title on the HUD
+export function missionText(s) {
+  const m = s.mission; if (!m) return '';
+  const by = (MISSIONS[m.idx] || MISSIONS[0]).by, left = m.need - m.count;
+  switch (m.kind) {
+    case 'hook': return m.stage ? `Bring the bag back to ${by}.` : 'Grab the bag at the yellow marker.';
+    case 'fetch': return m.stage ? `Bring the package to ${by}.` : 'Get the package at the yellow marker.';
+    case 'collect': return m.stage ? `Bring it all back to ${by}.` : `Pickup at the marker (${m.count}/${m.need}).`;
+    case 'beat': return `Knock out ${CREWS[m.crew].name} (${m.count}/${m.need}).`;
+    case 'chop': return m.stage ? 'Drive it to the chop shop marker.' : `Steal a ${m.carType} car (marked).`;
+    case 'take': return 'Take the marked block.';
+    case 'deliver': { const c = missionCar(s, m), hp = c ? Math.round((100 * c.hp) / c.max) : 0; return !m.stage ? `Get in the ${m.carType}.` : m.minHp ? `To the marker. Car ${hp}%, min ${Math.round(m.minHp * 100)}%.` : 'Drive it to the marker.'; }
+    case 'tail': return m.stage ? `Follow, not too close (${Math.floor(m.count)}/${m.need}s).` : 'Find the marked car.';
+    case 'chase': return 'Ram or take the marked car.';
+    case 'race': return `Drive to the marker (${m.count}/${m.need}).`;
+    case 'defend': return `Hold the block. ${left} left.`;
+    case 'escape': return 'Lose the police.';
+    case 'hit': return `Knock out the ${m.short}.`; // short on purpose: the phone HUD has one line
+    case 'own': return `Hold ${m.need} blocks (${m.count}/${m.need}).`;
+    default: return '';
+  }
 }
 function passMission(s) {
   const m = s.mission; s.crews.player.cash += m.reward; s.crews.player.rep += m.rep;
   log(s, `Job done: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep });
   s.mission = null; s.missionIdx++;
   if (m.gift === 'follower') grantFollower(s);
+  const next = MISSIONS[s.missionIdx];
+  if (next && next.handoff) log(s, next.handoff);
 }
-function failMission(s, why) { log(s, why); s.fx.push({ type: 'mission', state: 'fail', title: s.mission.title }); s.mission = null; }
+function failMission(s, why) {
+  const m = s.mission, car = missionCar(s, m);
+  if (car && (m.kind === 'tail' || m.kind === 'chase')) { car.mark = false; car.flee = false; if (car.ai) car.cruise = 9; }
+  log(s, why); s.fx.push({ type: 'mission', state: 'fail', title: m.title }); s.mission = null;
+}
 
 // ---------- main step ----------
 export function step(s, dt) {
@@ -1054,7 +1300,7 @@ export function step(s, dt) {
   policeStep(s, dt);
   // keep traffic topped up near the player
   const traffic = s.cars.filter((c) => c.ai && !c.wrecked);
-  for (const c of traffic) if (dist2(c, p) > 180 * 180) c.remove = true;
+  for (const c of traffic) if (dist2(c, p) > 180 * 180 && !c.mark) c.remove = true;
   if (traffic.length < s.cfg.traffic && R(s) < dt) spawnTraffic(s, false);
   // entities
   const chasers = new Map(), cells = bucketEnts(s);

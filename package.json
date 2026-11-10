@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "test:missions": "node tools/missions-test.mjs",
+    "test:jobs": "node tools/jobs-test.mjs",
     "test:bust": "node tools/bust-test.mjs",
     "test:combat": "node tools/combat-test.mjs",
     "test:retarget": "node tools/retarget-test.mjs",

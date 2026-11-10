@@ -83,9 +83,9 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
       const jack = dir === 'in' && jackId != null;
       cur = { kind: 'car', dir, t: 0, dur: (dir === 'in' ? 1.15 : 0.95) + (jack ? 0.4 : 0), jack: jack ? 0.4 : 0, carG, playerG, jackId, start: playerG.position.clone(), startRy: playerG.rotation.y, camInit: false };
     },
-    brief(idx, unc, playerG, intro, job) {
+    brief(idx, unc, playerG, intro, job, briefLines) {
       if (cur) end();
-      const lines = [...(BRIEFS[idx] || []), intro || ''].filter(Boolean);
+      const lines = [...(briefLines || BRIEFS[idx] || []), intro || ''].filter(Boolean);
       // each line holds long enough to read it: short lines 2 s, long ones up to 4.2 s
       const EST = 1.4, starts = [], durs = lines.map((l) => Math.max(2.0, Math.min(4.2, 1.3 + l.length * 0.04)));
       let at = EST; for (const d of durs) { starts.push(at); at += d; }
