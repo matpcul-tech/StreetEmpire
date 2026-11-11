@@ -71,6 +71,24 @@ Other commands: `list`, `remove car sedan`, `remove building house house-2`, `in
 
 `node tools/kit-glaze.mjs in.glb out.glb` fills every open window it finds with glass, using a dark glass pixel the model already has, so the game's finish pass shades it like the other windows. Import `out.glb` as usual (`@keep`).
 
+## Finished cars from Sovereign Asset
+
+A car finished in Sovereign Asset arrives ready: one material, one texture, four wheels split off, and a window mask. Upload it as `<slot>@keep.glb` (`sedan@keep.glb`) so the importer leaves the parts and pivots alone.
+
+What the file carries and what the game does with it:
+
+| In the file | Meaning |
+| --- | --- |
+| Nodes `wheel_fl`, `wheel_fr`, `wheel_rl`, `wheel_rr` with `extras.kitWheel: true`, origin on the axle | The game spins and steers each one around that origin. A wheel node may hold its mesh directly; the importer moves the mesh to a child so compression cannot shift the origin. |
+| One material with `extras.kitMask: true` | The car has a window mask. |
+| That material's emissive texture, emissive factor `[0, 0, 0]` | The mask image, on the same UVs as the base texture. Red is glass, green is body paint, blue is chrome, black is everything else (tires, trim, lamps, underside). Emissive factor 0 means it shows as nothing in any other viewer. |
+
+Without a mask the game sorts every pixel by its color: dark and gray is glass, the body's main hue is paint. That is a guess, so black trim and tires pick up the glass shine, a window with a reflection painted on comes out patchy, and paint creeps over the window edge when a car is repainted. With a mask none of that is guessed: glass, paint and chrome are exactly where the mask says (`finishMaterial` in `src/kit.js`), and the body color for repaints is read from the paint pixels only.
+
+The importer keeps the mask lossless (lossy compression rings at every edge, which is the bleed the mask is there to stop) and resizes it with the other textures. Its summary line says `window mask kept lossless`. kit.html shows `window mask: yes` for the car. Do not name the material paint or body: a masked material is always repainted per pixel.
+
+`npm run test:mask` builds a small masked car, runs it through the importer in a temp folder, and checks the mask comes out pixel for pixel the same and every wheel origin is still on its axle.
+
 ## Picking models that work
 
 - Pick low poly or game ready models of 5k to 40k triangles. Film-quality cars of 300k triangles get cut down hard and can look melted.

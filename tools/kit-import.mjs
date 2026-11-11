@@ -35,7 +35,8 @@ import { execFileSync } from 'node:child_process';
 import { canonical } from '../src/retarget.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const KIT = path.join(ROOT, 'public/models/kit');
+// KIT_DIR installs somewhere else (tools/kit-mask-test.mjs uses it so a test never touches the real kit or the credits)
+const KIT = process.env.KIT_DIR ? path.resolve(process.env.KIT_DIR) : path.join(ROOT, 'public/models/kit');
 const MANIFEST = path.join(KIT, 'kit.json');
 const INBOX = path.join(ROOT, 'kit-inbox');
 export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lowrider', 'pickup'];
@@ -65,7 +66,7 @@ const readManifest = () => (fs.existsSync(MANIFEST) ? JSON.parse(fs.readFileSync
 const writeManifest = (m) => { fs.mkdirSync(KIT, { recursive: true }); fs.writeFileSync(MANIFEST, JSON.stringify(m, null, 2) + '\n'); writeCredits(m); };
 // CREDITS.md keeps a generated Build kit section, so CC BY models are always credited in the repo
 function writeCredits(m) {
-  const f = path.join(ROOT, 'CREDITS.md'); if (!fs.existsSync(f)) return;
+  const f = path.join(ROOT, 'CREDITS.md'); if (process.env.KIT_DIR || !fs.existsSync(f)) return;
   const START = '<!-- kit-credits:start -->', END = '<!-- kit-credits:end -->';
   const rows = [];
   for (const [slot, e] of Object.entries(m.cars || {})) rows.push(`| car: ${slot} | ${e.credit || 'no credit given (add a .txt next to the upload)'} |`);
@@ -166,6 +167,49 @@ async function mergeForPhones(doc, kind, notes) {
   await doc.transform(join({ keepNamed: true }), prune());
 }
 
+// Window mask (made by Sovereign Asset): a material tagged extras.kitMask keeps a mask image in its emissive
+// slot with emissive factor 0, on the base texture's UVs. Red is glass, green is body paint, blue is chrome.
+// The game reads it in its finish pass (src/kit.js) instead of guessing each pixel from its color.
+// The mask is data: lossy compression rings at every edge and that ring is exactly the bleed the mask is
+// there to stop, so it is written lossless and kept out of the lossy texture pass by its name.
+const MASK_NAME = 'kitMask';
+function findMasks(doc) {
+  const out = [];
+  for (const m of doc.getRoot().listMaterials()) {
+    if (!m.getExtras()?.kitMask) continue;
+    const t = m.getEmissiveTexture();
+    if (!t) throw new Error(`material "${m.getName()}" is tagged kitMask but has no mask image in its emissive slot`);
+    if (!m.getBaseColorTexture()) throw new Error(`material "${m.getName()}" has a window mask but no base color texture to go with it`);
+    const a = m.getBaseColorTextureInfo().getTexCoord(), b = m.getEmissiveTextureInfo().getTexCoord();
+    if (a !== b) throw new Error(`material "${m.getName()}": the window mask uses UV set ${b} and the base texture uses UV set ${a}; they must share one layout`);
+    m.setEmissiveFactor([0, 0, 0]); // the mask never glows, here or in any other viewer
+    if (!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+async function packMasks(masks, texSize, notes) {
+  for (const t of masks) {
+    const img = sharp(Buffer.from(t.getImage())), meta = await img.metadata();
+    const big = Math.max(meta.width, meta.height) > texSize;
+    const buf = await (big ? img.resize(texSize, texSize, { fit: 'inside', kernel: 'lanczos3' }) : img).removeAlpha().webp({ lossless: true, effort: 6 }).toBuffer();
+    t.setImage(new Uint8Array(buf)).setMimeType('image/webp').setName(MASK_NAME).setURI(MASK_NAME + '.webp');
+    notes.push(`window mask kept lossless (${big ? `resized to ${texSize} px` : `${meta.width} x ${meta.height} px`}, ${(buf.length / 1024).toFixed(1)} KB): the game reads glass, paint and chrome from it`);
+  }
+}
+// A wheel node the game spins must be a plain group with its origin on the axle. quantize() moves the
+// origin of any node that holds a mesh directly (it folds the mesh's offset and scale into that node),
+// which would swing the wheel around the wrong point, so a tagged wheel that holds its own mesh gets
+// the mesh moved to a child first. Wheel rigs built as groups (wheel_fl > steer > spin > mesh) are untouched.
+function protectWheelPivots(doc) {
+  let n = 0;
+  for (const node of doc.getRoot().listNodes()) {
+    if (!node.getExtras()?.kitWheel || !node.getMesh()) continue;
+    const child = doc.createNode(node.getName() + '_mesh').setMesh(node.getMesh()).setSkin(node.getSkin());
+    node.setMesh(null).setSkin(null).addChild(child); n++;
+  }
+  return n;
+}
+
 // A character needs a skeleton with arms, legs, spine and head the retargeter can name.
 function checkCharacter(doc, notes) {
   const skins = doc.getRoot().listSkins();
@@ -188,6 +232,7 @@ export async function importModel(kind, slot, file, opts = {}) {
   if (kind === 'character') checkCharacter(doc, notes);
   for (const e of doc.getRoot().listExtensionsUsed()) if (e.extensionName === 'KHR_draco_mesh_compression') e.dispose();
   await doc.transform(dedup(), prune(), resample(), weld(), unpartition());
+  const masks = kind === 'car' ? findMasks(doc) : []; // after dedup, so the textures found here are the ones that get written
   // cars: guess which way the model faces from its lamps (tail or brake lights at the back)
   if (kind === 'car' && opts.yaw == null) {
     const scene = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0], all = getBounds(scene), mid = (all.min[2] + all.max[2]) / 2;
@@ -222,16 +267,19 @@ export async function importModel(kind, slot, file, opts = {}) {
   }
   if (!opts.keep && kind !== 'character') await mergeForPhones(doc, kind, notes); // characters keep their parts and skeleton as rigged
   else if (kind === 'car') { const rigs = findWheelRigs(doc); for (const n of rigs) n.setExtras({ ...n.getExtras(), kitWheel: true }); if (rigs.length) notes.push(`kept the model's own wheel rig (${rigs.length} wheels, pivots unchanged)`); }
+  await packMasks(masks, texSize, notes);
+  if (kind === 'car') protectWheelPivots(doc);
   await doc.transform(
     // 1024 px by default: a 2048 texture takes four times the phone's video memory per car. @tex2048 keeps fine detail on hero cars.
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: opts.keep ? 90 : 82 }),
+    // The pattern leaves the window mask alone (it was written lossless just above).
+    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: opts.keep ? 90 : 82, ...(masks.length && { pattern: new RegExp(`^(?!${MASK_NAME})`) }) }),
     quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
   );
   const names = doc.getRoot().listNodes().map((n) => n.getName() + ' ' + (n.getMesh() ? n.getMesh().getName() : ''));
   const wheels = doc.getRoot().listNodes().filter((n) => n.getExtras()?.kitWheel).length;
   if (kind === 'car' && !wheels) notes.push('no wheel nodes found (name them wheel, tire or rim to make them spin); the car still drives');
   const mats = doc.getRoot().listMaterials().map((m) => m.getName());
-  if (kind === 'car' && opts.paint !== false && !mats.some((n) => /paint|body|carpaint|exterior|shell/i.test(n))) notes.push('no paint material found (name it paint or body to get per-car colors); the model keeps its own color');
+  if (kind === 'car' && opts.paint !== false && !masks.length && !mats.some((n) => /paint|body|carpaint|exterior|shell/i.test(n))) notes.push('no paint material found (name it paint or body to get per-car colors); the model keeps its own color');
 
   const variant = opts.name || slot;
   const rel = `${DIRS[kind]}/${variant}.glb`;
@@ -255,7 +303,7 @@ export async function importModel(kind, slot, file, opts = {}) {
     list.push({ file: rel, ...(far && { far }), yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
   }
   writeManifest(m);
-  return { slot, kind, file: rel, tris: triCount(doc), before, bytes, wheels, materials: mats.length, notes };
+  return { slot, kind, file: rel, tris: triCount(doc), before, bytes, wheels, materials: mats.length, mask: masks.length > 0, notes };
 }
 
 // The far version of an installed building: simplified with texture seams kept (the
