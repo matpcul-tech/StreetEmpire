@@ -71,6 +71,31 @@ const put = (c, q) => { c.x = q.x; c.z = q.z; c.v = 0; };
   const ped = { n: 0 }; const w = world(), c2 = mount(w.s, w.p); const civ = G.spawnUnit(w.s, 'reds', 'defender', w.s.blocks[0].id, c2.x + 6, c2.z); civ.kind = 'ped'; civ.crew = 'civ'; civ.look = 1; civ.block = 0; civ.pt = 0; const ch = civ.hp; w.p.ammo = 5; w.p.cd = 0; G.applyAction(w.s, w.p.id, { type: 'attack' });
   check('it does not pick bystanders as targets', civ.hp === ch);
 }
+{ // fares
+  seen.length = 0; const { s, p } = world(), c = mount(s, p); put(c, { x: G.lineCoord(4), z: G.lineCoord(4) + 20 }); tick(s, p, 3);
+  const h = s.ents.find((e) => e.id === s.hail);
+  check(`in a car with no job, someone flags you down (${h && Math.hypot(h.x - c.x, h.z - c.z).toFixed(0)} m away)`, !!h && h.hail && !G.insideBuilding(h.x, h.z, 0.4) && got('fare')[0].state === 'hail');
+  const hx = h.x, hz = h.z; tick(s, p, 60); check('they wait where they are', Math.hypot(h.x - hx, h.z - hz) < 0.1);
+  const cash0 = s.crews.player.cash; put(c, { x: h.x + 3, z: h.z + 3 }); tick(s, p, 2);
+  check(`stopping beside them takes the fare (${s.side && Math.round(s.side.dist)} m, tip until ${s.side && s.side.par} s)`, s.side && s.side.kind === 'fare' && !s.ents.some((e) => e.id === h.id) && s.side.dist > 100 && !G.insideBuilding(s.side.target.x, s.side.target.z, 0.4));
+  const tg = s.side.target; tick(s, p, 30 * 5); put(c, { x: tg.x + 3, z: tg.z + 3 }); tick(s, p, 2);
+  const d = got('fare').find((f) => f.state === 'drop');
+  check(`dropping them off pays, with a tip for speed (+$${d && d.pay}, tip $${d && d.tip})`, !s.side && !!d && d.tip > 0 && d.pay > 80 && s.crews.player.cash === cash0 + d.pay);
+  // a slow, dented run: no tip
+  s.fareCd = 0; tick(s, p, 3); const h2 = s.ents.find((e) => e.id === s.hail); put(c, { x: h2.x + 3, z: h2.z + 3 }); tick(s, p, 2); const side = s.side; c.hp -= 30; side.t = side.par + 5; put(c, { x: side.target.x + 3, z: side.target.z + 3 }); seen.length = 0; tick(s, p, 2);
+  const d2 = got('fare').find((f) => f.state === 'drop'); check(`late and dented: base pay only (+$${d2 && d2.pay})`, !!d2 && d2.tip === 0);
+  s.fareCd = 0; tick(s, p, 3); const h3 = s.ents.find((e) => e.id === s.hail); put(c, { x: h3.x + 3, z: h3.z + 3 }); tick(s, p, 2); seen.length = 0;
+  G.applyAction(s, p.id, { type: 'car' }); for (let i = 0; i < 9 / DT; i++) { G.movePlayer(s, p, 0, 0, false, DT); G.step(s, DT); drain(s); }
+  check('leaving the car loses the fare', !s.side && got('fare').some((f) => f.state === 'lost'));
+  const w = world(), c2 = mount(w.s, w.p); w.p.heat = 60; put(c2, { x: G.lineCoord(4), z: G.lineCoord(4) + 20 }); w.s.policeT = 1e9; for (let i = 0; i < 5; i++) { w.p.heat = 60; G.movePlayer(w.s, w.p, 0, 0, true, DT); G.step(w.s, DT); }
+  check('nobody flags down a wanted driver', !w.s.hail);
+}
+{ // body armor
+  const { s, p } = world(); s.crews.player.cash = 500; const q = G.shopSpot(0); p.x = q.x; p.z = q.z; G.applyAction(s, p.id, { type: 'buy', item: 'armor' });
+  check('a shop sells body armor', p.armor === G.ARMOR_MAX && s.crews.player.cash === 300);
+  const foe = G.spawnUnit(s, 'reds', 'defender', s.blocks[0].id, p.x + 1, p.z); const hp0 = p.hp; p.x += 300; const c = s.cars.find((o) => !o.ai && o.type !== 'bike'); c.x = p.x; c.z = p.z + 3; c.hp = 1; c.burn = 0.05; tick(s, p, 6);
+  check(`armor takes the damage before health does (health ${hp0} to ${p.hp}, armor ${G.ARMOR_MAX} to ${p.armor})`, p.armor < G.ARMOR_MAX && p.hp > hp0 - 30);
+}
 { // progress
   const { s, p } = world(), a = G.progress(s);
   p.x = G.STASHES[5].x; p.z = G.STASHES[5].z; tick(s, p, 2); s.jumps = [0, 1]; s.best = { 0: 10 }; const b = G.progress(s);

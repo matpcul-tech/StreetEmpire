@@ -250,3 +250,6 @@ body.cine-on #lcol{visibility:hidden}
 .pop.bad{color:#ff7a66}
 #prog{margin:8px 0;font:13px Arial,sans-serif;color:#e8dcc8;display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:center}#prog b{flex-basis:100%;text-align:center;color:#ff8a1a;font-size:16px}
 #bFire{background:rgba(190,60,40,.6)!important}
+/* the radio button sits beside the pause button, clear of the message banner */
+@media (max-height:500px) and (orientation:landscape){#bRadio{top:auto;bottom:calc(var(--sb) + 10px);left:calc(50% + 34px)}}
+@media not ((max-height:500px) and (orientation:landscape)){#bRadio{top:calc(max(8px,env(safe-area-inset-top)) + 44px);left:50%;transform:translateX(-50%)}}

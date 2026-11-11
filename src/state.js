@@ -575,6 +575,7 @@ const BARKS = {
   rage: ['My car! You are paying for that!', 'Get out! Get out of the car!', 'Look what you did!'],
   jacked: ['That is my car!', 'Give it back!', 'You are dead, you hear me?'],
   bail: ['Forget the car!', 'I am not dying in traffic!'],
+  taxi: ['Hey! Over here!', 'I need a ride!', 'You working? I am paying!'],
   armed: ['Is that a gun?', 'Easy, easy...', 'I do not want trouble.'],
   hot: ['That is him from the news.', 'Cops are looking for you.', 'Keep walking, do not look.'],
   respect: ['Respect.', 'Block looks good these days.', 'Orange runs this corner.', 'Hey, boss.'],
@@ -630,6 +631,7 @@ function damage(s, e, amt, src, heavy, kb, stunO) {
     const d0 = Math.sqrt(dist2(e, src)) || 1, front = ((src.x - e.x) * Math.sin(e.ry) + (src.z - e.z) * Math.cos(e.ry)) / d0;
     if (front > 0.2) { amt = Math.ceil(amt * 0.2); e.hp -= amt; e.kx = (e.x - src.x) / d0 * 2; e.kz = (e.z - src.z) / d0 * 2; s.fx.push({ type: 'block', x: e.x, z: e.z, to: e.id, by: src.id }); if (e.hp <= 0) e.hp = 1; return; }
   }
+  if (e.kind === 'player' && e.armor > 0) { const soak = Math.min(e.armor, amt); e.armor -= soak; amt -= soak; } // body armor takes the hit first
   e.hp -= amt; e.hitT = heavy ? 0.45 : 0.3; e.stun = stunO != null ? stunO : (heavy ? 0.7 : 0.4); e.windup = 0; e.tell = '';
   const ko = e.hp <= 0;
   let dx = 0, dz = 0;
@@ -1207,6 +1209,7 @@ function pedStep(s, e, dt, p) {
     }
     return;
   }
+  if (e.hail && !(e.flee > 0)) { e.fromX = p.x; e.fromZ = p.z; face(); if (p.car && d2p < 30 * 30) bark(s, e, 'taxi', false, 6); return; }
   if (e.cower > 0) { e.cower -= dt; face(); if (e.cower <= 0) e.flee = 5; return; }
   if (e.call > 0) {
     e.call -= dt; face();
@@ -1289,7 +1292,44 @@ export function progress(s) {
   ];
   return { parts, pct: Math.floor(100 * parts.reduce((a, [, n, of]) => a + n / of, 0) / parts.length) };
 }
-export function sideText(s) { const r = s.side; if (!r) return ''; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
+// Fares: with no job on, driving a car, someone on a corner nearby flags you down. Stop beside them, take them to
+// the marker, stop. Pay is by distance, with a tip for being quick that shrinks with every dent on the way.
+export const FARE = { wait: 60, gap: 14, base: 40, perM: 0.5, tipMax: 60 };
+function fareSpot(s, from, lo, hi, salt) {
+  const opts = s.blocks.filter((b) => { const c = blockCenter(b), d = Math.hypot(c.x - from.x, c.z - from.z); return d > lo && d < hi; });
+  if (!opts.length) return null;
+  const b = opts[Math.floor(s.t * 13 + salt) % opts.length], k = Math.floor(s.t * 7 + salt) % 4; // a corner of that block, on the sidewalk
+  const c = blockCenter(b), q = [[-1, -1], [1, -1], [1, 1], [-1, 1]][k]; return { x: c.x + q[0] * (BLOCK / 2 + 1.5), z: c.z + q[1] * (BLOCK / 2 + 1.5) };
+}
+function fareStep(s, p, car, dt) {
+  const hail = s.hail ? s.ents.find((e) => e.id === s.hail) : null;
+  if (s.hail && (!hail || hail.hp <= 0 || !(hail.flee <= 0) || s.mission || s.side || hail.hailT < s.t)) { if (hail && hail.hp > 0 && hail.hail) { hail.hail = false; hail.remove = !(hail.flee > 0) && dist2(hail, p) > 60 * 60; } s.hail = null; s.fareCd = s.t + FARE.gap; }
+  if (!s.hail && !s.mission && !s.side && car && car.type !== 'bike' && car.type !== 'police' && !car.wrecked && (s.fareCd || 0) <= s.t && stars(p) < 2) {
+    const q = fareSpot(s, p, 45, 95, 1);
+    if (q) { const e = newEnt(s, { kind: 'ped', crew: 'civ', hp: 30, block: (blockAt(s, q.x, q.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.3, flee: 0, look: Math.floor(s.t * 31) % 100, x: q.x, z: q.z, hail: true, hailT: s.t + FARE.wait }); s.ents.push(e); s.hail = e.id; s.fx.push({ type: 'fare', state: 'hail', x: q.x, z: q.z }); }
+  }
+  if (hail && hail.hail && car && dist2(hail, car) < 36 && Math.abs(car.v) < 2 && car.type !== 'bike') {
+    if (stars(p) >= 2) { bark(s, hail, 'hot'); return; }
+    const to = fareSpot(s, hail, 140, 330, 5) || fareSpot(s, hail, 60, 600, 5); if (!to) return;
+    const dist = Math.hypot(to.x - hail.x, to.z - hail.z);
+    hail.remove = true; s.hail = null;
+    s.side = { kind: 'fare', t: 0, out: 0, target: to, dist, par: Math.round(dist / 12 + 8), hp0: car.hp, car: car.id };
+    s.fx.push({ type: 'fare', state: 'pick', dist }); log(s, `Fare: ${Math.round(dist)} m. Quick and clean gets a tip.`);
+  }
+}
+function fareRun(s, p, car, r, dt) {
+  r.t += dt; r.out = car && car.id === r.car ? 0 : r.out + dt;
+  const ride = s.cars.find((c) => c.id === r.car);
+  if (s.mission || p.hp <= 0 || r.out > 8 || !ride || ride.wrecked || ride.burn > 0 || r.t > r.par * 2.5) { s.side = null; s.fares = 0; s.fareCd = s.t + FARE.gap; s.fx.push({ type: 'fare', state: 'lost' }); log(s, 'The fare got out. No pay.'); return; }
+  if (car && dist2(r.target, car) < 100 && Math.abs(car.v) < 3) {
+    const dents = Math.max(0, r.hp0 - car.hp), tip = Math.max(0, Math.round(Math.min(FARE.tipMax, (r.par - r.t) * 3) - dents));
+    s.fares = (s.fares || 0) + 1; s.faresDone = (s.faresDone || 0) + 1; const streak = s.fares % 5 === 0 ? 100 : 0;
+    const pay = Math.round(FARE.base + r.dist * FARE.perM) + tip + streak; s.crews.player.cash += pay;
+    s.fx.push({ type: 'fare', state: 'drop', pay, tip, streak, n: s.fares }); log(s, `Fare paid: +$${pay}${tip ? ` (tip $${tip})` : ''}${streak ? ', five in a row bonus' : ''}`);
+    s.side = null; s.fareCd = s.t + 6;
+  }
+}
+export function sideText(s) { const r = s.side; if (!r) return ''; if (r.kind === 'fare') return `Drop the fare at the marker and stop. ${r.t.toFixed(0)} s (tip until ${r.par} s)`; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
 function sideStep(s, p, dt) {
   const cash = s.crews.player, car = p.car ? s.cars.find((c) => c.id === p.car) : null;
   // stashes, on foot
@@ -1316,7 +1356,9 @@ function sideStep(s, p, dt) {
     s.side = { kind: 'race', i, count: 0, t: 0, out: 0, target: RACES[i].points[0] }; s.raceLock = i;
     s.fx.push({ type: 'race', state: 'go', i, name: RACES[i].name }); log(s, `${RACES[i].name}. Go!`); break;
   }
+  fareStep(s, p, car, dt);
   const r = s.side; if (!r) return;
+  if (r.kind === 'fare') { fareRun(s, p, car, r, dt); return; }
   const Rc = RACES[r.i]; r.t += dt; r.out = car ? 0 : r.out + dt;
   if (s.mission || p.hp <= 0 || r.out > 6 || r.t > Rc.bronze * 1.6) { s.side = null; s.fx.push({ type: 'race', state: 'off', i: r.i }); log(s, `${Rc.name}: race over.`); return; }
   if (car && dist2(r.target, car) < 121) {
@@ -1339,12 +1381,14 @@ function sideStep(s, p, dt) {
 // Things to spend cash on. A shop is a counter on a street corner: stand at it and buy. A safehouse is bought
 // once: you come back there instead of your first block when you go down, you heal and the heat drains while
 // you stand at it with no police close, and a car of your own waits at its curb.
+export const ARMOR_MAX = 60;
 export const SHOP_ITEMS = {
   pistol: { name: 'Pistol, 24 rounds', cost: 150 },
   shotgun: { name: 'Shotgun, 10 shells', cost: 220 },
   bat: { name: 'Bat', cost: 80 },
   knuckles: { name: 'Brass knuckles', cost: 60 },
   patch: { name: 'Patch up (full health)', cost: 40 },
+  armor: { name: 'Body armor (soaks 60 damage)', cost: 200 },
 };
 export const SHOPS = [{ name: 'Pawn Counter', gx: 1, gz: 1 }, { name: 'Back Room Supply', gx: 4, gz: 3 }, { name: 'Dockside Locker', gx: 6, gz: 6 }];
 export const HOUSES = [
@@ -1365,6 +1409,7 @@ function buy(s, p, item) {
   const it = SHOP_ITEMS[item], cr = s.crews[p.crew];
   if (!it || shopAt(p) < 0 || p.car) return;
   if (item === 'patch' && p.hp >= p.max) { log(s, 'You are not hurt.'); return; }
+  if (item === 'armor' && p.armor >= ARMOR_MAX) { log(s, 'Your armor is already whole.'); return; }
   if ((item === 'bat' && p.hasBat) || (item === 'knuckles' && p.hasKnux)) { log(s, 'You already carry that.'); return; }
   if (cr.cash < it.cost) { log(s, `Need $${it.cost} for that.`); s.fx.push({ type: 'broke' }); return; }
   cr.cash -= it.cost;
@@ -1373,6 +1418,7 @@ function buy(s, p, item) {
   else if (item === 'bat') { p.hasBat = true; p.weapon = 'bat'; }
   else if (item === 'knuckles') { p.hasKnux = true; p.weapon = 'knuckles'; }
   else if (item === 'patch') p.hp = p.max;
+  else if (item === 'armor') p.armor = ARMOR_MAX;
   log(s, `Bought: ${it.name}. -$${it.cost}`); s.fx.push({ type: 'bought', item, cost: it.cost });
 }
 function buyHouse(s, p) {

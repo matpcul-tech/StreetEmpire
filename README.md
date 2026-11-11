@@ -37,6 +37,10 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **Fares.** Drive a car with no job on and someone on a nearby corner flags you down (`F` on the radar). Stop beside them, take them to the marker, stop. Pay is by distance, with a tip for speed that shrinks with every dent, and a bonus every fifth fare in a row.
+- **Body armor** at the shops: $200, soaks 60 damage before your health goes.
+- The RADIO button moved beside the pause button, clear of the message banner.
+
 - **Drive-bys.** FIRE in a car (or click, or F) shoots the pistol from the driver's seat at the nearest rival or officer, or straight ahead at a car.
 - **Police helicopter.** Four stars brings one overhead with a light on you. While it watches, heat does not cool. Outrun it, respray at a garage, or wait for it to break off and refuel.
 - **Progress.** The pause screen shows percent complete across jobs, turf, ramps, stashes, races and safehouses.
