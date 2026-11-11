@@ -458,8 +458,17 @@ const heliViz = (() => {
 const stashMarks = (() => { const g = new THREE.BoxGeometry(0.7, 0.45, 0.4), m = new THREE.MeshStandardMaterial({ color: 0xff8a1a, emissive: 0xff6a00, emissiveIntensity: 0.9, roughness: 0.6 }); return STASHES.map((q) => { const b = new THREE.Mesh(g, m); b.position.set(q.x, 0.6, q.z); b.visible = false; scene.add(b); return b; }); })();
 let lastSpot = '';
 const route = { pts: null, at: 0, tx: 0, tz: 0 };
+// The first time you come up to a new kind of marker, one line says what it is for.
+const hinted = new Set();
+function hintOnce(key, near, text) { if (hinted.has(key) || !near) return; hinted.add(key); if (!cine.active) showMsg(text); else hinted.delete(key); }
+const within = (list, p, r) => list.some((q) => (q.x - p.x) ** 2 + (q.z - p.z) ** 2 < r * r);
 function updateSpots(s, p, now) {
   heliViz(s, p, 1 / 60);
+  hintOnce('ramp', within(RAMPS, p, 30), p.car ? 'Stunt ramp: hit it fast and straight.' : 'Stunt ramp: bring a car, hit it fast and straight.');
+  hintOnce('race', within(RACES.map((r) => r.start), p, 22), 'Street race: stop a car on the yellow ring to start the clock.');
+  hintOnce('garage', within(GARAGES, p, 22), 'Garage: pull in slowly. $150 fixes and resprays the car, and loses the police if none are close.');
+  hintOnce('stash', within(STASHES.filter((_, k) => !(s.stashes || []).includes(k)), p, 14), 'A hidden stash. Twenty are tucked in alleys around the city.');
+  hintOnce('fire', !!p.car && p.ammo > 0, isTouch ? 'FIRE shoots your pistol from the car.' : 'Click or F shoots your pistol from the car.');
   { const found = s.stashes || []; stashMarks.forEach((b, k) => { b.visible = !found.includes(k) && (b.position.x - p.x) ** 2 + (b.position.z - p.z) ** 2 < 70 * 70; if (b.visible) { b.rotation.y = now / 500; b.position.y = 0.6 + Math.sin(now / 350 + k) * 0.12; } }); }
   for (const m of spotMarks) {
     const near = (m.q.x - p.x) ** 2 + (m.q.z - p.z) ** 2 < 110 * 110;
