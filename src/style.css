@@ -1,7 +1,7 @@
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:Impact,'Arial Black',sans-serif;color:#eee;touch-action:none;user-select:none;-webkit-user-select:none}
 #app canvas{display:block}
 #radar{position:fixed;top:max(10px,env(safe-area-inset-top));left:10px;width:200px;height:200px;border-radius:50%;border:3px solid #111;box-shadow:0 0 0 2px #555;pointer-events:none}
-#hud{position:fixed;top:max(8px,env(safe-area-inset-top));right:12px;text-align:right;pointer-events:none;text-shadow:2px 2px 0 #000,-1px -1px 0 #000}
+#hud{position:fixed;top:max(8px,env(safe-area-inset-top));right:12px;text-align:right;pointer-events:none;text-shadow:0 1px 3px rgba(0,0,0,.95),0 0 2px rgba(0,0,0,.9)}
 #clock{font-size:22px;color:#eee}
 #weapon{font-size:15px;color:#ddd;margin:2px 0}
 #cash{font-size:30px;color:#f4e6c4;letter-spacing:1px}
