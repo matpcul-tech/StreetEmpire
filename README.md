@@ -37,6 +37,8 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **Cleaner look.** Yard grass is fine-grained (the old texture read as blotchy camouflage), the daytime haze starts farther out, colors are a little richer with deeper blacks, and on landscape phones the district tag sits under the radar so it no longer covers the message banner.
+
 - **Sharper on phones.** Low quality (the phone default) now renders at up to twice the old resolution, smooths stair-step edges, and puts a soft shadow under people and cars. The resolution still steps down by itself if the frame rate drops.
 
 - Poles, lamp posts and tree trunks dissolve when they are close to the camera, so one between you and the camera no longer blocks the view. The first time you reach a ramp, race, garage or stash, one line says what it is for, and How to Play covers the new things around town.

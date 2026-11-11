@@ -10,14 +10,14 @@ function buildLut(N = 16) {
     let R = r / (N - 1), G = g / (N - 1), B = b / (N - 1);
     const L = 0.299 * R + 0.587 * G + 0.114 * B;
     // washed out: pull saturation down a little
-    R = L + (R - L) * 0.86; G = L + (G - L) * 0.86; B = L + (B - L) * 0.86;
+    R = L + (R - L) * 0.94; G = L + (G - L) * 0.94; B = L + (B - L) * 0.94;
     // soft S curve
     const curve = (x) => { const t = x * x * (3 - 2 * x); return x + (t - x) * 0.55; }; // high contrast S curve
     R = curve(R); G = curve(G); B = curve(B);
     // highlights warm, shadows teal, blacks lifted toward plum
     const hi = smooth(0.45, 1, L), lo = 1 - smooth(0, 0.4, L);
     R += 0.07 * hi + 0.02 * lo; G += 0.02 * hi + 0.005 * lo; B += -0.07 * hi - 0.01 * lo; // golden highlights, deep brown shadows
-    R = 0.03 + R * 0.97; G = 0.018 + G * 0.97; B = 0.01 + B * 0.95;
+    R = 0.016 + R * 0.984; G = 0.01 + G * 0.985; B = 0.006 + B * 0.97;
     const i = (r + g * N + b * N * N) * 4;
     data[i] = Math.min(255, Math.max(0, R * 255)); data[i + 1] = Math.min(255, Math.max(0, G * 255)); data[i + 2] = Math.min(255, Math.max(0, B * 255)); data[i + 3] = 255;
   }

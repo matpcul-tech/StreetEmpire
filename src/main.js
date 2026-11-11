@@ -112,7 +112,7 @@ function rebuildEnv() {
   envSun.copy(sunDir); sky2.material.uniforms.sunPosition.value.copy(sunDir);
   const rt = pmrem.fromScene(envScene, 0.04); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
 }
-scene.fog = new THREE.Fog(0xb87a52, 45, LOW ? 180 : 270);
+scene.fog = new THREE.Fog(0xb87a52, 45, LOW ? 215 : 270);
 const hemi = new THREE.HemisphereLight(0xc8a080, 0x4a3226, 0.9);
 const sun = new THREE.DirectionalLight(0xffa060, 2.2);
 if (!LOW) { sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; }
@@ -163,7 +163,7 @@ function updateDay() {
   // sidewalks and walls pale and flat; the hemisphere fill above stands in for it
   scene.environmentIntensity = 0.1 + 0.02 * day + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
-  scene.fog.near = 45 - 15 * night;
+  scene.fog.near = 62 - 32 * night; // the haze starts farther out by day, so the near street reads clean
   const baseExp = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark, bump = (composer ? 0 : 0.26) * (dark + 0.5 * dusk);
   renderer.toneMappingExposure = baseExp + bump;
   // characters: without a post pass keep most of the scene bump off them (it greyed skin and crew colors), smaller rim gain, mild saturation restore at dusk and night only

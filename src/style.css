@@ -253,3 +253,5 @@ body.cine-on #lcol{visibility:hidden}
 /* the radio button sits beside the pause button, clear of the message banner */
 @media (max-height:500px) and (orientation:landscape){#bRadio{top:auto;bottom:calc(var(--sb) + 10px);left:calc(50% + 34px)}}
 @media not ((max-height:500px) and (orientation:landscape)){#bRadio{top:calc(max(8px,env(safe-area-inset-top)) + 44px);left:50%;transform:translateX(-50%)}}
+/* landscape phones: the district tag sits under the radar, not across the message banner and the job line */
+@media (max-height:500px) and (orientation:landscape){#dtag{top:calc(var(--st) + 10px + var(--rad) + 6px);left:calc(var(--sl) + 10px);transform:none;max-width:42vw;overflow:hidden;text-overflow:ellipsis}}
