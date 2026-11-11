@@ -1937,19 +1937,31 @@ export function step(s, dt) {
     } else {
       // defenders guard their own block and at most three of them chase one foe
       const c = blockCenter(s.blocks[e.target]);
-      if (foe && e.role !== 'attacker' && e.role !== 'brawler') {
+      // a guard backing you up on a street call: run to the fight, take on whoever is still standing, and
+      // drop back to normal guard duty (the walk to the post, below) the moment the call ends
+      let helping = null;
+      if (e.backup) {
+        const call = s.calls && s.calls.active;
+        if (!call || call.id !== e.backup || call.phase !== 'fight') e.backup = null;
+        else { let hd = 1e12; for (const o of s.ents) if (o.streetId === e.backup && o.hp > 0) { const d = dist2(o, e); if (d < hd) { hd = d; helping = o; } }
+          if (helping && hd > 36) { goal = { x: helping.x, z: helping.z }; followSpeed = BACKUP.run; foe = null; }
+          else if (helping) foe = helping; }
+      }
+      if (helping) { if (foe) goal = foe; }
+      else if (foe && e.role !== 'attacker' && e.role !== 'brawler') {
         const inBlock = Math.abs(foe.x - c.x) < BLOCK / 2 + 2 && Math.abs(foe.z - c.z) < BLOCK / 2 + 2;
         const n = chasers.get(foe.id) || 0;
         if (!inBlock || n >= 3) foe = null; else chasers.set(foe.id, n + 1);
       }
       if (foe) goal = foe;
+      else if (helping) { /* still running to the fight: keep the goal set above */ }
       else if (e.guard) {
         // posts spread around the block, slow patrol between two corners of its side
         e.post ??= (e.id * 2.39996) % (Math.PI * 2);
         e.patT = (e.patT || 0) + dt * 0.12;
         const a = e.post + Math.sin(e.patT) * 0.5, r = BLOCK / 2 + 1.2;
         const spot = { x: c.x + Math.cos(a) * r, z: c.z + Math.sin(a) * r };
-        if (dist2(e, spot) > 2.2) { goal = spot; followSpeed = 1.6; }
+        if (dist2(e, spot) > 2.2) { goal = spot; followSpeed = dist2(e, spot) > 225 ? 4.5 : 1.6; } // jog home from far off (after backing you up), stroll on the beat
       }
       else if (dist2(e, c) > 16) goal = c;
     }
@@ -2192,6 +2204,7 @@ function placeCall(s, crew, homeId, x, z, o) {
 function endCall(s, why) {
   const c = ensureCalls(s), a = c.active;
   if (!a) return;
+  for (const e of s.ents) if (e.backup === a.id) e.backup = null; // the guard who came to help goes home
   for (const e of s.ents) if (e.streetId === a.id && !(why === 'win' && e.hp <= 0)) e.remove = true;
   s.ents = s.ents.filter((e) => !(e.remove && e.streetId === a.id));
   c.active = null;
@@ -2223,8 +2236,27 @@ function acceptCall(s, how) {
   if (!a || a.phase !== 'offer') return;
   a.phase = 'fight'; a.t = CALLS.fight;
   for (const e of s.ents) if (e.streetId === a.id) e.streetHold = false;
+  callBackup(s, a);
   if (a.heat && p) addHeat(s, p, a.heat);
   s.fx.push({ type: 'street', state: 'fight', kind: a.kind, how: how || 'choice' });
+}
+// Crew that shows up: when you step into a call, the nearest guard of yours runs over to fight beside you and
+// walks back to the post when it is over. A block's only guard leaves it just for trouble close by (within
+// BACKUP.near of the block's edge, a short run home); farther off, only a block that keeps another guard sends one.
+// Calls never start while a raid is gathering on your turf, so the short absence does not hand a block over.
+export const BACKUP = { range: 80, run: 8.5, near: 30 };
+function callBackup(s, a) {
+  let best = null, bd = BACKUP.range ** 2;
+  for (const e of s.ents) if (e.kind === 'npc' && e.crew === 'player' && e.role === 'defender' && e.hp > 0 && !e.backup) {
+    const b = s.blocks[e.target], c = blockCenter(b), d = dist2(e, a);
+    const ownCorner = Math.abs(a.x - c.x) < BLOCK / 2 + BACKUP.near && Math.abs(a.z - c.z) < BLOCK / 2 + BACKUP.near;
+    if (d < bd && (ownCorner || guardsOf(s, b).length >= 2)) { bd = d; best = e; }
+  }
+  if (!best) return;
+  best.backup = a.id;
+  const hustle = s.blocks[best.target].hustle;
+  log(s, `A guard from ${hustle} is coming to back you up.`);
+  s.fx.push({ type: 'backup', hustle });
 }
 function streetChoice(s, p, choice) {
   const a = ensureCalls(s).active;

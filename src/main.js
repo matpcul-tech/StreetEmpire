@@ -669,6 +669,7 @@ function handleFx(list) {
     else if (f.type === 'whiff') { /* swing sound already played */ }
     else if (f.type === 'tell' && d < 30) parts.burst(f.x, 0.15, f.z, 4, 1.2, { color: f.style === 'flank' ? 0x7ad7ff : f.style === 'retreat' ? 0xffe14a : 0xff5530, life: 0.35, g: 1, s: 0.12, up: 0.2 });
     else if (f.type === 'street' && f.state === 'win') pop(`+$${f.reward}`);
+    else if (f.type === 'backup') pop(`A guard from ${f.hustle} is coming to back you up`);
     else if (f.type === 'shot') {
       const sg = f.gun === 'shotgun', ry = f.ry ?? Math.atan2(f.tx - f.x, f.tz - f.z), mx = f.x + Math.sin(ry) * 0.8, mz = f.z + Math.cos(ry) * 0.8;
       if (sg) for (let k = -1; k <= 1; k++) tracer(f.x, f.z, f.x + Math.sin(ry + k * 0.12) * 13, f.z + Math.cos(ry + k * 0.12) * 13); else tracer(f.x, f.z, f.tx, f.tz);
