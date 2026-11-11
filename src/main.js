@@ -622,6 +622,7 @@ let hitStop = 0, shake = 0;
 let paused = false;
 function setPaused(on) {
   if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
+  if (!on) goFullscreen();
   if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); }
   if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
@@ -804,7 +805,15 @@ Promise.all([
   // build kit first, so the first cars and city sections already use its models
   Promise.all([loadKit(BASE, { low: LOW }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
 ]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = START_LABEL; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
-startBtn.onclick = () => { sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
+// On a phone the browser's address bar and the system buttons take a strip of the screen. Going fullscreen has to
+// happen inside a tap, so it is asked for on START and again whenever the game is resumed (the back gesture leaves
+// fullscreen). Browsers without it (iPhone Safari) ignore this; installing to the home screen is fullscreen there.
+function goFullscreen() {
+  if (!document.body.classList.contains('touch') || document.fullscreenElement || document.webkitFullscreenElement) return;
+  const el = document.documentElement, ask = el.requestFullscreen || el.webkitRequestFullscreen;
+  try { const r = ask && ask.call(el, { navigationUI: 'hide' }); if (r && r.catch) r.catch(() => {}); } catch { /* not allowed here: play on in the tab */ }
+}
+startBtn.onclick = () => { goFullscreen(); sfx.initAudio(); if (!loaded) { wantStart = true; startBtn.textContent = 'STARTING AS SOON AS IT LOADS...'; return; } startGame(); };
 function startGame() {
   if (started) return;
   sfx.initAudio();
