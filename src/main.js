@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeGradePass } from './grade.js';
 import { LocalSession } from './net.js';
-import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
+import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, BUILD_COST, BUILD_BOOST, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
 import { buildCity } from './city.js';
 import { loadKit } from './kit.js';
 import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './vehicles.js';
@@ -293,12 +293,13 @@ function context() {
   { const h = houseAt(p); if (h >= 0 && !ownsHouse(s, h)) return 'BUY'; }
   if (nearestCar(s, p, 5)) return 'CAR';
   const b = blockAt(s, p.x, p.z);
-  if (b && b.owner === p.crew && !b.upgraded) return 'UPGRADE';
+  if (b && b.owner === p.crew && !b.upgraded && guardsOf(s, b).length) return 'UPGRADE';
+  if (b && b.owner === p.crew && !b.built) return 'BUILD'; // after the guards are armed (or when there are none to arm)
   return null;
 }
 function doContext() {
   const c = context(); if (c === 'SHOP') { openShop(); return; } if (c === 'BUY') { session.send({ type: 'house' }); return; }
-  if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c === 'UPGRADE') { session.send({ type: 'upgrade' }); return; } if (c) { session.send({ type: 'car' }); return; }
+  if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c === 'UPGRADE') { session.send({ type: 'upgrade' }); return; } if (c === 'BUILD') { session.send({ type: 'build' }); return; } if (c) { session.send({ type: 'car' }); return; }
   // nothing in reach: say why and where to go instead of silently ignoring the key
   const s = S(), p = player(s), g = contactFor(s);
   if (g && s.mission) { const d = Math.hypot(g.x - p.x, g.z - p.z); showMsg(d < 4 ? `Finish ${s.mission.title} first.` : 'Nothing here. Follow the marker.'); }
@@ -314,6 +315,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyR') session.send({ type: 'recruit' });
   if (e.code === 'KeyT') session.send({ type: 'squad' });
   if (e.code === 'KeyU') session.send({ type: 'upgrade' });
+  if (e.code === 'KeyB') session.send({ type: 'build' });
   if (e.code === 'KeyQ') session.send({ type: 'weapon' });
   if (e.code === 'KeyM' && player(S()).car) radio.next();
   if (e.code === 'Space') { e.preventDefault(); session.send({ type: 'jump' }); }
@@ -689,6 +691,7 @@ function handleFx(list) {
     else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { radio.news(`News: a corner in ${hood()} is under new management. Orange is in.`); const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
     else if (f.type === 'stash' && (!f.stolen || f.crew === 'player')) pop(`+$${f.amt} ${f.hustle}`);
     else if (f.type === 'upgrade') pop(`${f.n} guard${f.n > 1 ? 's' : ''} armed`);
+    else if (f.type === 'built') { pop(`${f.hustle} built up: ${BUILD_BOOST}x income`); sfx.chime(true); }
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
@@ -1199,7 +1202,7 @@ function frame(now) {
   const ctxName = context(); const ctxBike = ctxName === 'EXIT' ? !!s.cars.find((c) => c.id === p.car && c.type === 'bike') : ctxName === 'CAR' && (nearestCar(s, p, 5) || {}).type === 'bike';
   const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName === 'UPGRADE' ? 'ARM' : ctxName;
   // desktop prompt for the E key, so walking up to Unc or a car says what E will do
-  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : '';
+  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : ctxName === 'BUILD' ? `E  Build up the hustle ($${BUILD_COST}, ${BUILD_BOOST}x income)` : '';
   if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
   $('bFire').textContent = p.ammo > 0 ? 'FIRE ' + p.ammo : 'NO AMMO';
@@ -1214,7 +1217,7 @@ function frame(now) {
   $('mtitle').textContent = m ? m.title + ':' : s.side ? (s.side.kind === 'fare' ? 'Fare:' : 'Race:') : '';
   $('mtext').textContent = missionText(s) || sideText(s);
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
-  if (started && here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
+  if (started && here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.built ? ', built up' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }
   if (dtagT > 0 && (dtagT -= rdt) <= 0) $('dtag').classList.remove('show');
   let ri = 0;
   const callMark = s.calls && s.calls.active;

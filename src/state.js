@@ -11,6 +11,8 @@ export const ZONE_R = 7;       // capture zone radius at block center
 export const CAPTURE_TIME = 6; // seconds to hold a zone
 export const RECRUIT_COST = 100;
 export const UPGRADE_COST = 80;  // bats and extra health for one block's guards
+export const BUILD_COST = 200;   // build up one block's hustle, once: it earns BUILD_BOOST times as much
+export const BUILD_BOOST = 2;    // rivals go for built-up blocks first, and the work is lost if the block falls
 export const UPGRADE_HP = 40;
 export const RAID_GATHER = 10;   // seconds a rival crew waits before hitting your block
 export const LANE = 3;         // lane offset from street centerline
@@ -299,7 +301,7 @@ export const squadOf = (s, p) => s.ents.filter((e) => e.crew === p.crew && e.rol
 export const guardsOf = (s, b) => s.ents.filter((e) => e.kind === 'npc' && e.crew === b.owner && e.role === 'defender' && e.target === b.id && e.hp > 0);
 // Hustle cash piles up on the block. More guards on post, more of the rate.
 // 0 guards: 0.4x. 3 guards: 1.0x. 1 guard (a fresh block): 0.6x.
-export function stashRate(s, b) { return b.rate * (0.4 + 0.2 * guardsOf(s, b).length); }
+export function stashRate(s, b) { return b.rate * (0.4 + 0.2 * guardsOf(s, b).length) * (b.built ? BUILD_BOOST : 1); }
 function armGuard(e, b) {
   if (!b || b.upgraded !== 'bat' || e.upgraded) return;
   e.weapon = 'bat'; e.max += UPGRADE_HP; e.hp += UPGRADE_HP; e.upgraded = true;
@@ -411,6 +413,18 @@ export function applyAction(s, playerId, a) {
     const b = a.block != null ? s.blocks[a.block] : blockAt(s, p.x, p.z);
     if (!b || b.owner !== p.crew) log(s, 'Nothing of yours to collect here.');
     else if (pocketStash(s, b, p.crew, true) < 1) log(s, `${b.hustle} stash is empty.`);
+  } else if (a.type === 'build') {
+    // Put money into the block's hustle, once. It earns double from then on, which makes it worth guarding:
+    // rivals pick built-up blocks first (aiThink), and a block that falls loses the work.
+    const b = blockAt(s, p.x, p.z), cr = s.crews[p.crew];
+    if (!b || b.owner !== p.crew) log(s, 'Stand in one of your blocks to build up its hustle.');
+    else if (b.built) log(s, `${b.hustle} is already built up.`);
+    else if (cr.cash < BUILD_COST) log(s, `Need $${BUILD_COST} to build up ${b.hustle}.`);
+    else {
+      cr.cash -= BUILD_COST; b.built = true;
+      log(s, `${b.hustle} is built up. It earns ${BUILD_BOOST}x now. Keep it guarded. -$${BUILD_COST}`);
+      s.fx.push({ type: 'built', block: b.id, hustle: b.hustle });
+    }
   } else if (a.type === 'upgrade') {
     const b = blockAt(s, p.x, p.z), cr = s.crews[p.crew];
     if (!b || b.owner !== p.crew) log(s, 'Stand in one of your blocks to upgrade guards.');
@@ -1939,7 +1953,8 @@ export function step(s, dt) {
       if (b.capBy !== k) { b.capBy = k; b.capT = 0; }
       b.capT += dt;
       if (b.capT >= CAPTURE_TIME) {
-        const prev = b.owner; b.owner = k; b.capBy = null; b.capT = 0; b.raid = null; b.upgraded = null;
+        const prev = b.owner; if (b.built && prev === 'player') log(s, `The work you put into ${b.hustle} is gone.`);
+        b.owner = k; b.capBy = null; b.capT = 0; b.raid = null; b.upgraded = null; b.built = null;
         s.crews[k].rep += 25;
         const loot = b.stash || 0;
         if (loot > 0 && s.crews[k]) {
@@ -2284,7 +2299,7 @@ function aiThink(s, k, dt) {
     const options = [];
     for (const b of own) for (const n of neighbors(s, b)) if (n.owner !== k) options.push({ from: b, to: n });
     if (!options.length) return;
-    const score = (o) => s.ents.filter((e) => e.crew === o.to.owner && e.hp > 0 && dist2(e, blockCenter(o.to)) < (PITCH / 2) ** 2).length + (o.to.owner === 'player' ? -0.5 : 0) + R(s);
+    const score = (o) => s.ents.filter((e) => e.crew === o.to.owner && e.hp > 0 && dist2(e, blockCenter(o.to)) < (PITCH / 2) ** 2).length + (o.to.owner === 'player' ? -0.5 : 0) + (o.to.built ? -1.5 : 0) + R(s); // a built-up block is the prize: about one and a half defenders' worth of pull
     options.sort((a, b) => score(a) - score(b));
     const o = options[0];
     const n = Math.min(4, cap - units, Math.floor(cr.cash / 50));
@@ -2296,7 +2311,7 @@ function aiThink(s, k, dt) {
       if (!o.to.raid) {
         o.to.raid = { crew: k, eta: RAID_GATHER, from: o.from.id };
         s.fx.push({ type: 'raid', block: o.to.id, eta: RAID_GATHER, crew: k });
-        log(s, `${CREWS[k].name} are gathering to hit ${o.to.hustle}. ${RAID_GATHER}s out.`);
+        log(s, `${CREWS[k].name} are gathering to hit ${o.to.built ? 'your built-up ' : ''}${o.to.hustle}. ${RAID_GATHER}s out.`);
       }
       gather = o.to.raid ? o.to.raid.eta : 0;
     }

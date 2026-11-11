@@ -23,4 +23,6 @@ Street calls do not pull those guards in on purpose. The slice to build: when yo
 
 Already in the sim: `stashRate` (more guards, more income), rep on a capture and on a knockout, five missions in `MISSIONS`, guard upgrades, and a win when rival blocks are gone and you hold enough turf.
 
-The slice to build: one reason to keep a single block after the missions. Spend rep or stash on that block's hustle (the names already exist) so the rate climbs once, and so a raid warning (`aiThink`) threatens something you improved. No skill tree and no second currency.
+Built (first step): the `build` action. Standing on your block, $200 (`BUILD_COST`) builds up its hustle once and doubles what it earns (`BUILD_BOOST` in `stashRate`). Rivals pick built-up blocks first in `aiThink`, the raid warning names them, and a block that falls loses the work. BUILD shows on the context button after the guards are armed; B on a keyboard.
+
+Still open: the slice to build: one reason to keep a single block after the missions. Spend rep or stash on that block's hustle (the names already exist) so the rate climbs once, and so a raid warning (`aiThink`) threatens something you improved. No skill tree and no second currency.
