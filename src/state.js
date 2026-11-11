@@ -1329,7 +1329,46 @@ function fareRun(s, p, car, r, dt) {
     s.side = null; s.fareCd = s.t + 6;
   }
 }
-export function sideText(s) { const r = s.side; if (!r) return ''; if (r.kind === 'fare') return `Drop the fare at the marker and stop. ${r.t.toFixed(0)} s (tip until ${r.par} s)`; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
+// Courier runs: the bike's own hustle. On a bike with no job on, one of your blocks has a package waiting at the
+// curb. Stop beside it to load, ride it to the marker and stop. Pay is by distance, with a bonus for beating the
+// clock that shrinks with every dent. A hard crash on the way does not lose the package; getting off the bike does.
+export const COURIER = { wait: 75, gap: 12, base: 60, perM: 0.6, bonusMax: 90 };
+function courierStep(s, p, car, dt) {
+  const k = s.pkg, bike = car && car.type === 'bike' && !car.wrecked ? car : null;
+  if (k && (s.mission || s.side || k.until < s.t || s.blocks[k.block].owner !== 'player')) { s.pkg = null; s.pkgCd = s.t + COURIER.gap; return; }
+  if (!k && bike && !s.mission && !s.side && (s.pkgCd || 0) <= s.t && stars(p) < 2) {
+    // the nearest block you hold that is not the one you are standing on
+    const own = s.blocks.filter((b) => b.owner === 'player').map((b) => ({ b, d: Math.hypot(blockCenter(b).x - p.x, blockCenter(b).z - p.z) })).filter((o) => o.d > 25).sort((a, b) => a.d - b.d)[0]
+      || s.blocks.filter((b) => b.owner === 'player').map((b) => ({ b, d: 0 }))[0];
+    if (!own) return;
+    const c = blockCenter(own.b), q = [[-1, -1], [1, -1], [1, 1], [-1, 1]][Math.floor(s.t * 7) % 4]; // a corner of the block, at the curb
+    s.pkg = { x: c.x + q[0] * (BLOCK / 2 + 1.5), z: c.z + q[1] * (BLOCK / 2 + 1.5), block: own.b.id, until: s.t + COURIER.wait };
+    s.fx.push({ type: 'courier', state: 'offer', hustle: own.b.hustle }); log(s, `${own.b.hustle} has a package to run. Ride over (P on the radar).`);
+    return;
+  }
+  if (k && bike && dist2(k, bike) < 49 && Math.abs(bike.v) < 3) {
+    if (stars(p) >= 2) return; // nobody hands a package to a wanted rider
+    const to = fareSpot(s, k, 150, 340, 9) || fareSpot(s, k, 60, 600, 9); if (!to) return;
+    const dist = Math.hypot(to.x - k.x, to.z - k.z), hustle = s.blocks[k.block].hustle;
+    s.pkg = null;
+    s.side = { kind: 'courier', t: 0, out: 0, target: to, dist, par: Math.round(dist / 15 + 6), hp0: bike.hp, car: bike.id, hustle };
+    s.fx.push({ type: 'courier', state: 'pick', dist, hustle }); log(s, `Package from ${hustle}: ${Math.round(dist)} m. Fast and clean pays extra.`);
+  }
+}
+function courierRun(s, p, car, r, dt) {
+  r.t += dt; r.out = car && car.id === r.car ? 0 : r.out + dt;
+  const ride = s.cars.find((c) => c.id === r.car);
+  if (s.mission || p.hp <= 0 || r.out > 8 || !ride || ride.wrecked || r.t > r.par * 2.5) { s.side = null; s.runs = 0; s.pkgCd = s.t + COURIER.gap; s.fx.push({ type: 'courier', state: 'lost' }); log(s, 'The package is gone. No pay.'); return; }
+  if (car && dist2(r.target, car) < 100 && Math.abs(car.v) < 3) {
+    const dents = Math.max(0, r.hp0 - car.hp), bonus = Math.max(0, Math.round(Math.min(COURIER.bonusMax, (r.par - r.t) * 5) - dents));
+    s.runs = (s.runs || 0) + 1; s.runsDone = (s.runsDone || 0) + 1; const streak = s.runs % 5 === 0 ? 150 : 0;
+    const pay = Math.round(COURIER.base + r.dist * COURIER.perM) + bonus + streak; s.crews.player.cash += pay;
+    if (s.runs % 5 === 0) s.crews.player.rep += 2;
+    s.fx.push({ type: 'courier', state: 'drop', pay, bonus, streak, n: s.runs }); log(s, `Package delivered: +$${pay}${bonus ? ` (speed bonus $${bonus})` : ''}${streak ? ', five in a row bonus' : ''}`);
+    s.side = null; s.pkgCd = s.t + 6;
+  }
+}
+export function sideText(s) { const r = s.side; if (!r) return ''; if (r.kind === 'courier') return `Ride the package to the marker and stop. ${r.t.toFixed(0)} s (bonus until ${r.par} s)`; if (r.kind === 'fare') return `Drop the fare at the marker and stop. ${r.t.toFixed(0)} s (tip until ${r.par} s)`; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
 function sideStep(s, p, dt) {
   const cash = s.crews.player, car = p.car ? s.cars.find((c) => c.id === p.car) : null;
   // stashes, on foot
@@ -1357,8 +1396,10 @@ function sideStep(s, p, dt) {
     s.fx.push({ type: 'race', state: 'go', i, name: RACES[i].name }); log(s, `${RACES[i].name}. Go!`); break;
   }
   fareStep(s, p, car, dt);
+  courierStep(s, p, car, dt);
   const r = s.side; if (!r) return;
   if (r.kind === 'fare') { fareRun(s, p, car, r, dt); return; }
+  if (r.kind === 'courier') { courierRun(s, p, car, r, dt); return; }
   const Rc = RACES[r.i]; r.t += dt; r.out = car ? 0 : r.out + dt;
   if (s.mission || p.hp <= 0 || r.out > 6 || r.t > Rc.bronze * 1.6) { s.side = null; s.fx.push({ type: 'race', state: 'off', i: r.i }); log(s, `${Rc.name}: race over.`); return; }
   if (car && dist2(r.target, car) < 121) {

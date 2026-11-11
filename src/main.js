@@ -556,7 +556,7 @@ function drawRadar(now) {
     } }
   // shops ($) and safehouses (H) on the radar, upright whatever way the map is turned
   const tag = (q, ch, col) => { if (Math.abs(q.x - p.x) > 130 || Math.abs(q.z - p.z) > 130) return; dot(q.x, q.z, '#000', 8); dot(q.x, q.z, col, 6.5); ctx.save(); ctx.translate(q.x, q.z); ctx.rotate(Math.PI - yaw); ctx.scale(1 / sc, 1 / sc); ctx.font = 'bold 11px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000'; ctx.fillText(ch, 0, 0.5); ctx.restore(); };
-  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); if (s.heli) tag(s.heli, '+', '#7ad7ff'); if (s.hail && p.car) { const h = s.ents.find((e) => e.id === s.hail); if (h) tag(h, 'F', '#ffe14a'); } RACES.forEach((r) => tag(r.start, 'R', '#ffcc33')); GARAGES.forEach((g) => tag(g, 'G', '#ff5fa2')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
+  SHOPS.forEach((_, i) => tag(shopSpot(i), '$', '#39d98a')); HOUSES.forEach((_, i) => tag(houseSpot(i), 'H', ownsHouse(s, i) ? '#ff8a1a' : '#4aa3ff')); if (s.heli) tag(s.heli, '+', '#7ad7ff'); if (s.hail && p.car) { const h = s.ents.find((e) => e.id === s.hail); if (h) tag(h, 'F', '#ffe14a'); } if (s.pkg && p.car) tag(s.pkg, 'P', '#ff8a1a'); RACES.forEach((r) => tag(r.start, 'R', '#ffcc33')); GARAGES.forEach((g) => tag(g, 'G', '#ff5fa2')); RAMPS.forEach((r, i) => tag(r, '^', (s.jumps || []).includes(i) ? '#8a8a8a' : '#ffcc33'));
   for (const e of s.ents) {
     if (e.hp <= 0 || Math.abs(e.x - p.x) > 110 || Math.abs(e.z - p.z) > 110) continue;
     if (e.kind === 'npc') dot(e.x, e.z, CREWS[e.crew].css, 3);
@@ -609,7 +609,7 @@ function streetTarget(s) {
   return { x: a.x, z: a.z, label: 'CALL' };
 }
 function missionTarget(s) {
-  const m = s.mission; if (!m) return s.side ? s.side.target : null;
+  const m = s.mission; if (!m) return s.side ? s.side.target : s.pkg && player(s).car ? s.pkg : null; // a waiting package gets the marker while you ride
   if (m.target) return m.target;
   if (m.kind === 'chop' && m.stage === 0) { const p = player(s); let best = null, bd = 1e12; for (const c of s.cars) if (c.type === 'muscle' && !c.wrecked) { const d = (c.x - p.x) ** 2 + (c.z - p.z) ** 2; if (d < bd) { bd = d; best = c; } } return best; }
   if (m.kind === 'beat') { const p = player(s); let best = null, bd = 1e12; for (const e of s.ents) if (e.crew === m.crew && e.hp > 0) { const d = (e.x - p.x) ** 2 + (e.z - p.z) ** 2; if (d < bd) { bd = d; best = e; } } return best; }
@@ -692,6 +692,7 @@ function handleFx(list) {
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
+    else if (f.type === 'courier') { if (f.state === 'offer') pop(`${f.hustle} has a package to run (P on the radar)`); else if (f.state === 'pick') { showBig('PACKAGE LOADED'); sfx.chime(true); } else if (f.state === 'drop') { showBig(`DELIVERED +$${f.pay}`); if (f.streak) pop('Five in a row: +$150'); sfx.chime(true); } else { showBig('PACKAGE LOST', true); sfx.chime(false); } }
     else if (f.type === 'fare') { if (f.state === 'hail') pop('Someone nearby needs a ride (F on the radar)'); else if (f.state === 'pick') { showBig('FARE ON BOARD'); sfx.chime(true); } else if (f.state === 'drop') { showBig(`FARE PAID +$${f.pay}`); if (f.streak) pop('Five in a row: +$100'); sfx.chime(true); } else { showBig('FARE LOST', true); sfx.chime(false); } }
     else if (f.type === 'heli') { if (f.state === 'in') { showBig('HELICOPTER INBOUND', true); radio.news('Police have a helicopter up tonight. Wave if you see it.'); } else if (f.fuel) pop('The helicopter is refueling: 30 s'); }
     else if (f.type === 'found') { pop(`+$${f.pay} stash ${f.n} of ${f.of}`); sfx.chime(true); if (f.all) showBig('EVERY STASH FOUND'); parts.burst(f.x, 0.8, f.z, 14, 3, { color: 0xffb040, life: 0.6, g: 3, s: 0.08, up: 1.2 }); }
@@ -1211,7 +1212,7 @@ function frame(now) {
   else if (raidB) { capEl.textContent = `${CREWS[raidB.raid.crew].name} raid on ${raidB.hustle}: ${Math.ceil(raidB.raid.eta)}s`; capEl.classList.add('raid'); }
   else { capEl.textContent = ''; capEl.classList.remove('raid'); }
   const m = s.mission;
-  $('mtitle').textContent = m ? m.title + ':' : s.side ? (s.side.kind === 'fare' ? 'Fare:' : 'Race:') : '';
+  $('mtitle').textContent = m ? m.title + ':' : s.side ? (s.side.kind === 'fare' ? 'Fare:' : s.side.kind === 'courier' ? 'Courier:' : 'Race:') : '';
   $('mtext').textContent = missionText(s) || sideText(s);
   $('mtimer').textContent = m && m.timer > 0 ? Math.ceil(m.timer) + 's' : '';
   if (started && here !== lastHere) { lastHere = here; if (here) { const gn = here.owner === 'player' ? guardsOf(s, here).length : 0; const guardNote = here.owner === 'player' ? `, ${gn} guard${gn === 1 ? '' : 's'}${here.upgraded ? ', armed' : ''}${here.stash >= 1 ? `, $${Math.floor(here.stash)} stashed` : ''}` : ''; $('dtag').textContent = `${DISTRICTS[districtOf(here)]}: ${here.hustle}${guardNote}`; $('dtag').classList.add('show'); dtagT = 2.2; } }

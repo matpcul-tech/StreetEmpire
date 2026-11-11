@@ -106,4 +106,37 @@ const put = (c, q) => { c.x = q.x; c.z = q.z; c.v = 0; };
   const s2 = G.migrate(JSON.parse(JSON.stringify(s))); G.step(s2, DT);
   check('found stashes survive a save and load', s2.stashes.length === 1);
 }
+{ // courier runs, on a bike
+  seen.length = 0; const { s, p } = world();
+  const bike = s.cars.filter((c) => c.type === 'bike').sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+  p.x = bike.x - 1.1; p.z = bike.z; G.applyAction(s, p.id, { type: 'car' }); if (p.car !== bike.id) throw new Error('not on the bike');
+  tick(s, p, 3);
+  const k = s.pkg;
+  check('on a bike with no job, one of your blocks has a package', !!k && s.blocks[k.block].owner === 'player' && !G.insideBuilding(k.x, k.z, 0.4) && got('courier')[0].state === 'offer');
+  check('no taxi fare is offered to a bike', !s.hail);
+  const cash0 = s.crews.player.cash; put(bike, { x: k.x + 3, z: k.z + 3 }); tick(s, p, 2);
+  check(`stopping beside it loads the package (${s.side && Math.round(s.side.dist)} m, bonus until ${s.side && s.side.par} s)`, !!s.side && s.side.kind === 'courier' && !s.pkg && s.side.dist > 100 && !G.insideBuilding(s.side.target.x, s.side.target.z, 0.4));
+  check('the tracker says what to do', /package/i.test(G.sideText(s)));
+  const tg = s.side.target; tick(s, p, 30 * 4); put(bike, { x: tg.x + 3, z: tg.z + 3 }); tick(s, p, 2);
+  const d = got('courier').find((f) => f.state === 'drop');
+  check(`delivering pays, with a bonus for speed (+$${d && d.pay}, bonus $${d && d.bonus})`, !s.side && !!d && d.bonus > 0 && d.pay > 120 && s.crews.player.cash >= cash0 + d.pay && s.crews.player.cash < cash0 + d.pay + 40); // the block's own stash is pocketed on the way through
+  // late and dented: base pay only
+  s.pkgCd = 0; tick(s, p, 3); put(bike, { x: s.pkg.x + 3, z: s.pkg.z + 3 }); tick(s, p, 2); const side = s.side; bike.hp -= 30; side.t = side.par + 5; put(bike, { x: side.target.x + 3, z: side.target.z + 3 }); seen.length = 0; tick(s, p, 2);
+  const d2 = got('courier').find((f) => f.state === 'drop'); check(`late and dented: base pay only (+$${d2 && d2.pay})`, !!d2 && d2.bonus === 0);
+  // getting off loses it
+  s.pkgCd = 0; tick(s, p, 3); put(bike, { x: s.pkg.x + 3, z: s.pkg.z + 3 }); tick(s, p, 2); seen.length = 0;
+  G.applyAction(s, p.id, { type: 'car' }); for (let i = 0; i < 9 / DT; i++) { G.movePlayer(s, p, 0, 0, false, DT); G.step(s, DT); drain(s); }
+  check('leaving the bike loses the package', !s.side && got('courier').some((f) => f.state === 'lost'));
+  // five in a row
+  const w = world(), b2 = w.s.cars.find((c) => c.type === 'bike'); w.p.x = b2.x - 1.1; w.p.z = b2.z; G.applyAction(w.s, w.p.id, { type: 'car' }); seen.length = 0;
+  for (let n = 0; n < 5; n++) { w.s.pkgCd = 0; tick(w.s, w.p, 3); put(b2, { x: w.s.pkg.x + 3, z: w.s.pkg.z + 3 }); tick(w.s, w.p, 2); const t2 = w.s.side.target; put(b2, { x: t2.x + 3, z: t2.z + 3 }); tick(w.s, w.p, 2); }
+  const drops = got('courier').filter((f) => f.state === 'drop');
+  check('the fifth run in a row pays a $150 streak bonus', drops.length === 5 && drops[4].streak === 150 && drops.slice(0, 4).every((f) => !f.streak));
+  // a car gets fares, not packages; a wanted rider gets nothing
+  const w2 = world(), c3 = mount(w2.s, w2.p); put(c3, { x: G.lineCoord(4), z: G.lineCoord(4) + 20 }); tick(w2.s, w2.p, 3);
+  check('a car is offered fares, not packages', !w2.s.pkg && !!w2.s.hail);
+  const w3 = world(), b3 = w3.s.cars.find((c) => c.type === 'bike'); w3.p.x = b3.x - 1.1; w3.p.z = b3.z; G.applyAction(w3.s, w3.p.id, { type: 'car' });
+  for (let i = 0; i < 5; i++) { w3.p.heat = 60; G.movePlayer(w3.s, w3.p, 0, 0, true, DT); G.step(w3.s, DT); }
+  check('no package for a wanted rider', !w3.s.pkg);
+}
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nSIDE TESTS PASSED'); process.exit(fails.length ? 1 : 0);
