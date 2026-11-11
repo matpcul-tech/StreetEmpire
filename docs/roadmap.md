@@ -11,7 +11,9 @@ This is the next-slice list after the combat and street-call slice. It is ground
 
 Already in the sim: `driveCar` (speed-sensitive steering, handbrake drift, `slip` and `skid`), carjack heat, crash damage, traffic in `trafficStep`, the Chop Job mission, squad members boarding the car you drive, and police cruisers in `policeStep`. The phone already has GAS, BRAKE, and DRIFT.
 
-The slice to build: a short drive that pays off on the block you already hold. One hustle hop or a marked loop that uses the existing chop-shop drop pattern (`missionCheck` / `m.target`), with crash damage you can read and a payout into the block stash. Do not add cars. Do not replace `driveCar`.
+Built: courier runs for bikes (`courierStep`, `courierRun`, `COURIER`). A block you hold has a package at the curb; ride it to a marker for pay by distance plus a speed bonus that dents eat. A built-up block's packages pay 1.5 times as much, and every fifth run in a row pays a streak bonus. Cars keep the taxi fares.
+
+Still open: the slice to build: a short drive that pays off on the block you already hold. One hustle hop or a marked loop that uses the existing chop-shop drop pattern (`missionCheck` / `m.target`), with crash damage you can read and a payout into the block stash. Do not add cars. Do not replace `driveCar`.
 
 ## Next: helpful crew
 

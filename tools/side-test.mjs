@@ -132,6 +132,12 @@ const put = (c, q) => { c.x = q.x; c.z = q.z; c.v = 0; };
   for (let n = 0; n < 5; n++) { w.s.pkgCd = 0; tick(w.s, w.p, 3); put(b2, { x: w.s.pkg.x + 3, z: w.s.pkg.z + 3 }); tick(w.s, w.p, 2); const t2 = w.s.side.target; put(b2, { x: t2.x + 3, z: t2.z + 3 }); tick(w.s, w.p, 2); }
   const drops = got('courier').filter((f) => f.state === 'drop');
   check('the fifth run in a row pays a $150 streak bonus', drops.length === 5 && drops[4].streak === 150 && drops.slice(0, 4).every((f) => !f.streak));
+  { // a built-up block's packages are worth more
+    const run = (built) => { const v = world(), bk = v.s.cars.find((c) => c.type === 'bike'); v.p.x = bk.x - 1.1; v.p.z = bk.z; G.applyAction(v.s, v.p.id, { type: 'car' }); seen.length = 0; tick(v.s, v.p, 3);
+      v.s.blocks[v.s.pkg.block].built = built; put(bk, { x: v.s.pkg.x + 3, z: v.s.pkg.z + 3 }); tick(v.s, v.p, 2); const sd = v.s.side; sd.t = sd.par + 5; put(bk, { x: sd.target.x + 3, z: sd.target.z + 3 }); tick(v.s, v.p, 2); return got('courier').find((f) => f.state === 'drop').pay; };
+    const plain = run(false), rich = run(true);
+    check(`a built-up block's package pays half again as much ($${plain} against $${rich})`, Math.abs(rich - plain * G.COURIER.built) <= 1);
+  }
   // a car gets fares, not packages; a wanted rider gets nothing
   const w2 = world(), c3 = mount(w2.s, w2.p); put(c3, { x: G.lineCoord(4), z: G.lineCoord(4) + 20 }); tick(w2.s, w2.p, 3);
   check('a car is offered fares, not packages', !w2.s.pkg && !!w2.s.hail);
