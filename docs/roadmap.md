@@ -19,7 +19,9 @@ Still open: the slice to build: a short drive that pays off on the block you alr
 
 Already in the sim: recruits at `RECRUIT_COST`, a squad of `SQUAD_MAX` in formation, `guardsOf` on a held block, the bat upgrade (`armGuard`), followers who only swing at foes next to you, and rival raids with `RAID_GATHER`.
 
-Street calls do not pull those guards in on purpose. The slice to build: when you step into a call, one nearby guard or the squad can move to you and take a striker slot under the same `CALLS.strikeCap`, then walk back to the post. Formation and the "recruits never hit you" rule stay.
+Built: `callBackup`. When you step into a call, the nearest defender within `BACKUP.range` runs to the fight, takes on whoever is standing, and returns to the block when the call ends. A block's only defender leaves just for a call within `BACKUP.near` of the block's edge; farther off, only a block that keeps another defender sends one.
+
+Earlier note: street calls did not pull those guards in on purpose. The slice was: when you step into a call, one nearby guard or the squad can move to you and take a striker slot under the same `CALLS.strikeCap`, then walk back to the post. Formation and the "recruits never hit you" rule stay.
 
 ## Next: worthwhile progression
 

@@ -270,5 +270,44 @@ check('fists recover faster than the bat', G.WEAPONS.fists.cd < G.WEAPONS.bat.cd
   check('a save without call fields still steps', !threw && G.player(s2).hp > 0);
 }
 
+{ // crew that shows up: a guard backs you up on a street call, then goes home
+  const guardsNear = (s, b) => G.guardsOf(s, b);
+  const setup = (extraGuards) => {
+    const { s, p } = fresh(); const home = s.blocks.find((b) => b.owner === 'player');
+    for (const e of s.ents) if (e.kind === 'npc' && e.crew !== 'player') e.hp = 0;
+    for (let i = 0; i < extraGuards; i++) { const u = G.spawnUnit(s, 'player', 'defender', home.id); u.guard = true; }
+    const offer = untilOffer(s, p); return { s, p, home, offer };
+  };
+  {
+    const { s, p, home, offer } = setup(1);
+    const before = guardsNear(s, home).length;
+    check('no guard moves while the call is only an offer', before >= 2 && !s.ents.some((e) => e.backup));
+    s.fx.length = 0; G.applyAction(s, p.id, { type: 'street', choice: 'in' });
+    const g = s.ents.find((e) => e.backup);
+    check('stepping in sends one guard to back you up', !!g && s.ents.filter((e) => e.backup).length === 1 && s.fx.some((f) => f.type === 'backup') && g.backup === offer.id);
+    g.hp = g.max = 500; // the player stands still in this test, so the guard takes all three alone
+    const d0 = Math.hypot(g.x - offer.x, g.z - offer.z);
+    const foes = () => streetEnts(s, offer.id), hp0 = foes().reduce((a, e) => a + e.hp, 0);
+    step(s, p, Math.round(6 / DT));
+    const near = Math.min(...foes().map((e) => Math.hypot(e.x - g.x, e.z - g.z)));
+    check(`the guard runs to the fight (${d0.toFixed(0)} m away at the start, ${near.toFixed(1)} m from a foe after 6 s)`, g.hp > 0 ? near < 4 : true);
+    step(s, p, Math.round(8 / DT));
+    check('and hurts the crew you are fighting', foes().reduce((a, e) => a + e.hp, 0) < hp0);
+    check('the guard still counts as that block\'s guard', guardsNear(s, home).includes(g) || g.hp <= 0);
+    for (const e of foes()) e.hp = 0; step(s, p, 3);
+    check('the call is won and the guard is released', !s.calls.active && !g.backup);
+    const c = G.blockCenter(home); step(s, p, Math.round(25 / DT));
+    check(`the guard walks back to the block (${Math.hypot(g.x - c.x, g.z - c.z).toFixed(0)} m from its center)`, g.hp <= 0 || Math.hypot(g.x - c.x, g.z - c.z) < G.BLOCK / 2 + 6);
+  }
+  {
+    // a lone guard on a far block stays put: helping must never leave a block empty
+    const { s, p, home } = setup(0);
+    const far = s.blocks.find((b) => b.owner !== 'player' && Math.hypot(G.blockCenter(b).x - p.x, G.blockCenter(b).z - p.z) > 60 && Math.hypot(G.blockCenter(b).x - p.x, G.blockCenter(b).z - p.z) < 75);
+    let kept = 0; for (const e of s.ents) if (e.kind === 'npc' && e.crew === 'player' && e.role === 'defender' && e.hp > 0) { if (kept++) { e.hp = 0; continue; } e.target = e.home = far.id; const c = G.blockCenter(far); e.x = c.x; e.z = c.z; }
+    far.owner = 'player';
+    G.applyAction(s, p.id, { type: 'street', choice: 'in' });
+    check('a block\'s only guard does not leave it for a call somewhere else', !s.ents.some((e) => e.backup) && G.guardsOf(s, far).length === 1);
+  }
+}
 if (fails.length) { console.log('FAILED ' + fails.length); process.exit(1); }
 console.log('COMBAT TESTS PASSED');

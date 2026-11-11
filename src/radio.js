@@ -103,13 +103,14 @@ export function createRadio({ audio, base = './', onTune = () => {}, onAir = () 
     if (el) { el.pause(); }
     if (bus) bus.gain.gain.setTargetAtTime(0, bus.ctx.currentTime, 0.08);
   }
+  // When a song ends and the next starts, onTune names the new one on screen (see the 'ended' handler).
   function playTrack() {
     const S = stations[idx]; if (!S || S.kind !== 'tracks') return;
     // after a song, a recorded drop (a DJ line or an ad) if the station has any, then the next song
     if (!el) { el = new Audio(); el.preload = 'none'; el.volume = 0.55; el.addEventListener('ended', () => {
       const S2 = stations[idx], drops = (S2 && S2.drops) || [];
       if (!inDrop && drops.length) { inDrop = true; const D = drops[(track + airN++) % drops.length], src = `${base}radio/${D.file}`; el.dataset.src = src; el.src = src; el.play().catch(() => {}); if (D.text) onAir(S2.name, D.text); return; }
-      inDrop = false; track++; playTrack(); }); el.addEventListener('error', () => { if (on && stations[idx] && stations[idx].kind === 'tracks' && stations[idx].tracks.length > 1) { track++; playTrack(); } }); }
+      inDrop = false; track++; playTrack(); onTune(label()); }); el.addEventListener('error', () => { if (on && stations[idx] && stations[idx].kind === 'tracks' && stations[idx].tracks.length > 1) { track++; playTrack(); } }); }
     const T = S.tracks[track % S.tracks.length], src = `${base}radio/${T.file}`;
     if (el.dataset.src !== src) { el.dataset.src = src; el.src = src; }
     el.play().catch(() => { /* the browser wants a tap first: the next tap on RADIO starts it */ });
