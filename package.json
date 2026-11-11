@@ -16,6 +16,7 @@
     "test:city": "node tools/city-test.mjs",
     "test:chaos": "node tools/chaos-test.mjs",
     "test:side": "node tools/side-test.mjs",
+    "test:mask": "node tools/kit-mask-test.mjs",
     "preview": "vite preview",
     "kit": "node tools/kit-import.mjs"
   },

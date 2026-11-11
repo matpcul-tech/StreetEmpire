@@ -23,6 +23,9 @@
 // the node tagged extras.kitSteer (fork, fender, bars and the front wheel under it) turns around
 // extras.kitSteerAxis. See docs/build-kit.md, Motorcycles.
 // Models face +z (the glTF convention); yaw (degrees) turns one that does not.
+// Window mask (optional, made by Sovereign Asset): a material tagged extras.kitMask carries a mask image in
+// its emissive slot (emissive factor 0), on the same UVs as the base texture. Red is glass, green is body
+// paint, blue is chrome. When present the finish pass reads it instead of guessing each pixel from its color.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -100,6 +103,25 @@ export async function loadKit(base, { low = false } = {}) {
   return kit;
 }
 
+// Window masks by material. The mask is taken out of the emissive slot at load so it never glows and
+// nothing else in the game mistakes it for a light. A WeakMap, not userData: material.clone() copies
+// userData through JSON, which a texture does not survive.
+const masks = new WeakMap();
+export const kitMask = (m) => masks.get(m) || null;
+function takeMasks(scene) {
+  let n = 0;
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of [].concat(o.material)) {
+      if (masks.has(m)) { n++; continue; }
+      if (!m.userData || !m.userData.kitMask || !m.emissiveMap || !m.map) continue;
+      const t = m.emissiveMap; t.colorSpace = THREE.NoColorSpace; t.needsUpdate = true; // mask values are data, not color
+      masks.set(m, t); m.emissiveMap = null; if (m.emissive) m.emissive.setScalar(0); m.needsUpdate = true; n++;
+    }
+  });
+  return n;
+}
+
 function shadows(root, cast, receive) { root.traverse((o) => { if (o.isMesh) { o.castShadow = cast; o.receiveShadow = receive; } }); }
 // low and potato: no transmission or clearcoat passes, they cost a full extra render on phones
 function cheapen(root) {
@@ -111,6 +133,7 @@ function cheapen(root) {
 // it can spin and steer. Paint materials are marked so each car gets its color.
 function prepCar(scene, spec, slot, low) {
   const root = new THREE.Group(); root.name = 'kit-car';
+  const masked = takeMasks(scene) > 0;
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
@@ -128,7 +151,7 @@ function prepCar(scene, spec, slot, low) {
     }
     const paint = collectPaint(scene, spec);
     shadows(root, !low, false); if (low) cheapen(root);
-    return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, slot, spec };
+    return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, masked, slot, spec };
   }
   // fallback for untagged models: meshes named like a wheel and much smaller than the body
   const found = [];
@@ -146,13 +169,14 @@ function prepCar(scene, spec, slot, low) {
   const paint = collectPaint(scene, spec);
   shadows(root, !low, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
-  return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, slot, spec };
+  return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, masked, slot, spec };
 }
 
 // A bike template: turned to +z, scaled to its length, tires on the ground. The file's own rig is kept
 // as built (wheel nodes on their axles, the steer node on the steering head), so nothing is re-pivoted here.
 function prepBike(scene, spec, slot, low) {
   const root = new THREE.Group(); root.name = 'kit-bike';
+  takeMasks(scene);
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
@@ -183,7 +207,7 @@ export function cloneKitBike(T, paintHex) {
 
 function collectPaint(scene, spec) {
   const paint = [];
-  scene.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (spec.paint !== false && PAINTABLE.test(m.name || '') && !paint.includes(m)) paint.push(m); });
+  scene.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material)) if (spec.paint !== false && !masks.has(m) && PAINTABLE.test(m.name || '') && !paint.includes(m)) paint.push(m); }); // a masked material is repainted per pixel, never tinted whole
   return paint;
 }
 
@@ -232,15 +256,20 @@ export function cloneKitCar(T, paintHex) {
 // hue, keeping their shading. Glass, tires, chrome and lamps (other hues or grays) are untouched.
 // White, gray or black bodies have no hue to key on, so those models keep their own color.
 function paintKey(scene) {
-  let map = null; scene.traverse((o) => { if (!map && o.isMesh) for (const m of [].concat(o.material)) if (m.map && m.map.image) { map = m.map; break; } });
+  let map = null, mask = null; scene.traverse((o) => { if (!map && o.isMesh) for (const m of [].concat(o.material)) if (m.map && m.map.image) { map = m.map; mask = masks.get(m) || null; break; } });
   if (!map || typeof document === 'undefined') return null;
   const N = 128, cv = document.createElement('canvas'); cv.width = cv.height = N;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   try { ctx.drawImage(map.image, 0, 0, N, N); } catch (e) { return null; }
   const px = ctx.getImageData(0, 0, N, N).data, bins = new Array(36).fill(0), sum = [];
+  // with a window mask the body hue comes from the pixels marked body paint only (green), so glass
+  // reflections, lamps and trim cannot pull the key off the paint
+  let mk = null;
+  if (mask && mask.image) { try { ctx.clearRect(0, 0, N, N); ctx.drawImage(mask.image, 0, 0, N, N); mk = ctx.getImageData(0, 0, N, N).data; } catch (e) { mk = null; } }
   let lit = 0, sat = 0; const c = new THREE.Color(), hsl = {};
   const hsv = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; };
   for (let i = 0; i < px.length; i += 4) {
+    if (mk && mk[i + 1] < 128) continue;
     const [h, s, v] = hsv(px[i] / 255, px[i + 1] / 255, px[i + 2] / 255);
     if (v < 0.12) continue; lit++;
     if (s < 0.25) continue; sat++;
@@ -260,6 +289,9 @@ function paintKey(scene) {
 // - chrome: bright, unsaturated, only on colored-body cars -> polished metal
 //   (a white or silver body would otherwise turn to mirror, so keyless models skip chrome)
 // Everything else keeps the model's own roughness and metalness.
+// A model with a window mask (see the top of this file) skips the guessing: glass, body paint and chrome
+// are exactly where the mask says, so tires and black trim stay matte and a window with a painted
+// reflection is still all glass. Models without a mask are sorted by color as before.
 const finished = new Map();
 function hsvOfColor(col) { const r = col.r, g = col.g, b = col.b, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; }
 function finishMaterial(m, key, paintHex) {
@@ -267,10 +299,12 @@ function finishMaterial(m, key, paintHex) {
   const uKey = { value: new THREE.Vector3(...(key || [0, 0, 1])) };
   const uPaint = { value: new THREE.Vector3(...(paintHex == null ? (key || [0, 0, 1]) : hsvOfColor(new THREE.Color(paintHex)))) };
   const uMode = { value: new THREE.Vector2(key ? 1 : 0, paintHex == null ? 0 : 1) }; // x: has body hue (paint gloss + chrome), y: repaint
+  const mask = masks.get(m) || null, uMask = { value: mask };
   t = m.clone(); t.envMapIntensity = 1.0;
+  if (mask) masks.set(t, mask);
   t.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uKey, uPaint, uMode });
-    sh.fragmentShader = 'uniform vec3 uKey;\nuniform vec3 uPaint;\nuniform vec2 uMode;\n' +
+    Object.assign(sh.uniforms, { uKey, uPaint, uMode }, mask ? { uMask } : {});
+    sh.fragmentShader = 'uniform vec3 uKey;\nuniform vec3 uPaint;\nuniform vec2 uMode;\n' + (mask ? 'uniform sampler2D uMask;\n' : '') +
       'vec3 kRgb2Hsv(vec3 c){vec4 K=vec4(0.,-1./3.,2./3.,-1.);vec4 p=mix(vec4(c.bg,K.wz),vec4(c.gb,K.xy),step(c.b,c.g));vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));float d=q.x-min(q.w,q.y);float e=1e-10;return vec3(abs(q.z+(q.w-q.y)/(6.*d+e)),d/(q.x+e),q.x);}\n' +
       'vec3 kHsv2Rgb(vec3 c){vec4 K=vec4(1.,2./3.,1./3.,3.);vec3 p=abs(fract(c.xxx+K.xyz)*6.-K.www);return c.z*mix(K.xxx,clamp(p-K.xxx,0.,1.),c.y);}\n' +
       sh.fragmentShader
@@ -280,6 +314,7 @@ function finishMaterial(m, key, paintHex) {
           float kBody = uMode.x * (1.0 - smoothstep(0.035, 0.065, kDh)) * smoothstep(0.10, 0.22, kHv.y);
           float kGlass = (1.0 - smoothstep(0.25, 0.4, kHv.y)) * smoothstep(0.006, 0.014, kHv.z) * (1.0 - smoothstep(0.07, 0.11, kHv.z));
           float kChrome = uMode.x * (1.0 - smoothstep(0.10, 0.18, kHv.y)) * smoothstep(0.30, 0.45, kHv.z);
+          ${mask ? 'vec3 kMask = texture2D(uMask, vMapUv).rgb; kGlass = kMask.r; kBody = kMask.g; kChrome = kMask.b;' : ''}
           if (uMode.y > 0.5) {
             vec3 kNh = vec3(uPaint.x, clamp(kHv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(kHv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));
             diffuseColor.rgb = mix(diffuseColor.rgb, kHsv2Rgb(kNh), kBody);
@@ -293,7 +328,7 @@ function finishMaterial(m, key, paintHex) {
           metalnessFactor = mix(metalnessFactor, 0.0, max(kBody, kGlass));
           metalnessFactor = mix(metalnessFactor, 1.0, kChrome);`);
   };
-  t.customProgramCacheKey = () => 'kit-finish';
+  t.customProgramCacheKey = () => (mask ? 'kit-finish-mask' : 'kit-finish');
   finished.set(id, t); return t;
 }
 

@@ -57,10 +57,11 @@ async function show(kind, slot, entry) {
   camera.position.set(r * 1.1, r * 0.7, r * 1.5); controls.target.set(0, size.y * 0.4, 0); controls.update();
   let bytes = '';
   try { const h = await fetch(`${BASE}models/kit/${entry.spec.file}`, { method: 'HEAD' }); const n = +h.headers.get('content-length'); if (n) bytes = (n / 1e6).toFixed(2) + ' MB'; } catch (e) { /* size unknown */ }
-  $('stats').innerHTML = stat('triangles', Math.round(tris).toLocaleString()) + stat('draw calls', meshes) + stat('size in game', `${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`) + stat('file', bytes || 'n/a') + stat('yaw', (entry.spec.yaw || 0) + '°') + (kind === 'car' ? stat('spinning wheels', wheels.length) : '');
+  $('stats').innerHTML = stat('triangles', Math.round(tris).toLocaleString()) + stat('draw calls', meshes) + stat('size in game', `${size.x.toFixed(1)} x ${size.y.toFixed(1)} x ${size.z.toFixed(1)} m`) + stat('file', bytes || 'n/a') + stat('yaw', (entry.spec.yaw || 0) + '°') + (kind === 'car' ? stat('spinning wheels', wheels.length) + stat('window mask', entry.masked ? 'yes' : 'no') : '');
   const notes = [];
   if (kind === 'car' && !wheels.length) notes.push(['bad', 'No separate wheels found: the car drives but the wheels do not spin. Name wheel parts wheel, tire or rim.']);
-  if (kind === 'car' && !entry.paint.length) notes.push(['', 'No paint material found: every copy keeps the model color. Name the body material paint or body to get colors.']);
+  if (kind === 'car' && entry.masked) notes.push(['', 'Window mask found: glass, paint and chrome are read from the mask, not guessed from color.']);
+  else if (kind === 'car' && !entry.paint.length) notes.push(['', 'No paint material found: every copy keeps the model color. Name the body material paint or body to get colors.']);
   if (tris > 45000) notes.push(['bad', 'Heavy for phones. Re-import, or pick a lighter model.']);
   if (meshes > 40) notes.push(['bad', `${meshes} draw calls per copy. Under 25 keeps phones smooth.`]);
   if (entry.spec.credit) notes.push(['', 'Credit: ' + entry.spec.credit]); else notes.push(['', 'No credit recorded. CC BY models need one: upload a .txt with the same name.']);
