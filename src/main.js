@@ -13,7 +13,7 @@ import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
-import { DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
+import { CLEAR_TIME, DOWN_TIME, MISSIONS, debugDown, openingScuffle, contactFor, missionText } from './state.js';
 import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
 import { routeTo, RAMPS, RACES, GARAGES, STASHES, sideText, progress } from './state.js';
@@ -687,6 +687,7 @@ function handleFx(list) {
       if (big) parts.burst(f.x, 0.3, f.z, 6, 2, { color: 0x8a8070, life: 0.8, g: 1, s: 0.3, up: 0.4 });
       if (f.by === p.id) { if (big && n > 20) { slowT = 0.4; fovKick = 5; } shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + (big ? 0.25 : 0.06); }
     }
+    else if (f.type === 'cleared') { for (let i = 0; i < 6; i++) smoke.emit(f.x + (Math.random() - 0.5) * 2, 0.6, f.z + (Math.random() - 0.5) * 2, false, false); }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
     else if (f.type === 'guards') { pop(`${f.n} guard${f.n > 1 ? 's' : ''} hold the block`); }
     else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { radio.news(`News: a corner in ${hood()} is under new management. Orange is in.`); const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
@@ -1044,6 +1045,8 @@ function frame(now) {
     let g = carViz.get(c.id);
     if (!g) { g = makeCar(c); g.position.set(c.x, 0, c.z); g.rotation.y = c.ry; scene.add(g); carViz.set(c.id, g); }
     updateCar(g, c, rdt, night > 0.3, now);
+    // a dead car being cleared sinks into the street and is gone (state.js clearCar)
+    if (c.clear != null) { const k = 1 - Math.max(0, c.clear) / CLEAR_TIME; g.position.y -= k * k * 2.2; g.userData.flares.visible = false; }
     // tire smoke and skid marks from the rear wheels while sliding
     if (c.skid && !c.wrecked && d2 < 70 * 70) {
       const sn = Math.sin(c.ry), cs = Math.cos(c.ry);
