@@ -5,6 +5,17 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCK, PITCH, GRID, ZONE_R, blockCenter, buildingsFor, districtOf } from './state.js';
 import { kitReady, kitBuilding, placeKitBuilding } from './kit.js';
 
+// Thin street props (poles, trunks, fronds) dissolve when they are close to the camera, so one standing between
+// the camera and the player does not block the view. A screen-door fade, so no sorting or blending is needed.
+function nearFade(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+      { float nf = smoothstep(3.5, 9.0, length(vViewPosition)); float dth = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453); if (nf < dth) discard; }`);
+  };
+  mat.customProgramCacheKey = () => 'nearfade';
+  return mat;
+}
+
 let rnd = mulberry(7);
 // Painted, photo-based textures (public/tex, WebP, 512 or 1024 px). The loader
 // returns textures at once and fills them in when the image arrives.
@@ -120,7 +131,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
     sigX.push([x + 8.6, z + 8.6, Math.PI / 2], [x - 8.6, z - 8.6, -Math.PI / 2]);
   }
   const sp = new THREE.CylinderGeometry(0.08, 0.1, 4.2, 6); sp.translate(0, 2.1, 0);
-  instAll(sp, new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5, roughness: 0.6 }), poles, 0);
+  instAll(sp, nearFade(new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5, roughness: 0.6 })), poles, 0);
   const head = new THREE.BoxGeometry(0.35, 0.9, 0.3); head.translate(0, 3.8, -0.25);
   const lampG = new THREE.BoxGeometry(0.22, 0.22, 0.05); lampG.translate(0, 3.8, -0.42);
   const zMat = new THREE.MeshBasicMaterial({ color: 0x20ff40, toneMapped: false }), xMat = new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false });
@@ -173,10 +184,10 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const M = {
     tower: new THREE.MeshStandardMaterial({ color: 0x5a3a26, roughness: 0.9 }), dumpster: dumpsterMat(),
     bag: new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.85 }), hydrant: new THREE.MeshStandardMaterial({ color: 0xa82020, roughness: 0.5 }),
-    trunk: new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 1 }), crown: new THREE.MeshStandardMaterial({ color: 0x3a4424, roughness: 0.9, flatShading: true }),
-    palmTrunk: new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 1 }),
-    palmCrown: new THREE.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 }),
-    pole: new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 1 }), hoop: new THREE.MeshStandardMaterial({ color: 0xc8c8c0, roughness: 0.6, metalness: 0.3 }),
+    trunk: nearFade(new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 1 })), crown: nearFade(new THREE.MeshStandardMaterial({ color: 0x3a4424, roughness: 0.9, flatShading: true })),
+    palmTrunk: nearFade(new THREE.MeshStandardMaterial({ color: 0x7a6650, roughness: 1 })),
+    palmCrown: nearFade(new THREE.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9 })),
+    pole: nearFade(new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 1 })), hoop: new THREE.MeshStandardMaterial({ color: 0xc8c8c0, roughness: 0.6, metalness: 0.3 }),
   };
   const wireMat = new THREE.LineBasicMaterial({ color: 0x141210 });
   const courtBlock = blocks.find((b) => districtOf(b) === 0 && b.gx === 1 && b.gz === 0);
@@ -333,7 +344,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
     for (const [sx, sz] of [[1, -1], [-1, 1]]) lamps.push([x + sx * 8.1, z + sz * 8.1, Math.atan2(-sx, -sz)]);
   }
   const pole = new THREE.CylinderGeometry(0.1, 0.14, 7, 6); pole.translate(0, 3.5, 0);
-  instAll(pole, new THREE.MeshStandardMaterial({ color: 0x1d1f20, roughness: 0.6, metalness: 0.5 }), lamps, 0);
+  instAll(pole, nearFade(new THREE.MeshStandardMaterial({ color: 0x1d1f20, roughness: 0.6, metalness: 0.5 })), lamps, 0);
   const arm = new THREE.BoxGeometry(0.1, 0.1, 2.2); arm.translate(0, 6.9, 1.1);
   instAll(arm, new THREE.MeshStandardMaterial({ color: 0x1d1f20 }), lamps, 0);
   const lh = new THREE.BoxGeometry(0.5, 0.15, 0.8); lh.translate(0, 6.8, 2.1);
