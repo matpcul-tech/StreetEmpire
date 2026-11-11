@@ -37,6 +37,8 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 
 ## What is new in v0.12
 
+- **Sharper on phones.** Low quality (the phone default) now renders at up to twice the old resolution, smooths stair-step edges, and puts a soft shadow under people and cars. The resolution still steps down by itself if the frame rate drops.
+
 - Poles, lamp posts and tree trunks dissolve when they are close to the camera, so one between you and the camera no longer blocks the view. The first time you reach a ramp, race, garage or stash, one line says what it is for, and How to Play covers the new things around town.
 
 - **Fares.** Drive a car with no job on and someone on a nearby corner flags you down (`F` on the radar). Stop beside them, take them to the marker, stop. Pay is by distance, with a tip for speed that shrinks with every dent, and a bonus every fifth fare in a row.

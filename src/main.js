@@ -64,8 +64,9 @@ addEventListener('pagehide', writeSave);
 
 // ---------- renderer, sky and light ----------
 const renderer = new THREE.WebGLRenderer({ antialias: !LOW, powerPreference: 'high-performance' });
-const PR_MAX = () => Math.min(devicePixelRatio, POTATO ? 0.75 : LOW ? 1.25 : 1.75);
-let pixelRatio = PR_MAX();
+// Low (phones): up to 2x, starting at 1.5. The scaler below steps it down if the frame rate drops and back up when it holds.
+const PR_MAX = () => Math.min(devicePixelRatio, POTATO ? 0.75 : LOW ? 2 : 2);
+let pixelRatio = Math.min(PR_MAX(), LOW && !POTATO ? 1.5 : 9);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = !LOW;
@@ -121,7 +122,7 @@ scene.add(hemi, sun, sun.target);
 const FX = !params.has('nofx') && !POTATO;
 let composer = null, grade = null;
 if (FX) {
-  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW ? 0 : 4 });
+  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW ? 2 : 4 }); // 2x multisampling on Low smooths the stair-step edges
   composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera)); composer.addPass(new OutputPass());
   grade = makeGradePass(ShaderPass); composer.addPass(grade);
@@ -235,6 +236,20 @@ for (let i = 0; i < 8; i++) {
   const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xff5530, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
   mesh.visible = false; mesh.frustumCulled = false; scene.add(mesh); tellRings.push(mesh);
 }
+// Low has no real shadows, so people and cars get a soft dark patch on the ground under them. Without it they float.
+const blobs = LOW ? (() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 4, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(0,0,0,.62)'); gr.addColorStop(0.55, 'rgba(0,0,0,.34)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+  const N = 72, geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const im = new THREE.InstancedMesh(geo, mat, N); im.frustumCulled = false; im.count = 0; im.renderOrder = 1; scene.add(im);
+  const m = new THREE.Matrix4(), pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  return (px, pz, night) => {
+    let n = 0; mat.opacity = 1 - 0.45 * night;
+    for (const g of charViz.values()) { if (n >= N || !g.visible || (g.position.x - px) ** 2 + (g.position.z - pz) ** 2 > 60 * 60) continue; m.compose(pos.set(g.position.x, g.position.y + 0.03, g.position.z), q.identity(), sc.set(1.25, 1, 1.25)); im.setMatrixAt(n++, m); }
+    for (const g of carViz.values()) { if (n >= N || (g.position.x - px) ** 2 + (g.position.z - pz) ** 2 > 90 * 90) continue; const k = 1 / (1 + g.position.y * 0.25), b = g.userData.bike; m.compose(pos.set(g.position.x, 0.05, g.position.z), q.setFromAxisAngle(up, g.rotation.y), sc.set((b ? 1.1 : 3) * k, 1, (b ? 2.6 : 5.6) * k)); im.setMatrixAt(n++, m); }
+    im.count = n; im.instanceMatrix.needsUpdate = true;
+  };
+})() : null;
 // Stunt ramps: an orange wedge in the middle of the street, low end facing the run-up.
 {
   const sh = new THREE.Shape(); sh.moveTo(-3, 0); sh.lineTo(2.2, 0); sh.lineTo(2.2, 1.35); sh.closePath();
@@ -936,7 +951,7 @@ function frame(now) {
   // sustained very low FPS after start: offer potato quality once
   if (started && !POTATO && !paused && frameAvg > 70 && (slowFor += rdt) > 6 && !potatoOffered) { potatoOffered = true; showMsg('Running slow: try POTATO in Pause.'); pixelRatio = 0.5; renderer.setPixelRatio(pixelRatio); composer = null; }
   else if (frameAvg < 50) slowFor = 0;
-  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.7, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
+  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.8, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
@@ -1050,6 +1065,7 @@ function frame(now) {
     if (c.honk > 1.2 && c.honk - (u.lastHonk || 0) > 2) { u.lastHonk = c.honk; sfx.honk(Math.max(0, 1 - Math.sqrt(d2) / 40)); }
   }
   for (const [id, g] of carViz) if (!seenCars.has(id)) { scene.remove(g); carViz.delete(id); }
+  if (blobs) blobs(p.x, p.z, night);
   // car entry and exit moments
   if (p.car !== prevCar) {
     const pg = charViz.get(p.id);
