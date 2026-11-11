@@ -219,6 +219,15 @@ check(`rival crowd stays small (max ${maxChasers} rivals within 6 m)`, maxChaser
   check('new guards on an armed block spawn with the upgrade', neu.weapon === 'bat' && neu.hp >= 60 + G.UPGRADE_HP);
   G.applyAction(s2, p2.id, { type: 'upgrade' });
   check('upgrade is once per block', s2.crews.player.cash === 20);
+  // build up the hustle: once, doubles the income, lost with the block
+  const r0 = G.stashRate(s2, home);
+  G.applyAction(s2, p2.id, { type: 'build' });
+  check('build refused when short on cash', !home.built && s2.crews.player.cash === 20);
+  s2.crews.player.cash = G.BUILD_COST + 5;
+  G.applyAction(s2, p2.id, { type: 'build' });
+  check(`build costs $${G.BUILD_COST} and doubles the block's income`, home.built === true && s2.crews.player.cash === 5 && Math.abs(G.stashRate(s2, home) - r0 * G.BUILD_BOOST) < 1e-9);
+  s2.crews.player.cash = 500; G.applyAction(s2, p2.id, { type: 'build' });
+  check('build is once per block', s2.crews.player.cash === 500);
 }
 {
   const s3 = G.createState(9, { traffic: 0, peds: 0 });
