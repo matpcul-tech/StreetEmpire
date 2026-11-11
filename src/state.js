@@ -1382,7 +1382,8 @@ function courierRun(s, p, car, r, dt) {
     s.side = null; s.pkgCd = s.t + 6;
   }
 }
-export function sideText(s) { const r = s.side; if (!r) return ''; if (r.kind === 'courier') return `Package to the marker. ${r.t.toFixed(0)} s, bonus to ${r.par} s`; // short: the phone's tracker cuts off at about 30 characters if (r.kind === 'fare') return `Drop the fare at the marker and stop. ${r.t.toFixed(0)} s (tip until ${r.par} s)`; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
+// Tracker lines stay short: the phone's tracker cuts off at about 30 characters.
+export function sideText(s) { const r = s.side; if (!r) return ''; if (r.kind === 'courier') return `Package to the marker. ${r.t.toFixed(0)} s, bonus to ${r.par} s`; if (r.kind === 'fare') return `Drop the fare at the marker and stop. ${r.t.toFixed(0)} s (tip until ${r.par} s)`; const R = RACES[r.i]; return `${R.name}: checkpoint ${r.count + 1} of ${R.points.length}. ${r.t.toFixed(1)} s (gold ${R.gold}, silver ${R.silver}, bronze ${R.bronze})`; }
 function sideStep(s, p, dt) {
   const cash = s.crews.player, car = p.car ? s.cars.find((c) => c.id === p.car) : null;
   // stashes, on foot
