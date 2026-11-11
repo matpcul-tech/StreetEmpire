@@ -119,8 +119,11 @@ const BIKE_BLOCKS = [0, 6, 20, 34, 40, 52, 64, 78];
 export const BIKE_MODELS = {
   sportbike: CAR_TYPES.bike,
   cruiser: { max: 34, acc: 19, hp: 115 },
-  dirtbike: { max: 31, acc: 27, hp: 75 },
+  // wb: the wheelbase the steering turns on. Everything else uses 2.7; the dirt bike's short one makes it the tightest turner in the city.
+  dirtbike: { max: 31, acc: 27, hp: 75, wb: 1.9 },
 };
+// how wide a vehicle is against walls: a bike is a third of a car, so it gets through alleys and past corners a car clips
+const wallR = (c) => (c.type === 'bike' ? 0.9 : 1.6);
 const BIKE_ORDER = ['sportbike', 'cruiser', 'dirtbike'];
 // the numbers a car or bike drives by
 const statsOf = (c) => (c.type === 'bike' && BIKE_MODELS[c.model]) || CAR_TYPES[c.type];
@@ -476,6 +479,8 @@ function exitCar(s, p) {
   const c = s.cars.find((c) => c.id === p.car); c.driver = null; p.car = null;
   const off = c.type === 'bike' ? 1.1 : 2.4; // step off a bike right beside it
   p.x = c.x - Math.cos(c.ry) * off; p.z = c.z + Math.sin(c.ry) * off;
+  // parked tight against a wall (a bike can be): step off on the open side instead of into the building
+  if (insideBuilding(p.x, p.z, 0.5) && !insideBuilding(c.x + Math.cos(c.ry) * off, c.z - Math.sin(c.ry) * off, 0.5)) { p.x = c.x + Math.cos(c.ry) * off; p.z = c.z - Math.sin(c.ry) * off; }
 }
 
 function startDodge(s, p, dx, dz) {
@@ -719,7 +724,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.v += throttle * (braking ? 34 : c.v < 0 ? 10 : T.acc) * dt;
   c.v *= 1 - (handbrake ? 0.7 : Math.abs(throttle) < 0.05 ? 0.9 : 0.25) * dt;
   c.v = Math.max(-9, Math.min(T.max, c.v));
-  c.ry -= (c.v / 2.7) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
+  c.ry -= (c.v / (T.wb || 2.7)) * Math.tan(c.steer) * dt * (handbrake ? 1.6 : 1);
   const grip = handbrake ? 1.1 : 6.5 - sp * 2;
   c.mh += angDiff(c.ry, c.mh) * Math.min(1, dt * grip);
   c.slip = Math.abs(angDiff(c.ry, c.mh));
@@ -728,7 +733,7 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt;
   clampWorld(c);
   c.scrapeT = Math.max(0, (c.scrapeT || 0) - dt);
-  collideBuildings(c, 1.6, () => {
+  collideBuildings(c, wallR(c), () => {
     const n = Math.abs(c.v);
     if (c.scrapeT <= 0 && n > 3) { c.scrapeT = 0.15; s.fx.push({ type: n > 10 ? 'crash' : 'scrape', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0, n }); }
     carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 0.85; c.mh = c.ry;
