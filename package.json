@@ -12,6 +12,7 @@
     "test:combat": "node tools/combat-test.mjs",
     "test:retarget": "node tools/retarget-test.mjs",
     "test:bike": "node tools/bike-test.mjs",
+    "test:collision": "node tools/collision-test.mjs",
     "test:city": "node tools/city-test.mjs",
     "test:chaos": "node tools/chaos-test.mjs",
     "test:side": "node tools/side-test.mjs",

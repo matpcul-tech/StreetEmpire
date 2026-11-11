@@ -122,8 +122,45 @@ export const BIKE_MODELS = {
   // wb: the wheelbase the steering turns on. Everything else uses 2.7; the dirt bike's short one makes it the tightest turner in the city.
   dirtbike: { max: 31, acc: 27, hp: 75, wb: 1.9 },
 };
-// how wide a vehicle is against walls: a bike is a third of a car, so it gets through alleys and past corners a car clips
-const wallR = (c) => (c.type === 'bike' ? 0.9 : 1.6);
+// ---------- vehicle footprints ----------
+// What a vehicle touches is its own body: a box as long and wide as the model, turned with it.
+// (It used to be a 1.5 m circle, so a car "hit" things a meter off its side and sank its nose into others.)
+// Length and width in meters, measured off the kit models. Bikes are their bodywork, not the bar ends.
+const FOOT_SIZE = { sedan: [4.9, 2.0], muscle: [4.8, 1.95], suv: [4.8, 1.93], van: [5.1, 2.1], taxi: [4.9, 1.91], police: [5.2, 2.04], lowrider: [5.4, 2.02], pickup: [5.2, 1.95],
+  sportbike: [2.1, 0.66], cruiser: [2.35, 0.72], dirtbike: [2.1, 0.66] };
+const FOOT_K = 0.94; // a touch inside the paint, so a hit always looks like a hit
+const FOOT = {}; for (const k in FOOT_SIZE) FOOT[k] = { hl: FOOT_SIZE[k][0] / 2 * FOOT_K, hw: FOOT_SIZE[k][1] / 2 * FOOT_K };
+export const footprint = (c) => (c.type === 'bike' && FOOT[c.model || 'sportbike']) || FOOT[c.type] || FOOT.sedan;
+// Two turned boxes: null when apart, else how deep they overlap and the direction from the first to the second
+// along the shortest way out. Each box is a center, a unit forward vector, half its length and half its width.
+const _hit = { nx: 0, nz: 0, d: 0 };
+function boxHit(ax, az, afx, afz, ahl, ahw, bx, bz, bfx, bfz, bhl, bhw) {
+  const dx = bx - ax, dz = bz - az; let best = Infinity, nx = 0, nz = 0;
+  for (let i = 0; i < 4; i++) { // the four side directions of the two boxes
+    const ux = i === 0 ? afx : i === 1 ? afz : i === 2 ? bfx : bfz, uz = i === 0 ? afz : i === 1 ? -afx : i === 2 ? bfz : -bfx;
+    const ra = ahl * Math.abs(afx * ux + afz * uz) + ahw * Math.abs(afz * ux - afx * uz);
+    const rb = bhl * Math.abs(bfx * ux + bfz * uz) + bhw * Math.abs(bfz * ux - bfx * uz);
+    const along = dx * ux + dz * uz, over = ra + rb - Math.abs(along);
+    if (over <= 0) return null;
+    if (over < best) { best = over; const sg = along < 0 ? -1 : 1; nx = ux * sg; nz = uz * sg; }
+  }
+  _hit.nx = nx; _hit.nz = nz; _hit.d = best; return _hit;
+}
+// A vehicle against the buildings of its block: pushed straight back out, onHit gets the wall's direction.
+function collideCarBuildings(c, onHit) {
+  const F = footprint(c);
+  for (const k of blockBuildings(c.x, c.z)) {
+    const h = boxHit(c.x, c.z, Math.sin(c.ry), Math.cos(c.ry), F.hl, F.hw, k.x, k.z, 0, 1, k.d / 2, k.w / 2);
+    if (!h) continue;
+    c.x -= h.nx * h.d; c.z -= h.nz * h.d;
+    onHit && onHit(h.nx, h.nz);
+  }
+}
+// is a person (a 0.4 m circle) touching this vehicle's body
+function carTouches(c, e) {
+  const F = footprint(c), fx = Math.sin(c.ry), fz = Math.cos(c.ry), rx = e.x - c.x, rz = e.z - c.z;
+  return Math.abs(rx * fx + rz * fz) < F.hl + 0.4 && Math.abs(rx * fz - rz * fx) < F.hw + 0.4;
+}
 const BIKE_ORDER = ['sportbike', 'cruiser', 'dirtbike'];
 // the numbers a car or bike drives by
 const statsOf = (c) => (c.type === 'bike' && BIKE_MODELS[c.model]) || CAR_TYPES[c.type];
@@ -733,28 +770,44 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt;
   clampWorld(c);
   c.scrapeT = Math.max(0, (c.scrapeT || 0) - dt);
-  collideBuildings(c, wallR(c), () => {
-    const n = Math.abs(c.v);
+  collideCarBuildings(c, (nx, nz) => {
+    // how square the hit is: 1 head on, down to 0.3 for a scrape along the wall, which costs little speed and paint
+    const k = Math.max(0.3, Math.abs(Math.sin(c.mh) * nx + Math.cos(c.mh) * nz)), n = Math.abs(c.v) * k;
     if (c.scrapeT <= 0 && n > 3) { c.scrapeT = 0.15; s.fx.push({ type: n > 10 ? 'crash' : 'scrape', x: c.x, z: c.z, by: driverEnt ? driverEnt.id : 0, n }); }
-    carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 0.85; c.mh = c.ry;
+    carHurt(s, c, n * 1.6); c.v *= n > 10 ? -0.25 : 1 - 0.15 * k; c.mh = c.ry;
   });
   if (rampStep(s, c, driverEnt)) return;
   const byPlayer = driverEnt && driverEnt.kind === 'player';
+  const F = footprint(c);
   for (const o of s.cars) if (o !== c) {
-    const d2o = dist2(o, c);
-    if (d2o >= 9) { if (byPlayer && (o.nm || d2o < 22)) nearMiss(s, c, o, d2o, driverEnt); continue; }
+    const d2o = dist2(o, c), G = footprint(o);
+    const h = d2o < 49 ? boxHit(c.x, c.z, Math.sin(c.ry), Math.cos(c.ry), F.hl, F.hw, o.x, o.z, Math.sin(o.ry), Math.cos(o.ry), G.hl, G.hw) : null;
+    if (!h) { if (byPlayer && (o.nm || d2o < 22)) nearMiss(s, c, o, d2o, driverEnt); continue; }
     o.nm = 0; c.crashT = s.t; if (byPlayer) o.byP = true;
-    const d = Math.sqrt(d2o) || 1, push = (3 - d) / 2;
-    c.x -= (o.x - c.x) / d * push; c.z -= (o.z - c.z) / d * push; o.x += (o.x - c.x) / d * push; o.z += (o.z - c.z) / d * push;
-    if (Math.abs(c.v) > 4) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') { addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); if (Math.abs(c.v) > 6) rammed(s, o, c); } }
-    c.v *= 0.5;
+    const push = h.d / 2; // each gives way half the overlap, straight apart
+    c.x -= h.nx * push; c.z -= h.nz * push; o.x += h.nx * push; o.z += h.nz * push;
+    // an off-center hit glances: slide a little along the contact, away from the other car's middle, so a clipped corner lets you past
+    { const tx = -h.nz, tz = h.nx, off = (c.x - o.x) * tx + (c.z - o.z) * tz; if (Math.abs(off) > 0.5) { const sl = Math.sign(off) * Math.min(h.d, 0.15) * 0.6; c.x += tx * sl; c.z += tz * sl; } }
+    // one crash per meeting: still leaning on the same car a moment later is a shove, not a second and third collision
+    const again = c.bumpId === o.id && s.t - (c.bumpT ?? -9) < 0.7 && Math.abs(c.v) < 10; c.bumpId = o.id; c.bumpT = s.t;
+    if (Math.abs(c.v) > 4 && !again) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') { addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); if (Math.abs(c.v) > 6) rammed(s, o, c); } }
+    c.v *= Math.abs(c.v) > 4 ? 0.5 : 0.92; // a crash halves your speed; leaning on a car at a crawl shoves it along instead of pinning you
   }
-  if (Math.abs(c.v) > 6) for (const e of s.ents) if (e !== driverEnt && e.hp > 0 && !e.car && e.kind !== 'giver' && dist2(e, c) < 5) {
+  if (Math.abs(c.v) > 6) for (const e of s.ents) if (e !== driverEnt && e.hp > 0 && !e.car && e.kind !== 'giver' && dist2(e, c) < 16 && carTouches(c, e)) {
     if (!driverEnt || driverEnt.kind === 'player' ? e.crew !== 'player' : hostile(driverEnt, e)) damage(s, e, 30, c, true, 10);
     else { const d = Math.sqrt(dist2(e, c)) || 1; e.kx = (e.x - c.x) / d * 6; e.kz = (e.z - c.z) / d * 6; }
     if (driverEnt && driverEnt.kind === 'player') addHeat(s, driverEnt, e.kind === 'ped' ? 10 : 3);
     c.v *= 0.6;
   }
+}
+// ---------- clearing dead cars ----------
+// How long a wreck stays, and how long a cleared car takes to sink out of the street (the client draws that).
+export const WRECK_CLEAR = 18, CLEAR_TIME = 1.6;
+// Take a dead or abandoned car off the street: at once when nobody can see it, otherwise with the short sink.
+function clearCar(s, c, p) {
+  if (c.clear != null || c.remove) return;
+  if (dist2(c, p) > 90 * 90) { c.remove = true; return; }
+  c.clear = CLEAR_TIME; s.fx.push({ type: 'cleared', car: c.id, x: c.x, z: c.z });
 }
 // ---------- fire, explosions, stunt jumps, near misses ----------
 export const BURN_TIME = 4.5, BLAST_R = 8;
@@ -806,7 +859,7 @@ function airStep(s, c, steerIn, dt, driverEnt) {
   c.vy -= 20 * dt; c.y += c.vy * dt; c.skid = 0; c.slip = 0; if (c.jump) c.jump.t += dt;
   c.ry -= steerIn * 0.5 * dt; // a little spin in the air, no grip
   c.x += Math.sin(c.mh) * c.v * dt; c.z += Math.cos(c.mh) * c.v * dt; clampWorld(c);
-  collideBuildings(c, 1.6, () => { c.v *= 0.3; });
+  collideCarBuildings(c, () => { c.v *= 0.3; });
   if (c.y > 0) return;
   c.y = 0; const hard = Math.abs(c.vy); c.vy = 0; c.mh = c.ry;
   const j = c.jump; c.jump = null;
@@ -1111,10 +1164,14 @@ function policeStep(s, dt) {
     if (!crew.length) {
       c.siren = st > 0 && dist2(c, p) < 80 * 80;
       c.v *= 1 - 2 * dt;
+      const waiting = s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && !e.car && !e.remove && dist2(e, c) < 45 * 45);
       if (st === 0) {
         c.leaveT = (c.leaveT || 0) + dt;
-        const waiting = s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && !e.car && !e.remove && dist2(e, c) < 45 * 45);
-        if ((!waiting && c.leaveT > 2) || c.leaveT > 14 || dist2(c, p) > 80 * 80) c.remove = true;
+        if ((!waiting && c.leaveT > 2) || c.leaveT > 14 || dist2(c, p) > 80 * 80) clearCar(s, c, p);
+      } else if (!waiting && !c.roadblock) {
+        // mid chase, its officers down or gone: nobody is coming back for it, so it does not sit there for the rest of the chase
+        c.leaveT = (c.leaveT || 0) + dt;
+        if (c.leaveT > 10) clearCar(s, c, p);
       } else c.leaveT = 0;
       continue;
     }
@@ -1872,7 +1929,9 @@ export function step(s, dt) {
     if (c.ai && !c.driver && !c.wrecked) trafficStep(s, c, dt);
     else if (!c.driver && !c.cops && c.v) { c.v *= 1 - 3 * dt; if (Math.abs(c.v) < 0.2) c.v = 0; c.x += Math.sin(c.ry) * c.v * dt; c.z += Math.cos(c.ry) * c.v * dt; }
     fireStep(s, c, dt);
-    if (c.wrecked) { c.wreckT = (c.wreckT || 0) + dt; if (c.wreckT > 60 && dist2(c, p) > 100 * 100) c.remove = true; }
+    // A wreck does not sit in the street forever: once it has burned out it is cleared, even with you standing by it.
+    if (c.wrecked) { c.wreckT = (c.wreckT || 0) + dt; if (c.wreckT > WRECK_CLEAR && !(c.burn > 0)) clearCar(s, c, p); }
+    if (c.clear != null) { c.clear -= dt; if (c.clear <= 0) c.remove = true; }
   }
   policeStep(s, dt);
   // keep traffic topped up near the player
