@@ -98,9 +98,11 @@ export function buildCity(scene, LOW, blocks, base = './') {
   const [lc, lg] = canvas(S / 2, S / 2); drawConcrete(lg, S / 2, S / 2, '#4a4642');
   const lotMat = new THREE.MeshStandardMaterial({ map: tex(lc, 4, 4), roughness: 0.95 });
   // dry yard grass for the Eastside
-  const [yc, yg] = canvas(128, 128); yg.fillStyle = '#5a5a34'; yg.fillRect(0, 0, 128, 128);
-  for (let i = 0; i < 700; i++) { const c = ['#6a6a3a', '#4a4a2a', '#7a6a42', '#3e4628', '#8a7a52'][Math.floor(rnd() * 5)]; yg.fillStyle = c; yg.fillRect(rnd() * 128, rnd() * 128, 2 + rnd() * 2, 3 + rnd() * 5); }
-  const yardMat = new THREE.MeshStandardMaterial({ map: tex(yc, 6, 6), roughness: 1 });
+  // Fine grain, tiled small: thousands of thin blades in close tones, a few soft worn patches. Big blotches read as camouflage.
+  const YS = LOW ? 256 : 512, [yc, yg] = canvas(YS, YS); yg.fillStyle = '#56562f'; yg.fillRect(0, 0, YS, YS);
+  for (let i = 0; i < 26; i++) { const x = rnd() * YS, y = rnd() * YS, r = YS * (0.06 + rnd() * 0.1), g = yg.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, rnd() < 0.5 ? 'rgba(112,98,66,.34)' : 'rgba(60,70,38,.3)'); g.addColorStop(1, 'rgba(0,0,0,0)'); yg.fillStyle = g; for (const ox of [-YS, 0, YS]) for (const oy of [-YS, 0, YS]) yg.fillRect(x + ox - r, y + oy - r, r * 2, r * 2); }
+  yg.lineWidth = 1; for (let i = 0; i < YS * 28; i++) { yg.strokeStyle = ['#66663a', '#4c4e2c', '#746a44', '#454c2a', '#7e7450', '#5e6234'][Math.floor(rnd() * 6)]; const x = rnd() * YS, y = rnd() * YS, h = 2 + rnd() * 4; yg.beginPath(); yg.moveTo(x, y); yg.lineTo(x + (rnd() - 0.5) * 2, y - h); yg.stroke(); }
+  const yardMat = new THREE.MeshStandardMaterial({ map: tex(yc, 9, 9), roughness: 1 });
   const courtMat = new THREE.MeshStandardMaterial({ map: painted('court'), roughness: 0.8 });
 
   // road markings (global, instanced)
