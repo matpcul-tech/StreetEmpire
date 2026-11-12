@@ -542,6 +542,7 @@ export function animate(g, e, dt, sitting) {
   else if (e.jumpT > 0) want = 'Jump_Start';
   else if (e.moving > 0.62) { want = e.moving > 0.9 ? 'Sprint_Loop' : 'Jog_Fwd_Loop'; speed = 0.85 + e.moving * 0.2; }
   else if (e.moving > 0.05) { want = 'Walk_Loop'; speed = Math.max(0.7, e.moving * 2.4); }
+  else if (e.pose === 'hang' && u.act.Idle_Talking_Loop) want = 'Idle_Talking_Loop'; // standing around the block's dice game, card table or boombox
   else want = e.weapon === 'pistol' || e.weapon === 'shotgun' ? 'Pistol_Idle_Loop' : 'Idle_Loop';
   const swingStart = e.swing > 0 && (u.lastSwing ?? 0) <= 0;
   if (swingStart) { u.punchN++; if (want.startsWith('Punch_')) want = u.punchN % 2 ? 'Punch_Cross' : 'Punch_Jab'; }

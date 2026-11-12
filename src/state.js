@@ -414,6 +414,85 @@ function log(s, text) { s.events.push({ t: s.t, text }); }
 function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math.min(100, p.heat + n); p.calmT = 0; }
 
 // ---------- actions ----------
+// ---------- what a block's crew is doing ----------
+// A held block is not a ring of guards: up to three of its people hang at one spot on the south sidewalk, around
+// a dice game, a card table or a boombox. The client draws the props (sceneSpot, sceneOf); the rest keep the beat.
+export const SCENES = ['dice', 'cards', 'stoop'];
+export const sceneOf = (b) => SCENES[b.id % SCENES.length];
+// The spot is on the sidewalk strip just outside the block, at a place along it that differs block to block.
+// Some buildings come right up to the sidewalk, so the stretch is checked: the first place along the strip
+// with room for the props and the people around them wins. Buildings never change, so each answer is kept.
+const _scene = [];
+export function sceneSpot(b) {
+  if (_scene[b.id]) return _scene[b.id];
+  const c = blockCenter(b), z = c.z + BLOCK / 2 + 1.0, first = -9 + (b.id % 4) * 6;
+  const clear = (x) => { for (const dx of [-1.8, -0.9, 0, 0.9, 1.8]) for (const dz of [-1.6, -0.8, 0, 0.8]) if (insideBuilding(x + dx, z + dz, 0.6)) return false; return true; };
+  let x = c.x + first;
+  if (!clear(x)) for (let k = 1; k <= 12; k++) { const tryX = c.x + ((first + 15 + k * 3) % 33) - 15; if (clear(tryX)) { x = tryX; break; } }
+  return (_scene[b.id] = { x, z });
+}
+// where each of the three stands, off the scene's middle (x along the sidewalk, z toward the street)
+export const SCENE_SLOTS = { dice: [[-1.25, 0.15], [1.25, 0.15], [0, -1.0]], cards: [[-1.15, 0], [1.15, 0], [0, -1.05]], stoop: [[-1.0, -0.5], [0.9, -0.6], [0.1, 0.9]] };
+// who has which spot this step: the longest-serving people of each block (up to three), so they do not swap around
+function sceneSlots(s) {
+  const by = new Map(), out = new Map();
+  for (const e of s.ents) if (e.kind === 'npc' && e.role === 'defender' && e.hp > 0 && !e.backup && !e.boss && e.target != null) { let l = by.get(e.target); if (!l) by.set(e.target, l = []); l.push(e); }
+  for (const [bid, l] of by) { const b = s.blocks[bid]; if (!b || l[0].crew !== b.owner) continue; l.sort((a, c) => a.id - c.id); const n = l.length === 1 ? 1 : Math.min(b.owner === 'player' ? 3 : 2, l.length - 1); for (let i = 0; i < n; i++) out.set(l[i].id, i); } // with two or more, one always stays on the beat; a rival's game is two people, so walking past one is not walking into a crowd
+  return out;
+}
+// is someone of the block's crew standing at its scene right now (the game needs somebody to play with)
+const sceneLive = (s, b) => { const q = sceneSpot(b); return s.ents.some((e) => e.pose === 'hang' && e.target === b.id && e.hp > 0 && dist2(e, q) < 9); };
+
+// ---------- street dice ----------
+// Craps against the corner's pot, on a block you hold that runs a dice game. You are the shooter: 7 or 11 on the
+// first roll wins, 2, 3 or 12 loses, anything else is your point, and then you roll until the point comes back
+// (win) or a 7 does (lose). A win pays even money out of the pot; a loss goes into it. The pot is the corner's
+// own money, not your stash: it refills slowly, so a hot hand can clean it out and has to come back later.
+// Everything runs through applyAction for one player, so a second player at the same game is the same code.
+export const DICE = { bets: [5, 10, 25, 50], reach: 3.4, leave: 6.5 };
+export const potCap = (b) => (40 + b.rate * 10) * (b.built ? BUILD_BOOST : 1);
+const potOf = (b) => (b.pot ??= potCap(b));
+// the block whose dice game this player is standing at, or null
+export function diceAt(s, p) {
+  if (!p || p.car || p.hp <= 0 || p.downT > 0) return null;
+  const b = blockAt(s, p.x, p.z) || nearBlock(s, p);
+  if (!b || b.owner !== p.crew || sceneOf(b) !== 'dice' || dist2(p, sceneSpot(b)) > DICE.reach ** 2) return null;
+  return sceneLive(s, b) ? b : null;
+}
+// the sidewalk scene sits just outside the block's square, where blockAt may already say "street"
+function nearBlock(s, p) { let best = null, bd = 1e12; for (const b of s.blocks) { const d = dist2(p, sceneSpot(b)); if (d < bd) { bd = d; best = b; } } return bd < 40 ? best : null; }
+function diceRoll(s, p) {
+  const g = p.dice, b = s.blocks[g.block];
+  const a = 1 + Math.floor(R(s) * 6), c = 1 + Math.floor(R(s) * 6), sum = a + c; g.n++;
+  let result = 'roll';
+  if (!g.point) { if (sum === 7 || sum === 11) result = 'win'; else if (sum === 2 || sum === 3 || sum === 12) result = 'lose'; else { g.point = sum; result = 'point'; } }
+  else if (sum === g.point) result = 'win'; else if (sum === 7) result = 'lose';
+  let pay = 0;
+  if (result === 'win') { pay = g.bet * 2; s.crews[p.crew].cash += pay; b.pot = Math.max(0, potOf(b) - g.bet); log(s, `${sum}. You take the pot: +$${g.bet}.`); }
+  else if (result === 'lose') { b.pot = Math.min(potCap(b) * 2, potOf(b) + g.bet); log(s, g.point ? `Seven out. -$${g.bet}.` : `${sum}. Craps. -$${g.bet}.`); }
+  s.fx.push({ type: 'dice', by: p.id, block: b.id, a, b: c, sum, point: g.point, result, bet: g.bet, pay });
+  if (result === 'win' || result === 'lose') p.dice = null;
+}
+function diceAction(s, p, a) {
+  if (p.dice) { if (diceAt(s, p)) diceRoll(s, p); return; } // a point is on: every tap is the next roll
+  const b = diceAt(s, p); if (!b) return;
+  const bet = DICE.bets.includes(a.bet) ? a.bet : 0, cr = s.crews[p.crew];
+  if (!bet) return;
+  if (cr.cash < bet) { log(s, `You need $${bet} to get in.`); return; }
+  if (potOf(b) < bet) { log(s, `The pot at ${b.hustle} cannot cover $${bet}.`); return; }
+  cr.cash -= bet; p.dice = { block: b.id, bet, point: 0, n: 0 };
+  diceRoll(s, p);
+}
+// the pots refill, and a shooter who walks off, gets in a fight or loses the block with a point on forfeits the bet
+function diceStep(s, p, dt) {
+  for (const b of s.blocks) if (b.pot != null && b.pot < potCap(b)) b.pot = Math.min(potCap(b), b.pot + dt / 3);
+  const g = p.dice; if (!g) return;
+  const b = s.blocks[g.block];
+  if (b.owner === p.crew && !p.car && p.hp > 0 && !(p.hitT > 0) && dist2(p, sceneSpot(b)) < DICE.leave ** 2) return;
+  b.pot = Math.min(potCap(b) * 2, potOf(b) + g.bet); p.dice = null;
+  log(s, `You walked off a live bet. -$${g.bet}.`); s.fx.push({ type: 'dice', by: p.id, block: b.id, result: 'forfeit', bet: g.bet, pay: 0 });
+}
+
 export function applyAction(s, playerId, a) {
   if (a && a.type === 'streetReady') { ensureCalls(s); s.calls.ready = true; return; }
   const p = s.ents.find((e) => e.id === playerId);
@@ -428,6 +507,7 @@ export function applyAction(s, playerId, a) {
     else startDodge(s, p, dx, dz);
   } else if (a.type === 'street') streetChoice(s, p, a.choice);
   else if (a.type === 'jump' && !p.car && p.jumpT <= 0) p.jumpT = 0.8;
+  else if (a.type === 'dice') diceAction(s, p, a);
   else if (a.type === 'weapon') {
     const list = ['fists', ...(p.hasKnux ? ['knuckles'] : []), ...(p.hasBat ? ['bat'] : []), ...(p.ammo > 0 ? ['pistol'] : []), ...(p.shells > 0 ? ['shotgun'] : [])];
     p.weapon = list[(list.indexOf(p.weapon) + 1) % list.length];
@@ -1918,6 +1998,7 @@ export function step(s, dt) {
   p.wasBlock = hereB ? hereB.id : -1;
   if (hereB && hereB.owner === p.crew && p.hp > 0 && !(p.downT > 0)) pocketStash(s, hereB, p.crew, enteredB);
   for (const k of s.pickups) if (k.respawnT > 0) k.respawnT -= dt;
+  diceStep(s, p, dt);
   // heat decays when nobody is chasing you
   p.calmT = (p.calmT || 0) + dt;
   const copNear = s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && dist2(e, p) < 30 * 30);
@@ -1940,7 +2021,7 @@ export function step(s, dt) {
   for (const c of s.cars) if (c.ditched && !c.driver && !c.wrecked && dist2(c, p) > 150 * 150) c.remove = true;
   if (traffic.length < s.cfg.traffic && R(s) < dt) spawnTraffic(s, false);
   // entities
-  const chasers = new Map(), cells = bucketEnts(s);
+  const chasers = new Map(), cells = bucketEnts(s), slots = sceneSlots(s);
   for (const e of s.ents) {
     if (e.cd > 0) e.cd -= dt; if (e.hitT > 0) e.hitT -= dt; if (e.swing > 0) e.swing -= dt; if (e.stun > 0) e.stun -= dt; if (e.pathT > 0) e.pathT -= dt; if (e.jumpT > 0) e.jumpT -= dt; if (e.dodgeCd > 0) e.dodgeCd -= dt;
     if (e.kind === 'player' && e.dodgeBuf > 0) { e.dodgeBuf -= dt; if (e.dodgeCd <= 0 && e.dodgeT <= 0 && e.hp > 0 && !e.car && !(e.downT > 0)) startDodge(s, e, e.dodgeDx, e.dodgeDz); }
@@ -1948,6 +2029,7 @@ export function step(s, dt) {
     if (e.kx || e.kz) { e.x += e.kx * dt; e.z += e.kz * dt; e.kx *= 1 - 6 * dt; e.kz *= 1 - 6 * dt; if (Math.abs(e.kx) + Math.abs(e.kz) < 0.1) e.kx = e.kz = 0; collideBuildings(e, 0.5); clampWorld(e); }
     if (e.kind === 'ped') { pedStep(s, e, dt, p); if (dist2(e, p) > 130 * 130 && e.hp > 0) { e.remove = true; } continue; }
     if (e.kind !== 'npc' || e.hp <= 0) continue;
+    e.pose = null;
     // a scout rides the commandeered traffic car until the drive-by passes
     if (e.scout && e.car && !e.bail) {
       const car = s.cars.find((c) => c.id === e.car);
@@ -2019,6 +2101,12 @@ export function step(s, dt) {
       }
       if (foe) goal = foe;
       else if (helping) { /* still running to the fight: keep the goal set above */ }
+      else if (slots.has(e.id)) {
+        // one of the three at the block's scene: walk to your spot, then stand facing the game
+        const b = s.blocks[e.target], q = sceneSpot(b), o = SCENE_SLOTS[sceneOf(b)][slots.get(e.id)], spot = { x: q.x + o[0], z: q.z + o[1] }, d2 = dist2(e, spot);
+        if (d2 > 0.36) { goal = spot; followSpeed = d2 > 225 ? 4.5 : 1.6; } // the walker below stops within half a meter of a goal
+        else { e.pose = 'hang'; e.moving = 0; let r = Math.atan2(q.x - e.x, q.z - e.z) - e.ry; r = Math.atan2(Math.sin(r), Math.cos(r)); e.ry += r * Math.min(1, dt * 6); }
+      }
       else if (e.guard) {
         // posts spread around the block, slow patrol between two corners of its side
         e.post ??= (e.id * 2.39996) % (Math.PI * 2);
