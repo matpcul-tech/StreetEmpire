@@ -53,9 +53,9 @@ export function createHustle(scene, LOW) {
   };
 
   const live = new Map(); // block id to its group
-  let tick = 0;
+  let scanAt = -1e9;
   function update(s, p, now, dt) {
-    if (tick++ % 20 === 0) {
+    if (now - scanAt > 400) { scanAt = now; // by the clock, not by frames: a slow phone still gets its props within half a second
       for (const b of s.blocks) {
         const q = sceneSpot(b), d2 = (q.x - p.x) ** 2 + (q.z - p.z) ** 2, have = live.get(b.id);
         if (!have && d2 < NEAR * NEAR) { const g = new THREE.Group(); g.position.set(q.x, Y, q.z); g.userData.kind = sceneOf(b); build[sceneOf(b)](g, b.id); scene.add(g); live.set(b.id, g); }

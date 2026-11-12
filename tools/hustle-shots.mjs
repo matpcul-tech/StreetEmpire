@@ -21,7 +21,7 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
     s.opening = { done: true, beat: 'done', ids: [] }; s.policeT = 1e9; s.crews.player.cash = 600;
     if (own) for (let i = 0; i < 3; i++) g.send({ type: 'recruit' });
     clearInterval(window.__hold);
-    const pin = () => { s.t = 424; p.hp = p.max; p.heat = 0; p.x = q.x + (own ? 0.3 : 30); p.z = q.z + (own ? 1.9 : 30); p.ry = Math.PI; };
+    const pin = () => { s.t = 424; p.hp = p.max; p.heat = 0; p.x = q.x + (own ? 0.3 : 0); p.z = q.z + (own ? 1.9 : 34); p.ry = Math.PI; }; // a rival's scene is watched from across the street, off their block
     for (let i = 0; i < 1500; i++) { pin(); g.tick(1 / 30); }
     window.__hold = setInterval(pin, 16); window.__q = q;
     return { block: b.id, hustle: b.hustle, owner: b.owner, hang: s.ents.filter((e) => e.pose === 'hang' && e.target === b.id).length };

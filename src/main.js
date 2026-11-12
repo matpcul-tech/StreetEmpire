@@ -18,7 +18,7 @@ import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
 import { routeTo, RAMPS, RACES, GARAGES, STASHES, sideText, progress } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
-import { DICE, diceAt, potCap } from './state.js';
+import { DICE, diceAt, potCap, sceneSpot } from './state.js';
 import { createHustle } from './hustle.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
@@ -467,6 +467,8 @@ function renderDice() {
 function openDice() {
   const b = diceAt(S(), player(S())); if (!b) return;
   diceOpen = b.id; diceNote = ''; diceCls = ''; setDie($('dieA'), 0); setDie($('dieB'), 0); renderDice();
+  // turn the camera so the game is in front of you: behind your shoulder on the street side, looking at the dice
+  { const p = player(S()), q = sceneSpot(b); yaw = Math.atan2(p.x - q.x, p.z - q.z) + 0.5; pitch = 0.42; lookIdle = 0; }
   $('dice').classList.remove('hidden'); if (document.pointerLockElement) document.exitPointerLock();
 }
 function closeDice() { diceOpen = -1; $('dice').classList.add('hidden'); }
