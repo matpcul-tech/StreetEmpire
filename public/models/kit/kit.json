@@ -7,7 +7,7 @@
       "paint": true
     },
     "muscle": {
-      "file": "cars/muscle-coupe-v4.glb",
+      "file": "cars/muscle-coupe-v5.glb",
       "yaw": 0,
       "length": 4.8,
       "paint": true
@@ -25,13 +25,13 @@
       "paint": true
     },
     "van": {
-      "file": "cars/van-v4.glb",
+      "file": "cars/van-v5.glb",
       "yaw": 0,
       "length": 5.2,
       "paint": true
     },
     "sedan": {
-      "file": "cars/sedan-v10.glb",
+      "file": "cars/sedan-v11.glb",
       "yaw": 0,
       "length": 4.5,
       "paint": true
