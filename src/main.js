@@ -137,7 +137,14 @@ if (FX) {
   composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   // glow: only light sources and hot highlights pass the threshold, so signs, lamps, headlights and the low sun bleed a little
-  if (SHADOWS) { bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.5, 0.9); composer.addPass(bloom); }
+  if (SHADOWS) {
+    bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.5, 0.9);
+    // One pixel that is infinite or not a number (the sun disc and hot glints overflow the half float buffer on phone GPUs)
+    // gets blurred across the whole frame and the screen goes black. Such pixels are dropped and the rest capped before the blur.
+    const hp = bloom.materialHighPassFilter, read = 'vec4 texel = texture2D( tDiffuse, vUv );';
+    if (hp.fragmentShader.includes(read)) { hp.fragmentShader = hp.fragmentShader.replace(read, read + ' if ( any( isnan( texel ) ) || any( isinf( texel ) ) ) texel = vec4( 0.0 ); texel = clamp( texel, vec4( 0.0 ), vec4( 32.0 ) );'); hp.needsUpdate = true; composer.addPass(bloom); }
+    else bloom = null; // the pass changed shape: run without glow rather than risk the black screen
+  }
   composer.addPass(new OutputPass());
   grade = makeGradePass(ShaderPass); composer.addPass(grade);
   // Low and potato: grain off. Med and High: off by default, opt in with se-grain=1
