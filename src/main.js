@@ -18,6 +18,8 @@ import { canonical } from './retarget.js';
 import { createRadio } from './radio.js';
 import { routeTo, RAMPS, RACES, GARAGES, STASHES, sideText, progress } from './state.js';
 import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHouse } from './state.js';
+import { DICE, diceAt, potCap } from './state.js';
+import { createHustle } from './hustle.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
@@ -290,6 +292,7 @@ function context() {
   if (p.car) return 'EXIT';
   if (!s.mission) for (const g of s.ents) if (g.kind === 'giver' && (g.x - p.x) ** 2 + (g.z - p.z) ** 2 < 16) return 'TALK';
   if (shopAt(p) >= 0) return 'SHOP';
+  if (diceAt(s, p)) return 'DICE';
   { const h = houseAt(p); if (h >= 0 && !ownsHouse(s, h)) return 'BUY'; }
   if (nearestCar(s, p, 5)) return 'CAR';
   const b = blockAt(s, p.x, p.z);
@@ -298,7 +301,7 @@ function context() {
   return null;
 }
 function doContext() {
-  const c = context(); if (c === 'SHOP') { openShop(); return; } if (c === 'BUY') { session.send({ type: 'house' }); return; }
+  const c = context(); if (c === 'SHOP') { openShop(); return; } if (c === 'DICE') { openDice(); return; } if (c === 'BUY') { session.send({ type: 'house' }); return; }
   if (c === 'TALK') { session.send({ type: 'talk' }); sfx.chime(true); return; } if (c === 'UPGRADE') { session.send({ type: 'upgrade' }); return; } if (c === 'BUILD') { session.send({ type: 'build' }); return; } if (c) { session.send({ type: 'car' }); return; }
   // nothing in reach: say why and where to go instead of silently ignoring the key
   const s = S(), p = player(s), g = contactFor(s);
@@ -436,6 +439,50 @@ function renderShop() {
 function openShop() { const i = shopAt(player(S())); if (i < 0) return; shopOpen = i; renderShop(); $('shop').classList.remove('hidden'); if (document.pointerLockElement) document.exitPointerLock(); }
 function closeShop() { shopOpen = -1; $('shop').classList.add('hidden'); }
 $('shopClose').onclick = closeShop;
+
+// ---------- street dice ----------
+// The panel sits low on the screen over the running game, like the shop, and closes when you step away.
+// The rules and the money live in state.js (diceAction); this only shows them.
+let diceOpen = -1, diceNote = '', diceCls = '';
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+function setDie(el, n, shake) {
+  el.textContent = ''; for (let i = 0; i < 9; i++) { const b = document.createElement('b'); if ((PIPS[n] || []).includes(i)) b.className = 'on'; el.appendChild(b); }
+  if (shake) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+}
+function renderDice() {
+  if (diceOpen < 0) return;
+  const s = S(), p = player(s), b = s.blocks[diceOpen], cash = Math.floor(s.crews.player.cash), pot = Math.floor(b.pot ?? potCap(b)), live = p.dice && p.dice.block === b.id ? p.dice : null;
+  $('diceName').textContent = b.hustle.toUpperCase() + ': DICE';
+  $('diceInfo').textContent = `Pot $${pot}  ·  Cash $${cash.toLocaleString('en-US')}`;
+  $('dicePoint').textContent = live && live.point ? `POINT ${live.point}  ·  $${live.bet} down` : '';
+  const msg = $('diceMsg'); msg.textContent = diceNote || '7 or 11 wins. 2, 3 or 12 loses. Anything else is your point.'; msg.className = diceCls;
+  const bets = $('diceBets'); bets.textContent = ''; bets.style.display = live ? 'none' : '';
+  if (!live) for (const bet of DICE.bets) {
+    const el = document.createElement('button'); el.type = 'button'; el.textContent = '$' + bet; el.classList.toggle('no', cash < bet || pot < bet);
+    el.onclick = () => { session.send({ type: 'dice', bet }); handleFx(session.drainFx()); renderDice(); };
+    bets.appendChild(el);
+  }
+  $('diceRoll').style.display = live ? '' : 'none';
+}
+function openDice() {
+  const b = diceAt(S(), player(S())); if (!b) return;
+  diceOpen = b.id; diceNote = ''; diceCls = ''; setDie($('dieA'), 0); setDie($('dieB'), 0); renderDice();
+  $('dice').classList.remove('hidden'); if (document.pointerLockElement) document.exitPointerLock();
+}
+function closeDice() { diceOpen = -1; $('dice').classList.add('hidden'); }
+$('diceClose').onclick = closeDice;
+$('diceRoll').onclick = () => { session.send({ type: 'dice' }); handleFx(session.drainFx()); renderDice(); };
+// one roll of yours, from the simulation: faces, the line under them, the sound and the dice on the sidewalk
+function diceFx(f) {
+  hustle.roll(f.block);
+  if (f.result === 'forfeit') { pop(`Walked off a live bet: -$${f.bet}`, 'bad'); closeDice(); return; }
+  setDie($('dieA'), f.a, true); setDie($('dieB'), f.b, true); sfx.block(0.5);
+  if (f.result === 'win') { diceNote = `${f.sum}. You win $${f.bet}.`; diceCls = 'win'; pop(`+$${f.bet} dice`); sfx.chime(true); }
+  else if (f.result === 'lose') { diceNote = f.point ? `Seven out. You lose $${f.bet}.` : `${f.sum}. Craps. You lose $${f.bet}.`; diceCls = 'lose'; pop(`-$${f.bet} dice`, 'bad'); sfx.chime(false); }
+  else if (f.result === 'point') { diceNote = `${f.sum}. That is your point. Roll it again before a 7.`; diceCls = ''; }
+  else { diceNote = `${f.sum}. Still shooting for ${f.point}.`; diceCls = ''; }
+}
+const hustle = createHustle(scene, LOW);
 // markers: a ring on the pavement and a slow turning block over it. Green is a shop, blue a safehouse for sale, orange one you own.
 const spotMarks = [];
 { const ringG = new THREE.RingGeometry(1.5, 1.9, 28), boxG = new THREE.BoxGeometry(0.55, 0.55, 0.55);
@@ -501,7 +548,12 @@ function updateSpots(s, p, now) {
     else if (hi >= 0) showMsg(ownsHouse(s, hi) ? `Home: ${HOUSES[hi].name}. You heal here and the heat cools off.` : `${HOUSES[hi].name}: $${HOUSES[hi].price.toLocaleString('en-US')}. ${isTouch ? 'Tap BUY' : 'Press E'} to make it yours.`);
   }
   if (shopOpen >= 0 && si !== shopOpen) closeShop();
+  // the blocks' scenes near you, and the dice panel while you stand at the game
+  hustle.update(s, p, now, 1 / 60);
+  { const db = diceAt(s, p); if (diceOpen >= 0) { if (!db || db.id !== diceOpen) closeDice(); else if (Math.floor(now / 500) !== diceTick) { diceTick = Math.floor(now / 500); renderDice(); } }
+    hintOnce('dice', !!db, `Your corner runs a dice game. ${isTouch ? 'Tap DICE' : 'Press E'} to put money down.`); }
 }
+let diceTick = 0;
 
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
@@ -693,6 +745,7 @@ function handleFx(list) {
     else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { radio.news(`News: a corner in ${hood()} is under new management. Orange is in.`); const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
     else if (f.type === 'stash' && (!f.stolen || f.crew === 'player')) pop(`+$${f.amt} ${f.hustle}`);
     else if (f.type === 'upgrade') pop(`${f.n} guard${f.n > 1 ? 's' : ''} armed`);
+    else if (f.type === 'dice') { if (f.by === p.id) diceFx(f); else hustle.roll(f.block); }
     else if (f.type === 'built') { pop(`${f.hustle} built up: ${BUILD_BOOST}x income`); sfx.chime(true); }
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
     else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
@@ -1207,7 +1260,7 @@ function frame(now) {
   const ctxName = context(); const ctxBike = ctxName === 'EXIT' ? !!s.cars.find((c) => c.id === p.car && c.type === 'bike') : ctxName === 'CAR' && (nearestCar(s, p, 5) || {}).type === 'bike';
   const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName === 'UPGRADE' ? 'ARM' : ctxName;
   // desktop prompt for the E key, so walking up to Unc or a car says what E will do
-  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : ctxName === 'BUILD' ? `E  Build up the hustle ($${BUILD_COST}, ${BUILD_BOOST}x income)` : '';
+  const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'DICE' ? 'E  Shoot dice' : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : ctxName === 'BUILD' ? `E  Build up the hustle ($${BUILD_COST}, ${BUILD_BOOST}x income)` : '';
   if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
   $('bFire').textContent = p.ammo > 0 ? 'FIRE ' + p.ammo : 'NO AMMO';

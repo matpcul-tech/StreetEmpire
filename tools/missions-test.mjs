@@ -14,7 +14,8 @@ function tick(mx = 0, mz = 0, sprint = true) {
   G.movePlayer(s, p, mx, mz, sprint, DT); G.step(s, DT); t += DT;
   p.hp = p.max; p.heat = 0;
   for (const f of s.fx) if (f.type === 'hit' && f.to === p.id && followers().some((e) => e.id === f.by)) followerHits++;
-  const ch = s.ents.filter((e) => e.kind === 'npc' && e.role !== 'follower' && e.hp > 0 && e.crew !== 'player' && G.navPoint && Math.hypot(e.x - p.x, e.z - p.z) < 6).length;
+  // (a raid party is not a crowd of chasers: two waves on one block can stand five deep, and whether the bot is there when they do depends on the seed)
+  const ch = s.ents.filter((e) => e.kind === 'npc' && e.role !== 'follower' && e.role !== 'attacker' && e.hp > 0 && e.crew !== 'player' && G.navPoint && Math.hypot(e.x - p.x, e.z - p.z) < 6).length;
   maxChasers = Math.max(maxChasers, ch);
   s.fx.length = 0; s.events.length = 0;
 }

@@ -255,3 +255,23 @@ body.cine-on #lcol{visibility:hidden}
 @media not ((max-height:500px) and (orientation:landscape)){#bRadio{top:calc(max(8px,env(safe-area-inset-top)) + 44px);left:50%;transform:translateX(-50%)}}
 /* landscape phones: the district tag sits under the radar, not across the message banner and the job line */
 @media (max-height:500px) and (orientation:landscape){#dtag{top:calc(var(--st) + 10px + var(--rad) + 6px);left:calc(var(--sl) + 10px);transform:none;max-width:42vw;overflow:hidden;text-overflow:ellipsis}}
+/* street dice: a small panel low on the screen, so the game on the sidewalk stays in view above it */
+#dice{inset:auto 0 14px 0;max-width:360px;padding:12px 14px;z-index:40;text-align:center}
+#dice h1{font-size:20px;margin:0 0 2px}
+#diceInfo{margin:0 0 8px;color:#f4e6c4;font:bold 13px Arial,sans-serif}
+#diceFaces{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px}
+.die{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);width:46px;height:46px;padding:6px;box-sizing:border-box;background:#f4f1e8;border-radius:8px;box-shadow:0 2px 0 #7a7468}
+.die b{display:block;margin:auto;width:8px;height:8px;border-radius:50%;background:transparent}
+.die b.on{background:#16161a}
+.die.shake{animation:dieshake .32s ease-out}
+@keyframes dieshake{0%{transform:translateY(-14px) rotate(-40deg)}55%{transform:translateY(2px) rotate(12deg)}100%{transform:none}}
+#dicePoint{min-width:74px;font:bold 13px Arial,sans-serif;color:#ffcc33;text-align:left}
+#diceMsg{margin:0 0 8px;min-height:18px;font:bold 14px Arial,sans-serif;color:#fff}
+#diceMsg.win{color:#8fe08a}#diceMsg.lose{color:#ff7a66}
+#diceBets{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+#diceBets button{font:bold 15px Arial,sans-serif;letter-spacing:.5px;padding:10px 0;background:#2a221a;border:1px solid #a63;color:#ffcc33}
+#diceBets button.no{opacity:.4}
+#diceBtns{display:flex;gap:8px;justify-content:center}
+#diceBtns button{padding:9px 20px;font-size:16px}
+#diceClose{background:#444}
+@media (max-height:500px){#dice{inset:auto 0 6px 0;padding:8px 12px}#dice h1{font-size:16px}#diceInfo{margin-bottom:4px;font-size:12px}.die{width:36px;height:36px;padding:5px}.die b{width:6px;height:6px}#diceMsg{margin-bottom:5px;font-size:13px}#diceBets button{padding:7px 0;font-size:14px}#diceBtns button{padding:7px 16px;font-size:14px}}
