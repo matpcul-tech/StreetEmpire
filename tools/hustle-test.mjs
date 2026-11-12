@@ -14,6 +14,9 @@ const cash = (s) => s.crews.player.cash;
   check('your first block runs a dice game', G.sceneOf(home) === 'dice');
   check('all three kinds of scene are on the map', G.SCENES.every((k) => s.blocks.some((b) => G.sceneOf(b) === k)));
   check('no scene spot is inside a building, on any block', s.blocks.every((b) => { const q = G.sceneSpot(b); return !G.insideBuilding(q.x, q.z, 0.6); }));
+  const tight = s.blocks.filter((b) => { const q = G.sceneSpot(b); return G.SCENE_SLOTS[G.sceneOf(b)].some(([dx, dz]) => G.insideBuilding(q.x + dx, q.z + dz, 0.55)); });
+  check(`every standing spot at every scene has room for a person (${tight.length} blocks too tight)`, tight.length === 0);
+  check('every scene is on its own block\'s south sidewalk', s.blocks.every((b) => { const q = G.sceneSpot(b), c = G.blockCenter(b); return Math.abs(q.x - c.x) <= 16 && Math.abs(q.z - (c.z + G.BLOCK / 2 + 1)) < 0.01; }));
   p.x += 60; // out of the way
   while (G.guardsOf(s, home).length < 4) { s.crews.player.cash += 100; G.applyAction(s, p.id, { type: 'recruit' }); if (s.crews.player.cash > 5000) break; }
   run(s, 40);
@@ -25,6 +28,9 @@ const cash = (s) => s.crews.player.cash;
   const rival = s.blocks.find((b) => b.owner !== 'player' && b.owner !== 'neutral');
   const far = world(); const fp = far.p; const rb = far.s.blocks.find((b) => b.id === rival.id); run(far.s, 40);
   check('rival blocks have their scene too', hang(far.s, rb).length >= 1);
+  // nobody is left walking into a wall beside the scene: everyone posted there has arrived and stands still
+  let stuck = 0; for (const b of far.s.blocks) { const q = G.sceneSpot(b); for (const e of far.s.ents) if (e.kind === 'npc' && e.target === b.id && e.hp > 0 && e.role === 'defender' && e.pose !== 'hang' && e.moving > 0 && Math.hypot(e.x - q.x, e.z - q.z) < 4) stuck++; }
+  check(`after 40 s nobody is still shuffling toward a spot they cannot reach (${stuck})`, stuck === 0);
 }
 { // getting in a game
   const { s, p } = world(), home = s.blocks.find((b) => b.owner === 'player');

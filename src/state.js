@@ -419,9 +419,20 @@ function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math
 // a dice game, a card table or a boombox. The client draws the props (sceneSpot, sceneOf); the rest keep the beat.
 export const SCENES = ['dice', 'cards', 'stoop'];
 export const sceneOf = (b) => SCENES[b.id % SCENES.length];
-export function sceneSpot(b) { const c = blockCenter(b); return { x: c.x - 9 + (b.id % 4) * 6, z: c.z + BLOCK / 2 + 1.0 }; }
+// The spot is on the sidewalk strip just outside the block, at a place along it that differs block to block.
+// Some buildings come right up to the sidewalk, so the stretch is checked: the first place along the strip
+// with room for the props and the people around them wins. Buildings never change, so each answer is kept.
+const _scene = [];
+export function sceneSpot(b) {
+  if (_scene[b.id]) return _scene[b.id];
+  const c = blockCenter(b), z = c.z + BLOCK / 2 + 1.0, first = -9 + (b.id % 4) * 6;
+  const clear = (x) => { for (const dx of [-1.8, -0.9, 0, 0.9, 1.8]) for (const dz of [-1.6, -0.8, 0, 0.8]) if (insideBuilding(x + dx, z + dz, 0.6)) return false; return true; };
+  let x = c.x + first;
+  if (!clear(x)) for (let k = 1; k <= 12; k++) { const tryX = c.x + ((first + 15 + k * 3) % 33) - 15; if (clear(tryX)) { x = tryX; break; } }
+  return (_scene[b.id] = { x, z });
+}
 // where each of the three stands, off the scene's middle (x along the sidewalk, z toward the street)
-const SCENE_SLOTS = { dice: [[-1.25, 0.15], [1.25, 0.15], [0, -1.0]], cards: [[-1.15, 0], [1.15, 0], [0, -1.05]], stoop: [[-1.0, -0.5], [0.9, -0.6], [0.1, 0.9]] };
+export const SCENE_SLOTS = { dice: [[-1.25, 0.15], [1.25, 0.15], [0, -1.0]], cards: [[-1.15, 0], [1.15, 0], [0, -1.05]], stoop: [[-1.0, -0.5], [0.9, -0.6], [0.1, 0.9]] };
 // who has which spot this step: the longest-serving people of each block (up to three), so they do not swap around
 function sceneSlots(s) {
   const by = new Map(), out = new Map();
