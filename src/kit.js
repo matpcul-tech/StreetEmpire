@@ -28,6 +28,8 @@
 // body: where paint may be. Blue is chrome. Glass is exactly the red area. Paint is the green area's
 // pixels that carry the body's main hue, so lamps, plates and trim on the body keep their own color and
 // tires (not green) are never painted. Chrome is the blue area, plus bright gray pixels outside both.
+// A white, gray or black car has no hue to pick, so its paint is the green area's pixels that have no
+// color of their own: lamps and markers on the body (which do) keep theirs, and dirt stays as shading.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -246,7 +248,9 @@ export function cloneKitCar(T, paintHex) {
   else if (T.atlas) model.traverse((o) => {
     // single-texture (atlas) models: per-pixel finish, plus the car's paint when it has a body hue
     if (!o.isMesh) return;
-    const swap = (m) => (m.map ? finishMaterial(m, T.key, T.key ? paintHex : null) : m);
+    // a car with a body hue is repainted by hue. A white, gray or black car has no hue to find, so it is
+    // repainted only when it has a mask to say where its body is.
+    const swap = (m) => (m.map ? finishMaterial(m, T.key, T.key || masks.has(m) ? paintHex : null) : m);
     o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
   });
   const wheels = []; for (const c of model.children) if (c.name === 'wheel') wheels.push({ node: c, front: c.position.z > 0 });
@@ -302,6 +306,7 @@ function finishMaterial(m, key, paintHex) {
   const uPaint = { value: new THREE.Vector3(...(paintHex == null ? (key || [0, 0, 1]) : hsvOfColor(new THREE.Color(paintHex)))) };
   const uMode = { value: new THREE.Vector2(key ? 1 : 0, paintHex == null ? 0 : 1) }; // x: has body hue (paint gloss + chrome), y: repaint
   const mask = masks.get(m) || null, uMask = { value: mask };
+  const neutral = !!mask && !key; // no body hue: the mask alone says where the paint is
   t = m.clone(); t.envMapIntensity = 1.0;
   if (mask) masks.set(t, mask);
   t.onBeforeCompile = (sh) => {
@@ -317,8 +322,11 @@ function finishMaterial(m, key, paintHex) {
           float kGlass = (1.0 - smoothstep(0.25, 0.4, kHv.y)) * smoothstep(0.006, 0.014, kHv.z) * (1.0 - smoothstep(0.07, 0.11, kHv.z));
           float kChrome = uMode.x * (1.0 - smoothstep(0.10, 0.18, kHv.y)) * smoothstep(0.30, 0.45, kHv.z);
           ${mask ? 'vec3 kMask = texture2D(uMask, vMapUv).rgb; kGlass = kMask.r; kBody *= kMask.g; kChrome = max(kMask.b, kChrome * (1.0 - max(kMask.r, kMask.g)));' : ''}
+          ${neutral ? 'kBody = kMask.g * (1.0 - smoothstep(0.38, 0.55, kHv.y)) * smoothstep(0.08, 0.22, kHv.z);' : ''}
           if (uMode.y > 0.5) {
-            vec3 kNh = vec3(uPaint.x, clamp(kHv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(kHv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));
+            ${neutral
+    ? 'vec3 kNh = vec3(uPaint.x, uPaint.y, clamp(kHv.z * uPaint.z * 1.1, 0.0, 1.0));'
+    : 'vec3 kNh = vec3(uPaint.x, clamp(kHv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(kHv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));'}
             diffuseColor.rgb = mix(diffuseColor.rgb, kHsv2Rgb(kNh), kBody);
           }
           diffuseColor.rgb *= 1.0 - 0.45 * kGlass;`)
@@ -330,7 +338,7 @@ function finishMaterial(m, key, paintHex) {
           metalnessFactor = mix(metalnessFactor, 0.0, max(kBody, kGlass));
           metalnessFactor = mix(metalnessFactor, 1.0, kChrome);`);
   };
-  t.customProgramCacheKey = () => (mask ? 'kit-finish-mask' : 'kit-finish');
+  t.customProgramCacheKey = () => (neutral ? 'kit-finish-mask-neutral' : mask ? 'kit-finish-mask' : 'kit-finish');
   finished.set(id, t); return t;
 }
 
