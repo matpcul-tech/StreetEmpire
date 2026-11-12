@@ -1,7 +1,7 @@
 {
   "cars": {
     "lowrider": {
-      "file": "cars/lowrider-v3.glb",
+      "file": "cars/lowrider-v4.glb",
       "yaw": 0,
       "length": 5.4,
       "paint": true

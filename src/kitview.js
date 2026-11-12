@@ -21,6 +21,8 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 1.2;
 const grid = new THREE.GridHelper(40, 40, 0x1c2c48, 0x12203a); scene.add(grid);
 window.__kv = { camera, controls }; // review shots set the camera through this
+// the game never repaints the police car or the taxi, nor a car whose kit.json says paint: false; show those the same way
+const noPaint = (slot, entry) => slot === 'police' || slot === 'taxi' || (entry.spec && entry.spec.paint === false);
 const holder = new THREE.Group(); scene.add(holder);
 let current = null, wheels = [], mixer = null, shown = null;
 // characters play the game's own clips, retargeted, so the preview is what the game shows
@@ -49,7 +51,7 @@ async function show(kind, slot, entry) {
   if (kind === 'character') return showCharacter(slot, entry);
   document.querySelectorAll('.slot').forEach((b) => b.classList.toggle('on', b.dataset.key === kind + slot + (entry?.spec.file || '')));
   $('hint').style.display = 'none';
-  const obj = kind === 'car' ? cloneKitCar(entry, 0x6a2420) : { model: placeKitBuilding(entry), wheels: [] };
+  const obj = kind === 'car' ? cloneKitCar(entry, noPaint(slot, entry) ? null : 0x6a2420) : { model: placeKitBuilding(entry), wheels: [] };
   holder.add(obj.model, guides(kind, entry.spec.length || 4.4)); wheels = obj.wheels; current = { kind };
   const box = new THREE.Box3().setFromObject(obj.model), size = box.getSize(new THREE.Vector3());
   let tris = 0, meshes = 0; const mats = new Set();
