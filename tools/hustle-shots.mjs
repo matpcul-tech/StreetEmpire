@@ -17,7 +17,7 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
   const goTo = async (kind, own) => page.evaluate(async ({ kind, own }) => {
     const g = window.__game, s = g.state, p = s.ents.find((e) => e.kind === 'player');
     const K = ['dice', 'cards', 'stoop'], b = s.blocks.filter((b) => K[b.id % 3] === kind && (own ? b.owner === 'player' : b.owner !== 'player' && b.owner !== 'neutral')).sort((a, c) => a.id - c.id)[0];
-    const c = window.__dbg.blockCenter(b), q = { x: c.x - 9 + (b.id % 4) * 6, z: c.z + 21 }; // sceneSpot in state.js
+    const q = window.__dbg.sceneSpot(b); // the game's own answer, so the shot stands where the scene really is
     s.opening = { done: true, beat: 'done', ids: [] }; s.policeT = 1e9; s.crews.player.cash = 600;
     if (own) for (let i = 0; i < 3; i++) g.send({ type: 'recruit' });
     clearInterval(window.__hold);
