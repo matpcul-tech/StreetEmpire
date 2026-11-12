@@ -75,7 +75,7 @@ function dumpsterMat() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter;
   return new THREE.MeshStandardMaterial({ map: t, roughness: 0.75, metalness: 0.15 });
 }
-export function buildCity(scene, LOW, blocks, base = './') {
+export function buildCity(scene, LOW, blocks, base = './', SH = !LOW) {
   TEXBASE = base;
   rnd = mulberry(7);
   const S = LOW ? 256 : 512;
@@ -87,7 +87,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
   // so the palette stays West Coast while the asphalt, concrete and stucco catch light like real surfaces
   const relief = (name, rx, ry, scale) => ({ normalMap: painted('pbr/' + name + '_n', rx, ry, false), normalScale: new THREE.Vector2(scale, scale) });
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIZE, SIZE), new THREE.MeshStandardMaterial({ map: painted('asphalt', SIZE / 14, SIZE / 14), roughness: 1, roughnessMap: painted('pbr/asphalt_r', SIZE / 4.5, SIZE / 4.5, false), ...relief('asphalt', SIZE / 4.5, SIZE / 4.5, 1.2) }));
-  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = !LOW; scene.add(ground);
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = SH; scene.add(ground);
   // harbor water beyond the far edge
   const water = new THREE.Mesh(new THREE.PlaneGeometry(SIZE * 3, 200), new THREE.MeshStandardMaterial({ color: 0x0c1a22, roughness: 0.15, metalness: 0.6 }));
   const water2 = new THREE.Mesh(new THREE.PlaneGeometry(200, SIZE * 3), new THREE.MeshStandardMaterial({ color: 0x0c1a22, roughness: 0.15, metalness: 0.6 }));
@@ -201,8 +201,8 @@ export function buildCity(scene, LOW, blocks, base = './') {
     const add = (o) => { grp.add(o); return o; };
     const c = blockCenter(b), dist = districtOf(b);
     const props = { ac: [], tower: [], dumpster: [], tree: [], palm: [], bag: [], hydrant: [], pole: [], hoop: [] };
-    const sw = add(new THREE.Mesh(new THREE.BoxGeometry(BLOCK + 4, 0.22, BLOCK + 4), sidewalkMat)); sw.position.set(c.x, 0.11, c.z); sw.receiveShadow = !LOW;
-    const lot = add(new THREE.Mesh(new THREE.BoxGeometry(BLOCK - 2, 0.24, BLOCK - 2), dist === 0 ? yardMat : lotMat)); lot.position.set(c.x, 0.12, c.z); lot.receiveShadow = !LOW;
+    const sw = add(new THREE.Mesh(new THREE.BoxGeometry(BLOCK + 4, 0.22, BLOCK + 4), sidewalkMat)); sw.position.set(c.x, 0.11, c.z); sw.receiveShadow = SH;
+    const lot = add(new THREE.Mesh(new THREE.BoxGeometry(BLOCK - 2, 0.24, BLOCK - 2), dist === 0 ? yardMat : lotMat)); lot.position.set(c.x, 0.12, c.z); lot.receiveShadow = SH;
     if (b === courtBlock) {
       const ct = add(new THREE.Mesh(new THREE.PlaneGeometry(13, 13), courtMat)); ct.rotation.x = -Math.PI / 2; ct.position.set(c.x, 0.25, c.z);
       props.hoop.push([c.x, 0, c.z - 6.4, 0], [c.x, 0, c.z + 6.4, Math.PI]);
@@ -225,7 +225,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
       let upperY = 0, upperH = k.h;
       if (k.kind === 'house') {
         mats.fill(side(13 / 4, k.h / 4)); mats[faceX(k.sx)] = mats[faceZ(k.sz)] = wallMat('house', 1, 1, 'house_e', 0.5);
-        const roof = add(new THREE.Mesh(new THREE.ConeGeometry(k.w * 0.74, 2.4, 4, 1), shingleMat)); roof.rotation.y = Math.PI / 4; roof.position.set(k.x, k.h + 1.2, k.z); roof.castShadow = !LOW;
+        const roof = add(new THREE.Mesh(new THREE.ConeGeometry(k.w * 0.74, 2.4, 4, 1), shingleMat)); roof.rotation.y = Math.PI / 4; roof.position.set(k.x, k.h + 1.2, k.z); roof.castShadow = SH;
         // porch roof and posts on the street sides
         for (const [dx, dz] of [[k.sx, 0], [0, k.sz]]) {
           if ((b.id + bi) % 2 && dz) continue;
@@ -245,11 +245,11 @@ export function buildCity(scene, LOW, blocks, base = './') {
         const gm = new Array(6).fill(wallMat('cinder', 13 / 4, 4.2 / 4));
         gm[faceX(k.sx)] = gm[faceZ(k.sz)] = (b.id + bi) % 2 ? wallMat('market', 1, 1, 'market_e', 0.6) : gateMat;
         gm[2] = roofMat; gm[3] = roofMat;
-        const gf = add(new THREE.Mesh(new THREE.BoxGeometry(k.w, 4.2, k.d), gm)); gf.position.set(k.x, 2.1, k.z); gf.receiveShadow = !LOW;
+        const gf = add(new THREE.Mesh(new THREE.BoxGeometry(k.w, 4.2, k.d), gm)); gf.position.set(k.x, 2.1, k.z); gf.receiveShadow = SH;
       }
       mats[2] = roofMat; mats[3] = roofMat;
       const body = add(new THREE.Mesh(new THREE.BoxGeometry(k.w, upperH, k.d), mats));
-      body.position.set(k.x, upperY + upperH / 2, k.z); body.castShadow = body.receiveShadow = !LOW;
+      body.position.set(k.x, upperY + upperH / 2, k.z); body.castShadow = body.receiveShadow = SH;
       if (k.kind !== 'house') { const par = add(new THREE.Mesh(new THREE.BoxGeometry(k.w + 0.4, 0.6, k.d + 0.4), parMat)); par.position.set(k.x, k.h + 0.3, k.z); }
       if (k.kind === 'shed') { // roll-up door on the street side
         const d = add(new THREE.Mesh(new THREE.PlaneGeometry(6, 4.5), gateMat)); d.position.set(k.x + k.sx * (k.w / 2 + 0.05), 2.4, k.z); d.rotation.y = k.sx * Math.PI / 2;
@@ -303,7 +303,7 @@ export function buildCity(scene, LOW, blocks, base = './') {
       if (!list.length) return;
       const im = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach(([x, y, z, r], i) => { const sc = scaleVar ? 0.8 + ((i * 37) % 10) / 20 : 1; im.setMatrixAt(i, m4.compose(v3.set(x, y, z), q.setFromAxisAngle(up, r), one.clone().setScalar(sc))); });
-      im.castShadow = shadow && !LOW; im.receiveShadow = !LOW; grp.add(im);
+      im.castShadow = shadow && SH; im.receiveShadow = SH; grp.add(im);
     };
     inst(G.ac, metal, props.ac, true); inst(G.tower, M.tower, props.tower, true); inst(G.dumpster, M.dumpster, props.dumpster, true);
     inst(G.bag, M.bag, props.bag, false); inst(G.hydrant, M.hydrant, props.hydrant, false);

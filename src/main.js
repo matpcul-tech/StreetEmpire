@@ -4,6 +4,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { makeGradePass } from './grade.js';
 import { LocalSession } from './net.js';
 import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, BUILD_COST, BUILD_BOOST, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
@@ -31,13 +32,20 @@ const VERSION = 'v0.12';
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
 const LOW = (isTouch || POTATO || params.has('low') || params.get('q') === 'low') && !params.has('high') && params.get('q') !== 'high';
-document.getElementById('ver').textContent = VERSION + (POTATO ? ' potato' : LOW ? ' low' : ' high');
+// Phones run the low tier's lighter city and crowds. "Full" adds sun shadows, glow on lights and a longer view on top;
+// "lite" is the plain low look. A phone that cannot hold its frame rate on full steps down by itself and remembers.
+// ?gfx=full or ?gfx=lite picks one, ?pin stops every automatic quality change (review shots).
+const PIN = params.has('pin');
+const gfxAsk = params.get('gfx') || localStorage.getItem('se-gfx');
+let FULL = LOW && !POTATO && (gfxAsk ? gfxAsk === 'full' : !(navigator.deviceMemory && navigator.deviceMemory < 4));
+const SHADOWS = !LOW || FULL;
+document.getElementById('ver').textContent = VERSION + (POTATO ? ' potato' : FULL ? ' low+' : LOW ? ' low' : ' high');
 if (isTouch) document.body.classList.add('touch');
 // a touchscreen can appear after load (device emulation, convertibles): switch the touch layout on at the first touch
 addEventListener('touchstart', () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); } }, { capture: true, passive: true });
 // no long press menus, callouts or text selection over the game
 addEventListener('contextmenu', (e) => { if (!e.target.closest || !e.target.closest('input,textarea')) e.preventDefault(); });
-const LOD_DIST = LOW ? 34 : 60, CAR_DIST = LOW ? 90 : 170, DRIVER_DIST = LOW ? 30 : 50;
+let LOD_DIST = !LOW ? 60 : FULL ? 46 : 34, CAR_DIST = !LOW ? 170 : FULL ? 105 : 90; const DRIVER_DIST = LOW ? 30 : 50;
 const BASE = import.meta.env.BASE_URL;
 
 // ---------- save game ----------
@@ -71,8 +79,8 @@ const PR_MAX = () => Math.min(devicePixelRatio, POTATO ? 0.75 : LOW ? 2 : 2);
 let pixelRatio = Math.min(PR_MAX(), LOW && !POTATO ? 1.5 : 9);
 renderer.setPixelRatio(pixelRatio);
 renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = !LOW;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = SHADOWS;
+renderer.shadowMap.type = FULL ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.85;
 document.getElementById('app').appendChild(renderer.domElement);
@@ -114,19 +122,23 @@ function rebuildEnv() {
   envSun.copy(sunDir); sky2.material.uniforms.sunPosition.value.copy(sunDir);
   const rt = pmrem.fromScene(envScene, 0.04); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
 }
-scene.fog = new THREE.Fog(0xb87a52, 45, LOW ? 215 : 270);
+scene.fog = new THREE.Fog(0xb87a52, 45, !LOW ? 270 : FULL ? 245 : 215);
 const hemi = new THREE.HemisphereLight(0xc8a080, 0x4a3226, 0.9);
 const sun = new THREE.DirectionalLight(0xffa060, 2.2);
-if (!LOW) { sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; }
+const SH_R = FULL ? 36 : 45, SH_MAP = FULL ? 1536 : 2048; // half width of the shadowed square around the view, and its map size
+if (SHADOWS) { sun.castShadow = true; sun.shadow.mapSize.set(SH_MAP, SH_MAP); Object.assign(sun.shadow.camera, { left: -SH_R, right: SH_R, top: SH_R, bottom: -SH_R, near: 1, far: 260 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.03; }
 scene.add(hemi, sun, sun.target);
 
 // post: tone map, then a warm LUT grade, optional soft film grain and vignette
 const FX = !params.has('nofx') && !POTATO;
-let composer = null, grade = null;
+let composer = null, grade = null, bloom = null;
 if (FX) {
-  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW ? 2 : 4 }); // 2x multisampling on Low smooths the stair-step edges
+  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW && !FULL ? 2 : 4 }); // 2x multisampling on Low smooths the stair-step edges
   composer = new EffectComposer(renderer, rt);
-  composer.addPass(new RenderPass(scene, camera)); composer.addPass(new OutputPass());
+  composer.addPass(new RenderPass(scene, camera));
+  // glow: only light sources and hot highlights pass the threshold, so signs, lamps, headlights and the low sun bleed a little
+  if (SHADOWS) { bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.5, 0.9); composer.addPass(bloom); }
+  composer.addPass(new OutputPass());
   grade = makeGradePass(ShaderPass); composer.addPass(grade);
   // Low and potato: grain off. Med and High: off by default, opt in with se-grain=1
   grade.uniforms.uGrain.value = (LOW || POTATO) ? 0 : (localStorage.getItem('se-grain') === '1' ? 1 : 0);
@@ -136,7 +148,7 @@ export function setGrain(on) {
   localStorage.setItem('se-grain', on ? '1' : '0');
   if (grade) grade.uniforms.uGrain.value = on ? 1 : 0;
 }
-const city = buildCity(scene, LOW, S().blocks, BASE);
+const city = buildCity(scene, LOW, S().blocks, BASE, SHADOWS);
 setCarQuality(LOW, POTATO);
 { const p = player(S()); city.buildAllNear(p.x, p.z); }
 
@@ -145,6 +157,10 @@ setCarQuality(LOW, POTATO);
 const fogDay = new THREE.Color(0xb48a66), fogDusk = new THREE.Color(0x8a7088), fogNight = new THREE.Color(0x2e2c40);
 const sunDay = new THREE.Color(0xfff0dd), sunDusk = new THREE.Color(0xffb27a);
 let night = 0, lastNightSet = -1;
+// Day light balance [sun, sky fill, sky reflection]. With sun shadows on, the sun carries the day and the fill drops,
+// so a shadow is a real step darker than the lit street; without shadows the softer, flatter balance stays.
+const LT = SHADOWS ? [1.15, 0.68, 0.6] : [1, 1, 1];
+function flatLight() { LT[0] = LT[1] = LT[2] = 1; }
 function updateDay() {
   const h = clock(S());
   const ang = ((h - 6) / 24) * Math.PI * 2; // 6:00 sunrise, 18:00 sunset
@@ -157,13 +173,13 @@ function updateDay() {
   night = 1 - THREE.MathUtils.smoothstep(elev, -0.12, 0.05);
   const dark = Math.max(night, Math.min(1, (1 - day) * 1.15)); // bridges dusk so twilight is never darker than night
   // night (v0.8): blue purple moonlight plus a strong sky fill so nothing goes black
-  sun.intensity = 2.0 * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
+  sun.intensity = 2.0 * LT[0] * day + 0.75 * night; sun.color.copy(sunDay).lerp(sunDusk, dusk * 0.9);
   if (elev < 0) { sun.color.setHex(0x8c96e0); }
-  hemi.intensity = 0.3 + 0.85 * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x9094c8 : dusk > 0.5 ? 0x9a94b4 : 0xc8a888);
+  hemi.intensity = 0.3 * (1 - day * (1 - LT[1])) + 0.85 * LT[1] * day + (LOW ? 1.5 : 1.35) * dark; hemi.color.setHex(night > 0.5 ? 0x9094c8 : dusk > 0.5 ? 0x9a94b4 : 0xc8a888);
   hemi.groundColor.setHex(night > 0.5 ? 0x9a6c44 : dusk > 0.4 ? 0x6a5a58 : 0x6e5c4c); // warm bounce off lit streets at night, so brick and dark walls do not drop to black // cool bounce in shadows at dusk
   // sky reflection is kept very low by day: the midday sky is so bright that a fuller reflection turned the road,
   // sidewalks and walls pale and flat; the hemisphere fill above stands in for it
-  scene.environmentIntensity = 0.1 + 0.02 * day + 0.2 * night;
+  scene.environmentIntensity = (0.1 + 0.02 * day) * (1 - day * (1 - LT[2])) + 0.2 * night;
   scene.fog.color.copy(fogDay).lerp(fogDusk, dusk * 0.8).lerp(fogNight, night);
   scene.fog.near = 62 - 32 * night; // the haze starts farther out by day, so the near street reads clean
   const baseExp = 0.62 + 0.3 * dusk + (LOW ? 0.62 : 0.74) * dark, bump = (composer ? 0 : 0.26) * (dark + 0.5 * dusk);
@@ -181,6 +197,8 @@ function updateDay() {
   skyGlow.position.copy(camera.position); glowU.uSun.value.copy(sunDir); glowU.uDusk.value = Math.max(dusk, (1 - day) * (1 - night)); glowU.uNight.value = night * 0.6;
   rebuildEnv();
   if (grade) { grade.uniforms.uNight.value = night; grade.uniforms.uDusk.value = dusk; }
+  // glow belongs to the lit hours: by day the sky itself is far past the threshold and would wash the whole street out
+  if (bloom && (FULL || !LOW)) { const g = Math.max(night, dusk * 0.7 * (1 - day)); bloom.strength = 0.7 * g; bloom.enabled = g > 0.04; }
   return h;
 }
 
@@ -484,7 +502,7 @@ function diceFx(f) {
   else if (f.result === 'point') { diceNote = `${f.sum}. That is your point. Roll it again before a 7.`; diceCls = ''; }
   else { diceNote = `${f.sum}. Still shooting for ${f.point}.`; diceCls = ''; }
 }
-const hustle = createHustle(scene, LOW);
+const hustle = createHustle(scene, LOW, SHADOWS);
 // markers: a ring on the pavement and a slow turning block over it. Green is a shop, blue a safehouse for sale, orange one you own.
 const spotMarks = [];
 { const ringG = new THREE.RingGeometry(1.5, 1.9, 28), boxG = new THREE.BoxGeometry(0.55, 0.55, 0.55);
@@ -848,7 +866,19 @@ function objArrow(tgt, p) {
 const camPos = new THREE.Vector3(), tmp = new THREE.Vector3(), look = new THREE.Vector3();
 
 // ---------- loop ----------
-let slowFor = 0, potatoOffered = false;
+let slowFor = 0, potatoOffered = false, fullT = 0, heavyFor = 0;
+const shF = new THREE.Vector3(), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shZ = new THREE.Vector3(), shC = new THREE.Vector3(), shUp = new THREE.Vector3(0, 1, 0);
+// full graphics on a phone that cannot carry them: shadows and glow go off, the view pulls back in, and the choice is kept
+function dropFull() {
+  FULL = false; sun.castShadow = false; flatLight(); if (bloom) bloom.enabled = false;
+  LOD_DIST = 34; CAR_DIST = 90; scene.fog.far = 215;
+  try { localStorage.setItem('se-gfx', 'lite'); } catch (e) { /* storage off: it steps down again next time */ }
+  document.getElementById('ver').textContent = VERSION + ' low'; setGfxBtn();
+  showMsg('Shadows off to keep it smooth.');
+}
+const gfxBtn = $('gfxBtn');
+function setGfxBtn() { if (gfxBtn) gfxBtn.textContent = FULL ? 'ON' : 'OFF'; }
+if (gfxBtn) { if (!LOW || POTATO) gfxBtn.parentElement.style.display = 'none'; setGfxBtn(); gfxBtn.onclick = () => { writeSave(); localStorage.setItem('se-gfx', FULL ? 'lite' : 'full'); const u = new URL(location.href); u.searchParams.delete('gfx'); location.href = u.toString(); }; }
 let last = performance.now(), radarT = 0, frameAvg = 16, resT = 0, camInit = false;
 const startBtn = $('start');
 // with a save on this device the title offers CONTINUE, and NEW GAME under it (two taps, it erases the save)
@@ -864,7 +894,7 @@ const grainBox = $('grain'); grainBox.checked = !(LOW || POTATO) && localStorage
 Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }, POTATO).catch((e) => console.error(e)),
   // build kit first, so the first cars and city sections already use its models
-  Promise.all([loadKit(BASE, { low: LOW }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
+  Promise.all([loadKit(BASE, { low: LOW, shadow: SHADOWS, farAt: FULL ? 52 : 0 }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
 ]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = START_LABEL; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
 // On a phone the browser's address bar and the system buttons take a strip of the screen. Going fullscreen has to
 // happen inside a tap, so it is asked for on START and again whenever the game is resumed (the back gesture leaves
@@ -914,7 +944,7 @@ function buildTitleProps() {
   const ce = { id: 9001, kind: 'cop', crew: 'cops', hp: 100, moving: 0, weapon: 'fists' };
   const look = lookFor(ce, CREWS);
   if (modelReady(look.model) || look.kitT) {
-    titleCop = makeCharacter(look, !LOW); const side = spot.x > p.x ? -1.6 : 1.6;
+    titleCop = makeCharacter(look, SHADOWS); const side = spot.x > p.x ? -1.6 : 1.6;
     titleCop.position.set(spot.x + side, 0.24, spot.z + 0.6); titleCop.rotation.y = Math.atan2(p.x - titleCop.position.x, p.z - titleCop.position.z);
     titleCop.userData.cineHold = true; titleCop.userData.cineAnim = 'Idle_Loop'; titleCop.userData.fakeEnt = ce; scene.add(titleCop); titleProps.push(titleCop);
   }
@@ -1019,9 +1049,11 @@ function frame(now) {
   let rdt = Math.max(0, Math.min(0.05, rawMs / 1000)); last = now;
   frameAvg = frameAvg * 0.95 + Math.min(1000, rawMs) * 0.05;
   // sustained very low FPS after start: offer potato quality once
-  if (started && !POTATO && !paused && frameAvg > 70 && (slowFor += rdt) > 6 && !potatoOffered) { potatoOffered = true; showMsg('Running slow: try POTATO in Pause.'); pixelRatio = 0.5; renderer.setPixelRatio(pixelRatio); composer = null; }
+  if (started && !POTATO && !PIN && !paused && frameAvg > 70 && (slowFor += rdt) > 6 && !potatoOffered) { potatoOffered = true; showMsg('Running slow: try POTATO in Pause.'); pixelRatio = 0.5; renderer.setPixelRatio(pixelRatio); composer = null; }
   else if (frameAvg < 50) slowFor = 0;
-  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.8, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
+  // phones on full graphics: under about 38 fps for five seconds running (after the first few seconds of loading hitches), step down
+  if (FULL && !PIN && gfxAsk !== 'full' && started && !paused && (fullT += rdt) > 8) { if (frameAvg > 26) { if ((heavyFor += rdt) > 5) dropFull(); } else if (frameAvg < 21) heavyFor = 0; }
+  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = PIN ? pixelRatio : frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.8, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
@@ -1070,7 +1102,7 @@ function frame(now) {
     if (!modelReady(look.model) && e.kind !== 'player') continue;
     seen.add(e.id);
     let g = charViz.get(e.id);
-    if (!g || g.userData.model !== look.model) { if (g) scene.remove(g); g = makeCharacter(look, !LOW && e.kind === 'player'); g.userData.model = look.model; g.position.set(e.x, 0.24, e.z); scene.add(g); charViz.set(e.id, g); }
+    if (!g || g.userData.model !== look.model) { if (g) scene.remove(g); g = makeCharacter(look, SHADOWS && e.kind === 'player'); g.userData.model = look.model; g.position.set(e.x, 0.24, e.z); scene.add(g); charViz.set(e.id, g); }
     const held = g.userData.cineHold;
     if (!held) g.position.x += (e.x - g.position.x) * Math.min(1, rdt * 25); if (!held) g.position.z += (e.z - g.position.z) * Math.min(1, rdt * 25);
     if (!held) g.position.y = 0.24 + (e.jumpT > 0 ? Math.sin((1 - e.jumpT / 0.8) * Math.PI) * 0.9 : 0);
@@ -1229,7 +1261,16 @@ function frame(now) {
   fovKick = Math.max(0, fovKick - rdt * 20);
   const wantFov = 62 + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;
   if (started && !cine.ownsFov) { camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix(); }
-  if (!LOW) { sun.position.set(pv.x + sunDir.x * 100, Math.max(15, sunDir.y * 100), pv.z + sunDir.z * 100); sun.target.position.set(pv.x, 0, pv.z); }
+  if (sun.castShadow) {
+    // the shadowed square sits a little ahead of the camera and moves in whole shadow texels, so shadow edges do not crawl as you move
+    camera.getWorldDirection(shF); shF.y = 0; shF.normalize();
+    shZ.set(sunDir.x * 100, Math.max(15, sunDir.y * 100), sunDir.z * 100); const far = shZ.length(); shZ.divideScalar(far);
+    shX.crossVectors(shUp, shZ).normalize(); shY.crossVectors(shZ, shX);
+    shC.set(pv.x + shF.x * SH_R * 0.4, 0, pv.z + shF.z * SH_R * 0.4);
+    const tx = (2 * SH_R) / SH_MAP, a = Math.round(shC.dot(shX) / tx) * tx, b = Math.round(shC.dot(shY) / tx) * tx, c = shC.dot(shZ);
+    shC.set(0, 0, 0).addScaledVector(shX, a).addScaledVector(shY, b).addScaledVector(shZ, c);
+    sun.target.position.copy(shC); sun.position.copy(shC).addScaledVector(shZ, far);
+  }
   // sections show around the player, or around the camera while the opening flyover is far from them
   if (cine.active === 'open') city.update(camera.position.x, camera.position.z); else city.update(pv.x, pv.z);
   // HUD

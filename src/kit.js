@@ -72,7 +72,9 @@ export function pickCharacter(list, seed = 0, gender = null) {
 export function kitCharacter(slot, seed = 0, gender = null) { return pickCharacter(kit.characters[slot], seed, gender); }
 
 // Loads every kit model. Resolves even when nothing is installed.
-export async function loadKit(base, { low = false } = {}) {
+let castSh = true; // sun shadows: on for high and for phones on full graphics
+export async function loadKit(base, { low = false, shadow = !low, farAt = 0 } = {}) {
+  castSh = shadow; if (farAt) FAR_AT.low = farAt;
   let manifest = null;
   try { const r = await fetch(`${base}models/kit/kit.json`, { cache: 'no-cache' }); if (r.ok) manifest = await r.json(); } catch (e) { /* no kit installed */ }
   if (!manifest) { done = true; return kit; }
@@ -154,7 +156,7 @@ function prepCar(scene, spec, slot, low) {
       pivot.attach(w); // the wheel keeps its authored transform inside the pivot; the pivot only adds spin and steer
     }
     const paint = collectPaint(scene, spec);
-    shadows(root, !low, false); if (low) cheapen(root);
+    shadows(root, castSh, false); if (low) cheapen(root);
     return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, masked, slot, spec };
   }
   // fallback for untagged models: meshes named like a wheel and much smaller than the body
@@ -171,7 +173,7 @@ function prepCar(scene, spec, slot, low) {
     pivot.attach(m); // keeps the world transform, so the wheel now turns around its own center
   }
   const paint = collectPaint(scene, spec);
-  shadows(root, !low, false); if (low) cheapen(root);
+  shadows(root, castSh, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
   return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, masked, slot, spec };
 }
@@ -192,7 +194,7 @@ function prepBike(scene, spec, slot, low) {
     if (o.userData && o.userData.kitSteer) steer++;
     if (o.userData && o.userData.kitWheel) { wheels++; const b = new THREE.Box3().setFromObject(o, true); wheelR = (b.max.y - b.min.y) / 2; }
   });
-  shadows(root, !low, false); if (low) cheapen(root);
+  shadows(root, castSh, false); if (low) cheapen(root);
   return { root, key: spec.paint === false ? null : paintKey(scene), hasWheels: wheels > 0, hasSteer: steer > 0, wheelR, height: size.y * k, slot, spec };
 }
 
@@ -225,12 +227,12 @@ function prepBuilding(scene, spec, low, farScene = null) {
   const box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
   const fit = spec.footprint || 13, k = (spec.scale || 1) * fit / Math.max(size.x, size.z, 1e-6);
   inner.scale.setScalar(k); inner.position.set(-(box.min.x + box.max.x) / 2 * k, -box.min.y * k, -(box.min.z + box.max.z) / 2 * k);
-  shadows(root, !low, !low); if (low) cheapen(root);
+  shadows(root, castSh, castSh); if (low) cheapen(root);
   let far = null;
   if (farScene) {
     far = new THREE.Group(); far.name = 'kit-building-far';
     const fi = new THREE.Group(); fi.rotation.copy(inner.rotation); fi.scale.copy(inner.scale); fi.position.copy(inner.position); fi.add(farScene); far.add(fi);
-    shadows(far, !low, !low); if (low) cheapen(far);
+    shadows(far, castSh, castSh); if (low) cheapen(far);
   }
   return { root, far, farAt: low ? FAR_AT.low : FAR_AT.high, height: size.y * k, spec };
 }

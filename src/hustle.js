@@ -8,7 +8,7 @@ import { sceneSpot, sceneOf } from './state.js';
 const Y = 0.22; // top of the sidewalk
 const NEAR = 95, FAR = 115; // build inside NEAR, drop outside FAR
 
-export function createHustle(scene, LOW) {
+export function createHustle(scene, LOW, SH = !LOW) {
   const lam = (color) => new THREE.MeshLambertMaterial({ color });
   const M = {
     chalk: new THREE.MeshBasicMaterial({ color: 0xe9e4d6, transparent: true, opacity: 0.78, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
@@ -23,7 +23,7 @@ export function createHustle(scene, LOW) {
     crate: new THREE.BoxGeometry(0.38, 0.3, 0.38), box: new THREE.BoxGeometry(0.62, 0.3, 0.16), speaker: new THREE.CylinderGeometry(0.1, 0.1, 0.02, 16).rotateX(Math.PI / 2), handle: new THREE.BoxGeometry(0.4, 0.025, 0.03),
     cooler: new THREE.BoxGeometry(0.5, 0.3, 0.32), lid: new THREE.BoxGeometry(0.52, 0.05, 0.34),
   };
-  const put = (g, geo, mat, x, y, z, ry = 0, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = shadow && !LOW; m.receiveShadow = !LOW; g.add(m); return m; };
+  const put = (g, geo, mat, x, y, z, ry = 0, shadow = true) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; m.castShadow = shadow && SH; m.receiveShadow = SH; g.add(m); return m; };
   // every block's props are placed from its id, so a block always looks the same
   const rnd = (id, k) => { const v = Math.sin(id * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); };
 
