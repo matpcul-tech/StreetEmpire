@@ -20,6 +20,7 @@ const sun = new THREE.DirectionalLight(0xfff0dd, 2.2); sun.position.set(6, 10, 8
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = 1.2;
 const grid = new THREE.GridHelper(40, 40, 0x1c2c48, 0x12203a); scene.add(grid);
+window.__kv = { camera, controls }; // review shots set the camera through this
 const holder = new THREE.Group(); scene.add(holder);
 let current = null, wheels = [], mixer = null, shown = null;
 // characters play the game's own clips, retargeted, so the preview is what the game shows
