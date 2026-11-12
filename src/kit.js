@@ -24,8 +24,10 @@
 // extras.kitSteerAxis. See docs/build-kit.md, Motorcycles.
 // Models face +z (the glTF convention); yaw (degrees) turns one that does not.
 // Window mask (optional, made by Sovereign Asset): a material tagged extras.kitMask carries a mask image in
-// its emissive slot (emissive factor 0), on the same UVs as the base texture. Red is glass, green is body
-// paint, blue is chrome. When present the finish pass reads it instead of guessing each pixel from its color.
+// its emissive slot (emissive factor 0), on the same UVs as the base texture. Red is glass. Green is the
+// body: where paint may be. Blue is chrome. Glass is exactly the red area. Paint is the green area's
+// pixels that carry the body's main hue, so lamps, plates and trim on the body keep their own color and
+// tires (not green) are never painted. Chrome is the blue area, plus bright gray pixels outside both.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -289,9 +291,9 @@ function paintKey(scene) {
 // - chrome: bright, unsaturated, only on colored-body cars -> polished metal
 //   (a white or silver body would otherwise turn to mirror, so keyless models skip chrome)
 // Everything else keeps the model's own roughness and metalness.
-// A model with a window mask (see the top of this file) skips the guessing: glass, body paint and chrome
-// are exactly where the mask says, so tires and black trim stay matte and a window with a painted
-// reflection is still all glass. Models without a mask are sorted by color as before.
+// A model with a window mask (see the top of this file) takes glass from the mask alone, so tires and
+// black trim stay matte and a window with a painted reflection is still all glass. Paint is still found
+// by hue, but only inside the mask's body area. Models without a mask are sorted by color as before.
 const finished = new Map();
 function hsvOfColor(col) { const r = col.r, g = col.g, b = col.b, mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0; if (d > 1e-6) h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [((h / 6) + 1) % 1, mx > 0 ? d / mx : 0, mx]; }
 function finishMaterial(m, key, paintHex) {
@@ -314,7 +316,7 @@ function finishMaterial(m, key, paintHex) {
           float kBody = uMode.x * (1.0 - smoothstep(0.035, 0.065, kDh)) * smoothstep(0.10, 0.22, kHv.y);
           float kGlass = (1.0 - smoothstep(0.25, 0.4, kHv.y)) * smoothstep(0.006, 0.014, kHv.z) * (1.0 - smoothstep(0.07, 0.11, kHv.z));
           float kChrome = uMode.x * (1.0 - smoothstep(0.10, 0.18, kHv.y)) * smoothstep(0.30, 0.45, kHv.z);
-          ${mask ? 'vec3 kMask = texture2D(uMask, vMapUv).rgb; kGlass = kMask.r; kBody = kMask.g; kChrome = kMask.b;' : ''}
+          ${mask ? 'vec3 kMask = texture2D(uMask, vMapUv).rgb; kGlass = kMask.r; kBody *= kMask.g; kChrome = max(kMask.b, kChrome * (1.0 - max(kMask.r, kMask.g)));' : ''}
           if (uMode.y > 0.5) {
             vec3 kNh = vec3(uPaint.x, clamp(kHv.y * uPaint.y / max(uKey.y, 1e-3), 0.0, 1.0), clamp(kHv.z * uPaint.z / max(uKey.z, 1e-3), 0.0, 1.0));
             diffuseColor.rgb = mix(diffuseColor.rgb, kHsv2Rgb(kNh), kBody);
