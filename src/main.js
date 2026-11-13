@@ -928,8 +928,10 @@ function startGame() {
     if (savedState) { showMsg('Back on your streets.'); return; } // a continued game drops straight in
     if (params.has('nointro') || !pg) { welcome(); return; }
     city.buildAll(); // the flyover crosses the whole city: build it behind the fade so no lot is empty
-    cine.opening({ home, far, center: { x: 0, z: 0 }, player: pg.position.clone(), onDone: welcome,
-      dur: 10.5, // the 9 x 9 city is a longer flight
+    // one block on the city's diagonal for each place the opening cuts to
+    const diag = (g) => blockCenter(s.blocks.find((b) => b.gx === g && b.gz === g) || s.blocks[0]);
+    cine.opening({ home, center: { x: 0, z: 0 }, player: pg.position.clone(), onDone: welcome, pitch: PITCH,
+      spots: { harbor: far, downtown: diag(Math.floor(GRID / 2)), midtown: diag(Math.round((GRID - 1) * 0.35)) },
       locs: [{ at: 0.2, k: DISTRICTS[2].toUpperCase(), t: 'Gold Line runs the docks' }, { at: 2.0, k: DISTRICTS[1].toUpperCase(), t: 'Red Kings. Blue Hand. Nobody shares.' }, { at: 3.9, k: DISTRICTS[3].toUpperCase(), t: 'Nobody holds it. Yet.' }, { at: 5.3, k: DISTRICTS[0].toUpperCase(), t: 'One block. Yours.' }] });
   }, 480);
 }

@@ -65,14 +65,27 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
       card.classList.toggle('red', red); card.classList.remove('show'); void card.offsetWidth; card.classList.add('show'); cardT = dur;
       const b = $('big'); if (b) b.classList.remove('show');
     },
-    // opening flyover: Harbor, over Downtown, down onto the player on the Eastside, then hand the camera back
+    // The opening, as five shots with hard cuts instead of one long flight. Each shot is a short, steady camera
+    // move and each cut lands on a place with its name on screen:
+    //   the Harbor from off its corner, rising   /   Downtown from above, pushing in between the towers
+    //   Midtown from the middle of a street, rolling forward   /   the Eastside, craning down toward your corner
+    //   you, from low down, and from there the camera swings round to where you play from
+    // o.spots holds a block center for each place, o.pitch the distance between streets.
     opening(o) {
       if (cur) end();
-      const V = (x, y, z) => new THREE.Vector3(x, y, z), F = o.far, C = o.center, H = o.home, P = o.player;
-      const away = Math.atan2(H.x - C.x, H.z - C.z);
-      const pts = [V(F.x + 22, 30, F.z + 26), V(F.x + (C.x - F.x) * 0.55 + 8, 40, F.z + (C.z - F.z) * 0.55 + 8), V(C.x + (H.x - C.x) * 0.5, 36, C.z + (H.z - C.z) * 0.5), V(P.x + Math.sin(away) * 18, 14, P.z + Math.cos(away) * 18), V(P.x + Math.sin(away) * 7, 3.2, P.z + Math.cos(away) * 7)];
-      const looks = [V(F.x, 4, F.z), V(C.x, 8, C.z), V(H.x, 4, H.z), V(P.x, 1.6, P.z), V(P.x, 1.4, P.z)];
-      cur = { kind: 'open', t: 0, dur: o.dur || 8.4, path: new THREE.CatmullRomCurve3(pts, false, 'centripetal'), look: new THREE.CatmullRomCurve3(looks, false, 'centripetal'), locs: o.locs || [], li: -1, onDone: o.onDone };
+      const V = (x, y, z) => new THREE.Vector3(x, y, z), C = o.center, H = o.home, P = o.player, S = o.spots, half = o.pitch / 2;
+      const away = Math.atan2(H.x - C.x, H.z - C.z), ax = Math.sin(away), az = Math.cos(away);
+      const L = o.locs || [];
+      const shots = [
+        { dur: 2.4, p0: V(S.harbor.x + 38, 7, S.harbor.z + 44), p1: V(S.harbor.x + 30, 14, S.harbor.z + 26), l0: V(S.harbor.x, 5, S.harbor.z), l1: V(S.harbor.x, 5, S.harbor.z), fov: 46, loc: L[0] },
+        { dur: 2.4, p0: V(S.downtown.x + 40, 46, S.downtown.z + 40), p1: V(S.downtown.x + 26, 32, S.downtown.z + 26), l0: V(S.downtown.x, 12, S.downtown.z), l1: V(S.downtown.x, 7, S.downtown.z), fov: 50, loc: L[1] },
+        // down the middle of the street on the block's east side: nothing but road ahead of the lens
+        { dur: 2.2, p0: V(S.midtown.x + half, 2.7, S.midtown.z + 34), p1: V(S.midtown.x + half, 2.3, S.midtown.z + 14), l0: V(S.midtown.x + half, 3.2, S.midtown.z - 30), l1: V(S.midtown.x + half, 3.0, S.midtown.z - 30), fov: 42, loc: L[2] },
+        { dur: 2.4, p0: V(P.x + ax * 34, 22, P.z + az * 34), p1: V(P.x + ax * 17, 9, P.z + az * 17), l0: V(H.x, 3, H.z), l1: V(P.x, 1.5, P.z), fov: 48, loc: L[3] },
+        { dur: 2.3, p0: V(P.x + ax * 4.4 + az * 1.2, 0.8, P.z + az * 4.4 - ax * 1.2), p1: V(P.x + ax * 3.6 + az * 0.4, 1.0, P.z + az * 3.6 - ax * 0.4), l0: V(P.x, 1.35, P.z), l1: V(P.x, 1.4, P.z), fov: 38, hand: true },
+      ];
+      let at = 0; for (const sh of shots) { sh.at = at; at += sh.dur; }
+      cur = { kind: 'open', t: 0, dur: at, shots, si: -1, onDone: o.onDone };
       document.body.classList.add('cine-on', 'cine-bars');
     },
     skip() { if (cur) cur.t = cur.dur; if (cardT > 0) cardT = Math.min(cardT, 0.3); },
@@ -108,7 +121,8 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
     },
     // title screen camera: three slow shots of the live block, dipping to black between them
     titleCam(rdt, o) { titleFrame(rdt, o); },
-    titleShot(n, k = 0.5) { T.shot = n; T.t = T.dur * k; }, // test hook for screenshots
+    titleShot(n, k = 0.5) { T.shot = n; T.t = DUR[n] * k; }, // test hook for screenshots
+    openShot(n, k = 0.5) { if (cur && cur.kind === 'open') cur.t = cur.shots[n].at + cur.shots[n].dur * k; }, // same, for the opening
     // per frame; returns true when it drove the camera this frame
     update(rdt) {
       if (cardT > 0 && (cardT -= rdt) <= 0) card.classList.remove('show');
@@ -281,19 +295,20 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   }
   const gp = new THREE.Vector3(), gl = new THREE.Vector3(), cp = new THREE.Vector3(), cl = new THREE.Vector3();
   function openFrame(c) {
-    // the main loop already placed the chase camera: that is where the flight lands
-    gp.copy(camera.position); camera.getWorldDirection(tv); gl.copy(gp).addScaledVector(tv, 6);
-    const k = Math.min(1, c.t / (c.dur * 0.84)), kk = k * k * (3 - 2 * k) * 0.35 + k * 0.65;
-    c.path.getPoint(kk, cp); c.look.getPoint(kk, cl);
-    const b = seg(c.t, c.dur * 0.8, c.dur);
+    // the main loop already placed the chase camera: that is where the last shot hands off
+    gp.copy(camera.position); camera.getWorldDirection(tv); gl.copy(gp).addScaledVector(tv, 6); const gFov = 62;
+    let si = 0; for (let i = 0; i < c.shots.length; i++) if (c.t >= c.shots[i].at) si = i;
+    const sh = c.shots[si], k = Math.min(1, (c.t - sh.at) / sh.dur);
+    // a steady move inside the shot: it is already moving on the first frame after a cut and still moving on the last
+    cp.lerpVectors(sh.p0, sh.p1, k); cl.lerpVectors(sh.l0, sh.l1, k);
+    const b = sh.hand ? seg(k, 0.5, 1) : 0; // the last shot spends its second half swinging round to the play camera
     camera.position.lerpVectors(cp, gp, b); tl.lerpVectors(cl, gl, b); camera.lookAt(tl);
-    camera.fov = 50 + 12 * b; camera.updateProjectionMatrix();
-    let li = -1; for (let i = 0; i < c.locs.length; i++) if (c.t >= c.locs[i].at) li = i;
-    if (li !== c.li) {
-      c.li = li; const el = $('cineLoc'); el.classList.remove('show');
-      if (li >= 0) { $('cineLocK').textContent = c.locs[li].k; $('cineLocT').textContent = c.locs[li].t; void el.offsetWidth; el.classList.add('show'); }
+    camera.fov = sh.fov + (gFov - sh.fov) * b; camera.updateProjectionMatrix();
+    if (si !== c.si) { // the cut: the place name lands with it
+      c.si = si; const el = $('cineLoc'); el.classList.remove('show');
+      if (sh.loc) { $('cineLocK').textContent = sh.loc.k; $('cineLocT').textContent = sh.loc.t; void el.offsetWidth; el.classList.add('show'); }
     }
-    if (c.li >= 0 && c.t > (c.locs[c.li + 1]?.at ?? c.dur) - 0.35) $('cineLoc').classList.remove('show');
+    if (c.t > sh.at + sh.dur - 0.3) $('cineLoc').classList.remove('show');
   }
   function passFrame(c) {
     // a slow low orbit on the player while the payoff card is up
@@ -315,13 +330,15 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   // The camera keeps its distance on purpose: the characters are built to be seen at street range, not in a close-up.
   // On a tall screen (a phone held upright) the hero shots sit further back so he fits between the logo and the buttons;
   // on a wide one he stands right of center, clear of the logo and buttons on the left.
-  const T = { t: 0, shot: 0, init: -1, a0: 0, dur: 8 };
-  const SHOTS = 4;
+  // Shots cut straight to the next one. Only the loop back from the crane to the hero dips through black.
+  const DUR = [7.5, 5.5, 5.5, 8.5], SHOTS = DUR.length;
+  const T = { t: 0, shot: 0, init: -1, a0: 0, dur: DUR[0] };
   const fade = () => document.getElementById('tiFade');
   function titleFrame(rdt, o) {
     T.t += rdt;
     if (T.t > T.dur) { T.t = 0; T.shot = (T.shot + 1) % SHOTS; }
-    const f = fade(); if (f) f.classList.toggle('on', T.t > T.dur - 0.45 || T.t < 0.15);
+    T.dur = DUR[T.shot];
+    const f = fade(); if (f) f.classList.toggle('on', (T.shot === SHOTS - 1 && T.t > T.dur - 0.45) || (T.shot === 0 && T.t < 0.15));
     const k = T.t / T.dur, e = k * k * (3 - 2 * k), P = o.player, tall = camera.aspect < 1;
     const fwdX = Math.sin(o.ry), fwdZ = Math.cos(o.ry); // the way he faces
     if (T.init !== T.shot) { // pick a clear starting angle for this shot
