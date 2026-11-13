@@ -353,7 +353,18 @@ function weapons() {
   if (weaponGeo) return weaponGeo;
   const bat = mergeGeometries([new THREE.CylinderGeometry(0.014, 0.032, 0.78, 8).translate(0, 0.33, 0), new THREE.CylinderGeometry(0.02, 0.02, 0.012, 8).translate(0, -0.06, 0)].map((g) => g.toNonIndexed()));
   bat.rotateX(Math.PI / 2); // handle across the palm
-  const pistol = mergeGeometries([new THREE.BoxGeometry(0.03, 0.035, 0.17).translate(0, 0.03, 0.05), new THREE.BoxGeometry(0.028, 0.09, 0.035).translate(0, -0.01, 0)].map((g) => g.toNonIndexed()));
+  // A service pistol, built here with +z down the barrel and +y up, the web of the hand at the origin:
+  // slide, the frame under it, a raked grip, a trigger guard, sights and the muzzle end. About 19 cm long.
+  const pistol = mergeGeometries([
+    new THREE.BoxGeometry(0.027, 0.03, 0.19).translate(0, 0.033, 0.055), // slide
+    new THREE.BoxGeometry(0.024, 0.016, 0.125).translate(0, 0.011, 0.062), // frame and dust cover
+    new THREE.BoxGeometry(0.026, 0.105, 0.04).rotateX(0.2).translate(0, -0.042, -0.02), // grip, raked back
+    new THREE.BoxGeometry(0.029, 0.012, 0.046).rotateX(0.2).translate(0, -0.098, -0.031), // magazine base
+    new THREE.BoxGeometry(0.016, 0.006, 0.052).translate(0, -0.03, 0.045), new THREE.BoxGeometry(0.016, 0.03, 0.006).translate(0, -0.016, 0.07), // trigger guard
+    new THREE.BoxGeometry(0.004, 0.02, 0.008).rotateX(-0.3).translate(0, -0.012, 0.04), // trigger
+    new THREE.BoxGeometry(0.018, 0.007, 0.01).translate(0, 0.051, -0.03), new THREE.BoxGeometry(0.005, 0.007, 0.008).translate(0, 0.051, 0.142), // rear and front sight
+    new THREE.CylinderGeometry(0.008, 0.008, 0.012, 8).rotateX(Math.PI / 2).translate(0, 0.036, 0.154), // muzzle
+  ].map((g) => g.toNonIndexed()));
   pistol.rotateX(-Math.PI / 2);
   const shotgun = mergeGeometries([new THREE.CylinderGeometry(0.014, 0.014, 0.62, 6).rotateX(Math.PI / 2).translate(0, 0.035, 0.25), new THREE.BoxGeometry(0.04, 0.06, 0.32).translate(0, 0.0, -0.12), new THREE.BoxGeometry(0.035, 0.035, 0.14).translate(0, 0.0, 0.2)].map((g) => g.toNonIndexed()));
   shotgun.rotateX(-Math.PI / 2);
@@ -468,12 +479,23 @@ export function makeCharacter(L, shadow) {
 // the slot (1.8 m unless kit.json says otherwise), feet on the ground, night shading on its materials.
 const kitPrep = new WeakMap();
 const kitMats = new Map();
+// Generated character maps come with two defects that show up in a close-up:
+// - about one texel in twenty of the normal map is garbage (seams and whole patches tilted past 45 degrees, some pointing
+//   into the surface). Lit, those are the white and black specks on a face. Any texel tilted that far is read as flat.
+// - the roughness map dips to mirror-smooth in spots. Nothing on a person is glossier than 0.6 here.
+function skinPatch(sh) {
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = max(roughnessFactor, 0.6);')
+    .replace('#include <normal_fragment_maps>', THREE.ShaderChunk.normal_fragment_maps.replace('mapN.xy *= normalScale;', 'if (mapN.z < 0.72) mapN = vec3(0.0, 0.0, 1.0);\n\tmapN.xy *= normalScale;'));
+}
 function kitMat(m) {
   if (!m || kitMats.has(m)) return kitMats.get(m) || m;
   // keep the authored albedo, normal and packed maps. The paint shader is only for the shared Quaternius body.
   // fill 0.35: textured kit models keep their shading instead of the full painted-body night glow
   const k = m.clone(); k.envMapIntensity = Math.min(k.envMapIntensity ?? 1, 0.45); k.color.set(0xffffff);
-  k.onBeforeCompile = (sh) => nightPatch(sh, 0.35); k.customProgramCacheKey = () => 'kitchar';
+  // skin and cloth are not metal. The generated packed maps say up to 40 percent metal in patches, which reads as wet, pale skin.
+  k.metalness = 0; k.metalnessMap = null;
+  k.onBeforeCompile = (sh) => { nightPatch(sh, 0.35); skinPatch(sh); }; k.customProgramCacheKey = () => 'kitchar2';
   kitMats.set(m, k); return k;
 }
 export function prepKit(T) {
@@ -517,6 +539,9 @@ function makeKitCharacter(T, shadow) {
     const gripPoint = new THREE.Object3D(); gripPoint.name = 'grip_point'; gripPoint.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(gripPoint);
     for (const w of [bat, gun, shotgun, knux]) { w.visible = false; w.position.set(GRIP.x, GRIP.y, GRIP.z); grip.add(w); }
     knux.position.set(0, 0.075, 0.03);
+    // on these rigs the hand frame comes out turned half way round the barrel: without this the guns sit upside down, grip in the air
+    gun.rotation.y = Math.PI; shotgun.rotation.y = Math.PI;
+    gun.position.set(GRIP.x, GRIP.y - 0.02, GRIP.z + 0.02); // raised so the fist closes on the grip, not on the frame under the barrel
   }
   const g = new THREE.Group(); g.add(root);
   const mixer = new THREE.AnimationMixer(model), act = {};
@@ -561,7 +586,8 @@ export function animate(g, e, dt, sitting) {
     u.cur = want;
   }
   if (want === 'Jog_Fwd_Loop' || want === 'Sprint_Loop' || want === 'Walk_Loop') u.act[want].timeScale = speed;
-  u.bat.visible = e.weapon === 'bat'; u.gun.visible = e.weapon === 'pistol'; u.shotgun.visible = e.weapon === 'shotgun'; u.knux.visible = e.weapon === 'knuckles';
+  const out = !u.cineHolster; // a staged moment can put the weapon away without touching what the player carries
+  u.bat.visible = out && e.weapon === 'bat'; u.gun.visible = out && e.weapon === 'pistol'; u.shotgun.visible = out && e.weapon === 'shotgun'; u.knux.visible = out && e.weapon === 'knuckles';
   u.mixer.update(dt);
-  if (u.grip) applyGrip(u.root, u.grip, gripAmount(u.cur, e.weapon));
+  if (u.grip) applyGrip(u.root, u.grip, out ? gripAmount(u.cur, e.weapon) : 0);
 }

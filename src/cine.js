@@ -307,25 +307,45 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
   }
 
   // ---------- title screen camera ----------
-  const T = { t: 0, shot: 0, init: -1, a0: 0, dur: 7.5 };
+  // Four slow shots of the live block, dipping to black between them:
+  //   0 the hero, full figure from low down so he stands over the lens, with the sky behind for the logo
+  //   1 over his shoulder, looking down his street
+  //   2 the street: the crew, the cruiser and its lights
+  //   3 a crane up off the corner and out over the city
+  // The camera keeps its distance on purpose: the characters are built to be seen at street range, not in a close-up.
+  // On a tall screen (a phone held upright) the hero shots sit further back so he fits between the logo and the buttons;
+  // on a wide one he stands right of center, clear of the logo and buttons on the left.
+  const T = { t: 0, shot: 0, init: -1, a0: 0, dur: 8 };
+  const SHOTS = 4;
   const fade = () => document.getElementById('tiFade');
   function titleFrame(rdt, o) {
     T.t += rdt;
-    if (T.t > T.dur) { T.t = 0; T.shot = (T.shot + 1) % 3; }
+    if (T.t > T.dur) { T.t = 0; T.shot = (T.shot + 1) % SHOTS; }
     const f = fade(); if (f) f.classList.toggle('on', T.t > T.dur - 0.45 || T.t < 0.15);
-    const k = T.t / T.dur, P = o.player;
+    const k = T.t / T.dur, e = k * k * (3 - 2 * k), P = o.player, tall = camera.aspect < 1;
+    const fwdX = Math.sin(o.ry), fwdZ = Math.cos(o.ry); // the way he faces
     if (T.init !== T.shot) { // pick a clear starting angle for this shot
       T.init = T.shot;
-      const base = T.shot === 0 ? o.ry : T.shot === 1 ? (o.prop ? Math.atan2(o.prop.x - P.x, o.prop.z - P.z) + 0.5 : o.ry + 0.9) : Math.atan2(P.x - o.center.x, P.z - o.center.z);
-      const R = T.shot === 0 ? 3.4 : T.shot === 1 ? 9 : 10, H = T.shot === 0 ? 1.2 : T.shot === 1 ? 2.4 : 4;
-      const fx = T.shot === 1 && o.prop ? o.prop.x + (P.x - o.prop.x) * 0.3 : P.x, fz = T.shot === 1 && o.prop ? o.prop.z + (P.z - o.prop.z) * 0.3 : P.z;
+      const n = T.shot;
+      const base = n === 0 ? o.ry + 0.45 : n === 1 ? o.ry + Math.PI - (tall ? 0.2 : 0.42) : n === 2 ? (o.prop ? Math.atan2(o.prop.x - P.x, o.prop.z - P.z) + 0.5 : o.ry + 0.9) : Math.atan2(P.x - o.center.x, P.z - o.center.z);
+      const R = n === 0 ? (tall ? 5.2 : 4.2) : n === 1 ? (tall ? 3.0 : 2.4) : n === 2 ? 9 : 10, H = n === 0 ? 0.6 : n === 1 ? 1.75 : n === 2 ? 2.4 : 4;
+      const fx = n === 2 && o.prop ? o.prop.x + (P.x - o.prop.x) * 0.3 : P.x, fz = n === 2 && o.prop ? o.prop.z + (P.z - o.prop.z) * 0.3 : P.z;
       T.a0 = base; T.fx = fx; T.fz = fz;
-      for (let i = 0; i < 16; i++) { const a = base + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 0.4; if (clear(fx, fz, [fx + Math.sin(a) * R, H, fz + Math.cos(a) * R])) { T.a0 = a; break; } }
+      // the over-the-shoulder shot has to stay behind him, so it only tries a narrow fan of angles
+      const step = n === 1 ? 0.1 : 0.4, tries = n === 1 ? 5 : 16;
+      for (let i = 0; i < tries; i++) { const a = base + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * step; if (clear(fx, fz, [fx + Math.sin(a) * R, H, fz + Math.cos(a) * R])) { T.a0 = a; break; } }
     }
-    if (T.shot === 0) { // hero: low and close, sliding around him with the skyline behind
-      const a = T.a0 + 0.32 * k, r = 3.5 - 0.3 * k, h = 1.0 + 0.3 * k;
-      camera.position.set(P.x + Math.sin(a) * r, h, P.z + Math.cos(a) * r); camera.lookAt(P.x, 1.5, P.z); camera.fov = 40;
-    } else if (T.shot === 1) { // the street: the crew, the cruiser and its lights
+    if (T.shot === 0) { // the hero: low, a slow push in and a quarter turn around him
+      const a = T.a0 - 0.3 * e, r = (tall ? 5.2 : 4.2) - 0.7 * e, h = 0.55 + 0.25 * e;
+      const side = tall ? 0 : -0.95; // wide screens: slide the frame so he stands right of center
+      const sx = Math.cos(a) * side, sz = -Math.sin(a) * side;
+      camera.position.set(P.x + Math.sin(a) * r + sx, h, P.z + Math.cos(a) * r + sz); camera.lookAt(P.x + sx, tall ? 1.3 : 1.32, P.z + sz); camera.fov = tall ? 38 : 34;
+    } else if (T.shot === 1) { // over the shoulder: behind him, drifting forward, his street ahead
+      // a tall screen sees a narrow slice, so the camera sits almost straight behind him there; a wide one can stand off to the side
+      const a = T.a0 + (tall ? 0.05 : 0.12) * e, r = (tall ? 3.0 : 2.4) - 0.5 * e, h = 1.8 + 0.05 * e;
+      camera.position.set(P.x + Math.sin(a) * r, h, P.z + Math.cos(a) * r);
+      camera.lookAt(P.x + fwdX * (tall ? 5 : 9), tall ? 1.35 : 1.5, P.z + fwdZ * (tall ? 5 : 9)); camera.fov = tall ? 50 : 40;
+    } else if (T.shot === 2) { // the street: the crew, the cruiser and its lights
       const a = T.a0 - 0.22 * k, r = 7.5 - 1.0 * k, h = 1.6 + 0.4 * k;
       camera.position.set(T.fx + Math.sin(a) * r, h, T.fz + Math.cos(a) * r); camera.lookAt(T.fx, 1.2, T.fz); camera.fov = 46;
     } else { // crane up off the corner and out over the city
