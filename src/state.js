@@ -416,6 +416,8 @@ export function stat(s, k, n = 1) { const st = s.stats || (s.stats = {}); st[k] 
 // Cash the player earns by playing (not loot taken from a rival's stash), so the summary can say what a run made.
 function earn(s, n) { s.crews.player.cash += n; stat(s, 'earned', n); }
 function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math.min(100, p.heat + n); p.calmT = 0; }
+// an officer, on foot or in a cruiser, close enough to see what just happened
+export function copSees(s, at, r = 45) { const r2 = r * r; return s.ents.some((e) => e.kind === 'cop' && e.hp > 0 && dist2(e, at) < r2) || s.cars.some((c) => c.cops && !c.wrecked && dist2(c, at) < r2); }
 
 // ---------- actions ----------
 // ---------- what a block's crew is doing ----------
@@ -784,8 +786,13 @@ function damage(s, e, amt, src, heavy, kb, stunO) {
   const tag = src && src.kind === 'player' ? (src.weapon === 'fists' ? (src.combo ? 'CROSS' : 'JAB') : src.weapon === 'knuckles' ? 'KNUCK' : src.weapon === 'bat' ? 'BAT' : src.weapon === 'shotgun' ? 'BUCK' : src.weapon === 'pistol' ? 'SHOT' : '') : (src && src.style ? src.style : '');
   s.fx.push({ type: 'hit', x: e.x, z: e.z, by: src ? src.id : 0, to: e.id, heavy: !!heavy, ko, dx, dz, amt, tag, wpn: src && src.weapon ? src.weapon : '' });
   if (src && src.kind === 'player') {
-    addHeat(s, src, e.kind === 'ped' ? 7 : e.kind === 'cop' ? 18 : 2);
-    if (ko) addHeat(s, src, e.kind === 'ped' ? 8 : e.kind === 'cop' ? 15 : 4);
+    // a crew fight is the street's business: it only heats up when an officer can see it or a gun goes off
+    // (a bystander can still phone it in, see pedStep). Hitting civilians or officers always counts.
+    const gun = src.weapon === 'pistol' || src.weapon === 'shotgun';
+    if (e.kind !== 'npc' || gun || copSees(s, e)) {
+      addHeat(s, src, e.kind === 'ped' ? 7 : e.kind === 'cop' ? 18 : gun ? 3 : 2);
+      if (ko) addHeat(s, src, e.kind === 'ped' ? 8 : e.kind === 'cop' ? 15 : gun ? 5 : 4);
+    }
   }
   if (e.kind === 'ped') pedHurt(s, e, src);
   panic(s, e.x, e.z, 14, !!src && (src.kind === 'player' || (src.driver != null && src.driver === player(s).id)), false);
@@ -869,8 +876,10 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
   });
   if (rampStep(s, c, driverEnt)) return;
   const byPlayer = driverEnt && driverEnt.kind === 'player';
+  // out of sight of the player a car is ambient: it follows its lane and skips the car on car and car on person checks
+  const far = !byPlayer && dist2(c, player(s)) > 80 * 80;
   const F = footprint(c);
-  for (const o of s.cars) if (o !== c) {
+  if (!far) for (const o of s.cars) if (o !== c) {
     const d2o = dist2(o, c), G = footprint(o);
     const h = d2o < 49 ? boxHit(c.x, c.z, Math.sin(c.ry), Math.cos(c.ry), F.hl, F.hw, o.x, o.z, Math.sin(o.ry), Math.cos(o.ry), G.hl, G.hw) : null;
     if (!h) { if (byPlayer && (o.nm || d2o < 22)) nearMiss(s, c, o, d2o, driverEnt); continue; }
@@ -881,13 +890,15 @@ function driveCar(s, c, throttle, steerIn, dt, driverEnt, handbrake) {
     { const tx = -h.nz, tz = h.nx, off = (c.x - o.x) * tx + (c.z - o.z) * tz; if (Math.abs(off) > 0.5) { const sl = Math.sign(off) * Math.min(h.d, 0.15) * 0.6; c.x += tx * sl; c.z += tz * sl; } }
     // one crash per meeting: still leaning on the same car a moment later is a shove, not a second and third collision
     const again = c.bumpId === o.id && s.t - (c.bumpT ?? -9) < 0.7 && Math.abs(c.v) < 10; c.bumpId = o.id; c.bumpT = s.t;
+    // the other car takes some of the speed along its own heading: rear-ended it lurches forward, hit head on it is shoved back
+    if (!again && o.ai && Math.abs(c.v) > 4) { const along = h.nx * Math.sin(o.ry) + h.nz * Math.cos(o.ry); o.v += along * Math.abs(c.v) * 0.45; }
     if (Math.abs(c.v) > 4 && !again) { s.fx.push({ type: 'crash', x: (c.x + o.x) / 2, z: (c.z + o.z) / 2, by: driverEnt ? driverEnt.id : 0, n: Math.abs(c.v) }); carHurt(s, c, Math.abs(c.v)); carHurt(s, o, Math.abs(c.v)); if (driverEnt && driverEnt.kind === 'player') { addHeat(s, driverEnt, o.type === 'police' ? 15 : 2); if (Math.abs(c.v) > 6) rammed(s, o, c); } }
     c.v *= Math.abs(c.v) > 4 ? 0.5 : 0.92; // a crash halves your speed; leaning on a car at a crawl shoves it along instead of pinning you
   }
-  if (Math.abs(c.v) > 6) for (const e of s.ents) if (e !== driverEnt && e.hp > 0 && !e.car && e.kind !== 'giver' && dist2(e, c) < 16 && carTouches(c, e)) {
+  if (!far && Math.abs(c.v) > 6) for (const e of s.ents) if (e !== driverEnt && e.hp > 0 && !e.car && e.kind !== 'giver' && dist2(e, c) < 16 && carTouches(c, e)) {
     if (!driverEnt || driverEnt.kind === 'player' ? e.crew !== 'player' : hostile(driverEnt, e)) damage(s, e, 30, c, true, 10);
     else { const d = Math.sqrt(dist2(e, c)) || 1; e.kx = (e.x - c.x) / d * 6; e.kz = (e.z - c.z) / d * 6; }
-    if (driverEnt && driverEnt.kind === 'player') addHeat(s, driverEnt, e.kind === 'ped' ? 10 : 3);
+    if (driverEnt && driverEnt.kind === 'player' && (e.kind !== 'npc' || copSees(s, e))) addHeat(s, driverEnt, e.kind === 'ped' ? 10 : 3);
     c.v *= 0.6;
   }
 }
@@ -2039,7 +2050,12 @@ export function step(s, dt) {
     if (e.kind === 'player' && e.dodgeBuf > 0) { e.dodgeBuf -= dt; if (e.dodgeCd <= 0 && e.dodgeT <= 0 && e.hp > 0 && !e.car && !(e.downT > 0)) startDodge(s, e, e.dodgeDx, e.dodgeDz); }
     e.dodging = e.dodgeT > 0; if (e.dodgeT > 0) e.dodgeT = Math.max(0, e.dodgeT - dt);
     if (e.kx || e.kz) { e.x += e.kx * dt; e.z += e.kz * dt; e.kx *= 1 - 6 * dt; e.kz *= 1 - 6 * dt; if (Math.abs(e.kx) + Math.abs(e.kz) < 0.1) e.kx = e.kz = 0; collideBuildings(e, 0.5); clampWorld(e); }
-    if (e.kind === 'ped') { pedStep(s, e, dt, p); if (dist2(e, p) > 130 * 130 && e.hp > 0) { e.remove = true; } continue; }
+    if (e.kind === 'ped') {
+      // far from the player a pedestrian is ambient: stepped every third tick with a triple step, so the street stays busy for a third of the cost
+      const d2 = dist2(e, p), far = d2 > 70 * 70;
+      if (!far || (e.id + Math.floor(s.t * 20)) % 3 === 0) pedStep(s, e, far ? dt * 3 : dt, p);
+      if (d2 > 130 * 130 && e.hp > 0) { e.remove = true; } continue;
+    }
     if (e.kind !== 'npc' || e.hp <= 0) continue;
     e.pose = null;
     // a scout rides the commandeered traffic car until the drive-by passes

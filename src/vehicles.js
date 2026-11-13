@@ -382,7 +382,9 @@ export function updateCar(g, c, dt, night, now) {
   u.pv = ((u.pv || 0) + ((tPitch - (u.pitch || 0)) * 90 - (u.pv || 0) * 9) * dt); u.pitch = (u.pitch || 0) + u.pv * dt;
   u.rv = ((u.rv || 0) + ((tRoll - (u.roll || 0)) * 80 - (u.rv || 0) * 8) * dt); u.roll = (u.roll || 0) + u.rv * dt;
   u.bounce = (u.bounce || 0) * Math.max(0, 1 - dt * 4); const by = Math.sin(now / 45) * (u.bounce || 0) * 0.3;
-  u.model.rotation.x = u.pitch; u.model.rotation.z = u.roll; u.model.position.y = u.baseY + by;
+  // a faint road buzz at speed, so a car at full tilt does not sit dead still on its springs
+  const buzz = u.bike ? 0 : Math.sin(now / 21) * Math.min(1, Math.abs(c.v) / 28) * 0.007;
+  u.model.rotation.x = u.pitch; u.model.rotation.z = u.roll; u.model.position.y = u.baseY + by + buzz;
   for (const ch of g.children) if (ch.userData.beam) ch.visible = night && !c.wrecked;
   // brake lights glow when slowing hard or stopped in traffic, flares at night
   const braking = !c.wrecked && (acc < -2.5 || (c.ai && Math.abs(c.v) < 0.5));
