@@ -1,4 +1,4 @@
-# Street Empire (v0.13)
+# Street Empire (v0.14)
 
 A third-person browser game about building a street empire one block at a time. Think "World of Warcraft for the streets": every block is territory, every block runs a hustle, and rival crews are always expanding.
 
@@ -34,6 +34,12 @@ In a car, forward and back are throttle and left and right steer. Hitting rivals
 The game saves itself on this device every few seconds, when you pause and when you leave the page. The title screen then offers CONTINUE, with NEW GAME under it (two taps, it erases the save). RESTART in the pause menu also starts over.
 
 Phones get low settings automatically (no shadows, no dynamic street lights, pixel ratio up to 1.25, character LOD at 32 m). Add `?low` to the URL to force low settings on desktop.
+
+## What is new in v0.14
+
+- **Every big moment is a clip.** A moments director (`src/moments.js`) gives everything that happens a hook and a shot: a car going up gets a low orbit round the blast in slow motion under BOOM; a knockout streak gets a push in; the helicopter gets a tilt up to it; five stars, a taken or lost block, a stunt landing, a race medal, a cop down, a jacked car, rain moving in, a knockout or an arrest each get their headline and a line under it. The card is drawn inside the frame, not in the HUD, so it is in the recording.
+- **Clips.** The game keeps a rolling recording of itself (`src/clips.js`): the frame as rendered with the game's sound. The biggest moments cut themselves into a clip once they have played out, and K (or CLIP beside the pause button on a phone) cuts the last 20 seconds any time. Clips stay on the device, the last eight, and the pause menu saves or shares them (the share sheet on phones). On by default in stream mode, or with `?clips`, or from the pause menu; off, nothing records. Needs a browser with MediaRecorder; the pause menu says when there is none.
+- `tools/moments-shots.mjs` fires every moment on desktop and phone, shoots each mid-move, and checks a clip file comes out.
 
 ## What is new in v0.13
 
@@ -127,7 +133,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - `src/state.js`: pure, serializable game state and simulation (blocks, crews, economy, AI, combat, cars). No rendering code.
 - `src/net.js`: session seam. `LocalSession` runs the sim in the tab. An online session can implement the same `send(action)`, `input(...)`, `tick(dt)` interface and talk to an authoritative host.
 - `src/main.js`: renderer, camera, input (keyboard, mouse, touch), HUD and game feel. It only reads state and sends actions.
-- `src/stream.js`: the stream layer (event feed, turf bar, run stats and summary, stream mode). `src/weather.js`: rain on the sim's clock. `src/grade.js`: the color grade and the lens (sharpen, speed blur, color split).
+- `src/stream.js`: the stream layer (event feed, turf bar, run stats and summary, stream mode). `src/moments.js`: the hook and shot for each big moment. `src/clips.js`: the rolling clip recorder. `src/weather.js`: rain on the sim's clock. `src/grade.js`: the color grade and the lens (sharpen, speed blur, color split).
 - `src/city.js`, `src/vehicles.js`, `src/chars.js`, `src/audio.js`: city builder, car models, character loading and animation, and synthesized sound.
 - `tools/smoke.mjs`: headless Playwright smoke test for desktop and phone.
 

@@ -158,6 +158,10 @@ export function boom(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thu
 
 // Rain: broadband noise with the low end rolled off, a slow wobble so it does not sit still. Started on first use.
 let rainGain = null;
+// everything the game plays, as a media stream for the clip recorder (master is tapped, the speakers keep playing)
+let dest = null;
+export function stream() { if (!ctx) return null; if (!dest) { dest = ctx.createMediaStreamDestination(); master.connect(dest); } return dest.stream; }
+
 export function setRain(v) {
   if (!ctx) return;
   if (!rainGain) {
