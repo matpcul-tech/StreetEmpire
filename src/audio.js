@@ -156,6 +156,20 @@ export function setSkid(v) {
 
 export function boom(vol = 1) { if (!ctx) return; const t = ctx.currentTime; thump(t, 75, 22, 1.1 * vol, 0.9); burst(t, { freq: 420, q: 0.5, type: 'lowpass', vol: 1 * vol, len: 0.9 }); burst(t, { freq: 2600, q: 0.8, vol: 0.4 * vol, len: 0.14 }); burst(t + 0.25, { freq: 180, q: 0.6, type: 'lowpass', vol: 0.5 * vol, len: 1.2 }); }
 
+// Rain: broadband noise with the low end rolled off, a slow wobble so it does not sit still. Started on first use.
+let rainGain = null;
+export function setRain(v) {
+  if (!ctx) return;
+  if (!rainGain) {
+    if (v <= 0.01) return;
+    const n = noiseSrc(true), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 900; lp.type = 'lowpass'; lp.frequency.value = 6500;
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.23; lg.gain.value = 500; lfo.connect(lg).connect(lp.frequency); lfo.start();
+    rainGain = ctx.createGain(); rainGain.gain.value = 0; n.connect(hp).connect(lp).connect(rainGain).connect(master); n.start();
+  }
+  rainGain.gain.setTargetAtTime(0.11 * v, ctx.currentTime, 0.6);
+}
+
 // Police helicopter: low noise chopped at blade rate. One looping source, started on first use.
 let heliGain = null;
 export function setHeli(vol) {

@@ -2,6 +2,7 @@
 // Env: SHOTDIR, SHOTPREFIX for screenshot output.
 import { chromium, devices } from 'playwright';
 const url = process.argv[2];
+const innerW = (o) => (o.viewport ? o.viewport.width : 390);
 const dir = process.env.SHOTDIR || '/tmp', pre = process.env.SHOTPREFIX || 'shot';
 const browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'] });
 for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 } }], ['phone', devices['iPhone 13']]]) {
@@ -11,6 +12,9 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
   await page.waitForFunction(() => !document.getElementById('start').disabled, null, { timeout: 150000 });
   if (name === 'phone') await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(1500);
+  // the opening (v0.9) hides the controls until it ends: skip it with a tap, as a player would
+  for (let i = 0; i < 6 && await page.evaluate(() => document.body.classList.contains('cine-on')); i++) { await page.mouse.click(innerW(opts) / 2, 120); await page.waitForFunction(() => !document.body.classList.contains('cine-on'), null, { timeout: 10000 }).catch(() => {}); }
+  await page.waitForTimeout(600);
   if (name === 'desktop') { await page.keyboard.down('KeyD'); await page.waitForTimeout(800); await page.keyboard.up('KeyD'); await page.keyboard.press('KeyF'); }
   else { await page.tap('#bAttack'); await page.tap('#bRecruit'); }
   await page.waitForTimeout(2500);

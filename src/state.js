@@ -77,7 +77,7 @@ const DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 const R = (s) => { s.rng = (s.rng * 1664525 + 1013904223) % 4294967296; return s.rng / 4294967296; };
 
 export function createState(seed = 1, cfg = {}) {
-  const s = { t: 0, nextId: 1, seed, rng: seed % 4294967296, cfg: { traffic: cfg.traffic ?? 10, peds: cfg.peds ?? 14 }, blocks: [], crews: {}, ents: [], cars: [], pickups: [], events: [], fx: [], over: null, mission: null, missionIdx: 0, calls: { cd: CALLS.first, n: 0, active: null, grace: 0, ready: false, capped: false } };
+  const s = { t: 0, nextId: 1, seed, rng: seed % 4294967296, cfg: { traffic: cfg.traffic ?? 10, peds: cfg.peds ?? 14 }, blocks: [], crews: {}, ents: [], cars: [], pickups: [], events: [], fx: [], over: null, mission: null, missionIdx: 0, stats: {}, calls: { cd: CALLS.first, n: 0, active: null, grace: 0, ready: false, capped: false } };
   // you start with one corner block; each rival crew holds a 2 x 2 corner of its own
   const L = GRID - 1, starts = { '0,0': 'player' };
   for (const [crew, cx, cz] of [['reds', L, 0], ['blues', 0, L], ['golds', L, L]]) for (const ox of [0, 1]) for (const oz of [0, 1]) starts[Math.abs(cx - ox) + ',' + Math.abs(cz - oz)] = crew;
@@ -349,7 +349,7 @@ function armGuard(e, b) {
 function makeGuard(e, b) { e.role = 'defender'; e.guard = true; e.target = b.id; e.home = b.id; e.leader = null; e.slot = undefined; e.post = undefined; armGuard(e, b); }
 function pocketStash(s, b, crew, announce) {
   const raw = b.stash || 0; if (raw <= 0) return 0;
-  b.stash = 0; s.crews[crew].cash += raw;
+  b.stash = 0; s.crews[crew].cash += raw; if (crew === 'player') stat(s, 'earned', raw);
   const shown = Math.floor(raw);
   if (announce && shown >= 1) {
     s.fx.push({ type: 'stash', block: b.id, amt: shown, hustle: b.hustle, crew });
@@ -411,6 +411,10 @@ function nearbyEnts(g, x, z, out) {
 }
 const nbFoe = [], nbSep = [];
 function log(s, text) { s.events.push({ t: s.t, text }); }
+// Run stats for the summary card and the stream feed: counts only, the sim does not read them back.
+export function stat(s, k, n = 1) { const st = s.stats || (s.stats = {}); st[k] = (st[k] || 0) + n; }
+// Cash the player earns by playing (not loot taken from a rival's stash), so the summary can say what a run made.
+function earn(s, n) { s.crews.player.cash += n; stat(s, 'earned', n); }
 function addHeat(s, p, n) { if (!p || p.kind !== 'player') return; p.heat = Math.min(100, p.heat + n); p.calmT = 0; }
 
 // ---------- actions ----------
@@ -788,6 +792,12 @@ function damage(s, e, amt, src, heavy, kb, stunO) {
   if (ko) {
     e.hp = 0;
     if (src && s.crews[src.crew]) s.crews[src.crew].rep += e.kind === 'player' ? 10 : e.kind === 'npc' ? 2 : 0;
+    if (src && src.kind === 'player' && e.kind !== 'player') {
+      // knockouts within six seconds of each other chain into a streak; three or more is a moment
+      stat(s, 'ko'); s.koStreak = s.t - (s.koT ?? -99) < 6 ? (s.koStreak || 0) + 1 : 1; s.koT = s.t;
+      if (s.koStreak > (s.stats.bestStreak || 0)) s.stats.bestStreak = s.koStreak;
+      if (s.koStreak >= 3) s.fx.push({ type: 'streak', n: s.koStreak, x: e.x, z: e.z });
+    }
     if (e.kind === 'npc' && s.mission && s.mission.kind === 'beat' && e.crew === s.mission.crew && src && src.crew === 'player') { s.mission.count++; }
     if (e.kind === 'player') onPlayerDown(s, e);
   }
@@ -801,7 +811,7 @@ function onPlayerDown(s, p) {
   log(s, busted ? `Bail: -$${lost}` : `Lost $${lost}. Back at your turf.`);
   if (p.car) exitCar(s, p);
   if (s.mission && DOWN_FAILS.has(s.mission.kind)) failMission(s, busted ? 'Locked up. Job failed.' : 'You went down. Job failed.');
-  s.fx.push({ type: busted ? 'busted' : 'wasted', x: p.x, z: p.z });
+  s.fx.push({ type: busted ? 'busted' : 'wasted', x: p.x, z: p.z }); stat(s, busted ? 'busted' : 'wasted');
   // a short down beat (the client plays it in slow motion) before the respawn
   p.downT = DOWN_TIME; p.downBusted = busted;
 }
@@ -948,7 +958,7 @@ function airStep(s, c, steerIn, dt, driverEnt) {
   carHurt(s, c, hard * 0.8);
   if (j && dist > 12 && !c.wrecked && driverEnt && driverEnt.kind === 'player') {
     s.jumps = s.jumps || []; const first = !s.jumps.includes(j.i); if (first) s.jumps.push(j.i);
-    const pay = Math.round(dist) * 2 + (first ? 150 : 0); s.crews.player.cash += pay;
+    const pay = Math.round(dist) * 2 + (first ? 150 : 0); earn(s, pay); stat(s, 'stunts');
     s.fx.push({ type: 'stunt', dist, t: j.t, pay, first, done: s.jumps.length, of: RAMPS.length });
     log(s, `Stunt jump: ${Math.round(dist)} m. +$${pay}${first ? ` (${s.jumps.length} of ${RAMPS.length} found)` : ''}`);
   }
@@ -960,7 +970,7 @@ function nearMiss(s, c, o, d2, p) {
   const clean = s.t - (c.crashT ?? -9) > 1.2 && s.t - o.nm < 2 && Math.abs(c.v) > 12; o.nm = 0;
   if (!clean) return;
   p.nmN = s.t - (p.nmT ?? -9) < 6 ? (p.nmN || 0) + 1 : 1; p.nmT = s.t;
-  const pay = Math.min(40, 5 * p.nmN); s.crews.player.cash += pay;
+  const pay = Math.min(40, 5 * p.nmN); earn(s, pay);
   s.fx.push({ type: 'nearmiss', n: p.nmN, pay, x: c.x, z: c.z });
 }
 
@@ -1480,7 +1490,7 @@ function fareRun(s, p, car, r, dt) {
   if (car && dist2(r.target, car) < 100 && Math.abs(car.v) < 3) {
     const dents = Math.max(0, r.hp0 - car.hp), tip = Math.max(0, Math.round(Math.min(FARE.tipMax, (r.par - r.t) * 3) - dents));
     s.fares = (s.fares || 0) + 1; s.faresDone = (s.faresDone || 0) + 1; const streak = s.fares % 5 === 0 ? 100 : 0;
-    const pay = Math.round(FARE.base + r.dist * FARE.perM) + tip + streak; s.crews.player.cash += pay;
+    const pay = Math.round(FARE.base + r.dist * FARE.perM) + tip + streak; earn(s, pay);
     s.fx.push({ type: 'fare', state: 'drop', pay, tip, streak, n: s.fares }); log(s, `Fare paid: +$${pay}${tip ? ` (tip $${tip})` : ''}${streak ? ', five in a row bonus' : ''}`);
     s.side = null; s.fareCd = s.t + 6;
   }
@@ -1518,7 +1528,7 @@ function courierRun(s, p, car, r, dt) {
   if (car && dist2(r.target, car) < 100 && Math.abs(car.v) < 3) {
     const dents = Math.max(0, r.hp0 - car.hp), bonus = Math.max(0, Math.round(Math.min(COURIER.bonusMax, (r.par - r.t) * 5) - dents));
     s.runs = (s.runs || 0) + 1; s.runsDone = (s.runsDone || 0) + 1; const streak = s.runs % 5 === 0 ? 150 : 0;
-    const pay = Math.round((COURIER.base + r.dist * COURIER.perM) * (r.built ? COURIER.built : 1)) + bonus + streak; s.crews.player.cash += pay;
+    const pay = Math.round((COURIER.base + r.dist * COURIER.perM) * (r.built ? COURIER.built : 1)) + bonus + streak; earn(s, pay);
     if (s.runs % 5 === 0) s.crews.player.rep += 2;
     s.fx.push({ type: 'courier', state: 'drop', pay, bonus, streak, n: s.runs }); log(s, `Package delivered: +$${pay}${bonus ? ` (speed bonus $${bonus})` : ''}${streak ? ', five in a row bonus' : ''}`);
     s.side = null; s.pkgCd = s.t + 6;
@@ -1533,7 +1543,7 @@ function sideStep(s, p, dt) {
     const found = s.stashes || (s.stashes = []); if (found.includes(k) || dist2(STASHES[k], p) > 4) continue;
     found.push(k); let pay = STASH_PAY; const all = found.length === STASHES.length;
     if (all) { pay += STASH_ALL; p.max += 25; p.hp = p.max; }
-    cash.cash += pay; s.fx.push({ type: 'found', k, n: found.length, of: STASHES.length, pay, all, x: p.x, z: p.z });
+    earn(s, pay); s.fx.push({ type: 'found', k, n: found.length, of: STASHES.length, pay, all, x: p.x, z: p.z });
     log(s, all ? `Every stash found. +$${pay}, and you can take more punishment now.` : `Hidden stash ${found.length} of ${STASHES.length}. +$${pay}`);
   }
   // garages
@@ -1564,7 +1574,7 @@ function sideStep(s, p, dt) {
     if (r.count < Rc.points.length) { r.target = Rc.points[r.count]; s.fx.push({ type: 'checkpoint', n: r.count, of: Rc.points.length }); return; }
     const medal = r.t <= Rc.gold ? 'gold' : r.t <= Rc.silver ? 'silver' : r.t <= Rc.bronze ? 'bronze' : 'none';
     s.best = s.best || {}; const prev = s.best[r.i], record = prev == null || r.t < prev; if (record) s.best[r.i] = +r.t.toFixed(2);
-    cash.cash += RACE_PAY[medal]; if (medal !== 'none') cash.rep += medal === 'gold' ? 8 : 3;
+    earn(s, RACE_PAY[medal]); stat(s, 'races'); if (medal !== 'none') cash.rep += medal === 'gold' ? 8 : 3;
     s.fx.push({ type: 'race', state: 'win', i: r.i, name: Rc.name, medal, time: r.t, pay: RACE_PAY[medal], record });
     log(s, `${Rc.name}: ${r.t.toFixed(1)} s${medal === 'none' ? '' : ', ' + medal}. +$${RACE_PAY[medal]}`); s.side = null;
   }
@@ -1756,6 +1766,7 @@ export function contactFor(s) {
 // Saves from before the job chain: the old five jobs map onto the new list by name where they still exist.
 export function migrate(s) {
   ensureContacts(s);
+  s.stats = s.stats || {}; // saves from before the run summary
   if (s.jobsV !== 2) { s.jobsV = 2; s.mission = null; s.missionIdx = s.missionIdx > 0 ? 1 : 0; }
   addBikes(s); // saves from before the motorcycles get them parked
   return s;
@@ -1972,7 +1983,7 @@ export function missionText(s) {
   }
 }
 function passMission(s) {
-  const m = s.mission; s.crews.player.cash += m.reward; s.crews.player.rep += m.rep;
+  const m = s.mission; earn(s, m.reward); s.crews.player.rep += m.rep;
   log(s, `Job done: ${m.title}. +$${m.reward}`); s.fx.push({ type: 'mission', state: 'pass', title: m.title, reward: m.reward, rep: m.rep, said: contactLine(m, 'pass') });
   if (contactLine(m, 'pass')) log(s, contactLine(m, 'pass'));
   s.mission = null; s.missionIdx++;
@@ -2190,7 +2201,8 @@ export function step(s, dt) {
         for (const e of s.ents) if (e.crew === k && e.role === 'attacker' && e.target === b.id) e.role = 'defender';
         const fromWhom = prev === 'player' ? 'you' : CREWS[prev].name;
         log(s, `${CREWS[k].name} took ${b.hustle} block from ${fromWhom}.`);
-        s.fx.push({ type: 'capture', block: b.id, crew: k });
+        if (k === 'player') stat(s, 'taken'); if (prev === 'player') stat(s, 'lost');
+        s.fx.push({ type: 'capture', block: b.id, crew: k, from: prev, hustle: b.hustle });
       }
     } else if (b.capT > 0) { b.capT = Math.max(0, b.capT - dt * 2); if (b.capT === 0) b.capBy = null; }
   }
@@ -2480,7 +2492,7 @@ function callsStep(s, dt) {
       return;
     }
     if (!live().length) {
-      s.crews.player.cash += a.reward; s.crews.player.rep += a.rep;
+      earn(s, a.reward); s.crews.player.rep += a.rep; stat(s, 'calls');
       log(s, `${a.win} +$${a.reward}`);
       s.fx.push({ type: 'street', state: 'win', kind: a.kind, reward: a.reward, rep: a.rep });
       endCall(s, 'win');

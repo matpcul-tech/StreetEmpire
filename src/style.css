@@ -275,3 +275,32 @@ body.cine-on #lcol{visibility:hidden}
 #diceBtns button{padding:9px 20px;font-size:16px}
 #diceClose{background:#444}
 @media (max-height:500px){#dice{inset:auto 0 6px 0;padding:8px 12px}#dice h1{font-size:16px}#diceInfo{margin-bottom:4px;font-size:12px}.die{width:36px;height:36px;padding:5px}.die b{width:6px;height:6px}#diceMsg{margin-bottom:5px;font-size:13px}#diceBets button{padding:7px 0;font-size:14px}#diceBtns button{padding:7px 16px;font-size:14px}}
+
+/* v0.13 stream layer: event feed on the left strip, turf bar under the HUD, run stats, stream mode */
+#feed{display:flex;flex-direction:column;gap:3px;pointer-events:none}
+.fl{font:bold 13px/1.25 Arial,sans-serif;color:#f1e9dc;background:rgba(10,8,6,.62);border-left:3px solid #fff;padding:3px 8px;border-radius:0 4px 4px 0;animation:feedIn .25s ease-out;transition:opacity .4s;max-width:100%;box-sizing:border-box}
+.fl.big{color:#ffe0a8;background:rgba(20,12,6,.78)}
+@keyframes feedIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+.touch:not(.stream) #feed{display:none}
+.touch .fl:nth-child(n+4){display:none}
+#turfbar{display:flex;height:9px;width:150px;margin:0 0 2px;border:1px solid rgba(0,0,0,.8);background:#222;overflow:hidden;border-radius:2px;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+#turfbar i{display:block;flex:0 1 auto;min-width:0;font:bold 8px/9px Arial,sans-serif;color:#000;text-align:center;overflow:hidden;transition:flex-grow .6s}
+#runclock{color:#ffcf7a;display:none}
+body.stream #runclock{display:inline}
+.stats{display:grid;grid-template-columns:repeat(3,auto);gap:3px 14px;font:13px Arial,sans-serif;color:#e8dcc8;margin:6px 0 10px}
+.stats span{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(255,255,255,.12);padding:2px 0}
+.stats i{font-style:normal;color:#b9ad9c}.stats b{color:#f4e6c4}
+#pause .stats{max-width:420px}
+.endBtns{display:flex;gap:8px;flex-wrap:wrap}#endCopy{background:#444}
+@media (max-width:500px){#turfbar{width:100%;max-width:150px}.stats{grid-template-columns:repeat(2,auto);font-size:12px}}
+@media (max-height:500px) and (orientation:landscape){#turfbar{width:130px;height:8px}#turfbar i{font-size:7px;line-height:8px}#pause .stats{font-size:11px;gap:1px 10px;margin:2px 0 4px}}
+/* stream mode: a safe margin all round so overlays and the webcam never sit on the HUD, and bigger type for a stream at 720p or on a phone recording */
+:root.stream{--st:calc(env(safe-area-inset-top,0px) + 2.2vh);--sl:calc(env(safe-area-inset-left,0px) + 2.2vw);--sr:calc(env(safe-area-inset-right,0px) + 2.2vw);--sb:calc(env(safe-area-inset-bottom,0px) + 2.2vh)}
+body.stream #cash{font-size:36px}body.stream #clock{font-size:24px}body.stream #weapon{font-size:17px}body.stream #sub{font-size:15px}body.stream #hp{width:170px;height:12px}
+body.stream #turfbar{width:170px;height:12px}body.stream #turfbar i{font-size:10px;line-height:12px}
+body.stream #mission,body.stream.touch #mission,body.stream #msg,body.stream.touch #msg,body.stream .fl,body.stream #capture,body.stream #onb{font-size:15px}
+body.stream #big{font-size:40px}body.stream.touch #big{font-size:24px}
+body.stream #lcol{width:min(340px,54vw)}
+@media (max-width:500px){body.stream #cash{font-size:27px}body.stream #clock{font-size:19px}body.stream #sub{font-size:12px}body.stream #hp{width:130px}body.stream #turfbar{width:130px}body.stream .fl,body.stream #mission,body.stream.touch #mission,body.stream #msg,body.stream.touch #msg{font-size:13px}}
+/* short landscape phones have no room to spare top to bottom: the stream margin is sideways only and the HUD keeps its size */
+@media (max-height:500px) and (orientation:landscape){:root.stream{--st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px)}body.stream #cash{font-size:22px}body.stream #clock{font-size:16px}body.stream #weapon{font-size:12px}body.stream #sub{font-size:11px}body.stream #hp{width:110px;height:10px}body.stream #turfbar{width:130px;height:8px}body.stream #turfbar i{font-size:7px;line-height:8px}body.stream .fl,body.stream #mission,body.stream.touch #mission,body.stream #msg,body.stream.touch #msg,body.stream #capture,body.stream #onb{font-size:12px}body.stream #lcol{width:260px}}
