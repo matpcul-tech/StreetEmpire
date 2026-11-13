@@ -571,7 +571,7 @@ export function applyAction(s, playerId, a) {
       if (c) {
         if (c.ai) {
           log(s, 'You jacked a ride.'); addHeat(s, p, 6);
-          const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: 8, look: Math.floor(R(s) * 100), x: c.x - Math.cos(c.ry) * 2.2, z: c.z + Math.sin(c.ry) * 2.2, fromX: p.x, fromZ: p.z });
+          const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: 8, look: Math.floor(R(s) * 100), x: c.x + Math.cos(c.ry) * 2.2, z: c.z - Math.sin(c.ry) * 2.2, fromX: p.x, fromZ: p.z });
           if (c.type !== 'police' && carNerve(c) < 22) { d.flee = 0; d.angry = 10; d.hp = d.max = 45; d.cd = 1; } // one driver in five wants the car back
           s.ents.push(d); s.fx.push({ type: 'jack', car: c.id, ped: d.id }); bark(s, d, 'jacked', true);
         }
@@ -599,9 +599,10 @@ export function nearestCar(s, p, r) {
 function exitCar(s, p) {
   const c = s.cars.find((c) => c.id === p.car); c.driver = null; p.car = null;
   const off = c.type === 'bike' ? 1.1 : 2.4; // step off a bike right beside it
-  p.x = c.x - Math.cos(c.ry) * off; p.z = c.z + Math.sin(c.ry) * off;
+  // out of the driver's door: the left side (traffic keeps right, so the wheel is on the left; local +x is the car's left)
+  p.x = c.x + Math.cos(c.ry) * off; p.z = c.z - Math.sin(c.ry) * off;
   // parked tight against a wall (a bike can be): step off on the open side instead of into the building
-  if (insideBuilding(p.x, p.z, 0.5) && !insideBuilding(c.x + Math.cos(c.ry) * off, c.z - Math.sin(c.ry) * off, 0.5)) { p.x = c.x + Math.cos(c.ry) * off; p.z = c.z - Math.sin(c.ry) * off; }
+  if (insideBuilding(p.x, p.z, 0.5) && !insideBuilding(c.x - Math.cos(c.ry) * off, c.z + Math.sin(c.ry) * off, 0.5)) { p.x = c.x - Math.cos(c.ry) * off; p.z = c.z + Math.sin(c.ry) * off; }
 }
 
 function startDodge(s, p, dx, dz) {
@@ -744,7 +745,7 @@ function panic(s, x, z, r, by, gun) {
 // The driver gets out and the car stays where it is. angry: he comes for the player instead of running.
 function ditch(s, c, fromX, fromZ, angry) {
   c.ai = false; c.v = 0; c.scare = 0; c.ditched = true;
-  const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: angry ? 45 : 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: angry ? 0 : 8, angry: angry ? 14 : 0, cd: 0.8, look: (carNerve(c) * 7) % 100, x: c.x - Math.cos(c.ry) * 2.2, z: c.z + Math.sin(c.ry) * 2.2, fromX, fromZ });
+  const d = newEnt(s, { kind: 'ped', crew: 'civ', hp: angry ? 45 : 30, block: (blockAt(s, c.x, c.z) || s.blocks[0]).id, pt: 0, dir: 1, speed: 1.4, flee: angry ? 0 : 8, angry: angry ? 14 : 0, cd: 0.8, look: (carNerve(c) * 7) % 100, x: c.x + Math.cos(c.ry) * 2.2, z: c.z - Math.sin(c.ry) * 2.2, fromX, fromZ });
   s.ents.push(d); s.fx.push({ type: 'ditch', car: c.id, ped: d.id, angry: !!angry, x: c.x, z: c.z }); return d;
 }
 // The player's car hit this one. Once per car: the driver gets out swinging, or takes off, or leans on the horn.
@@ -2119,8 +2120,9 @@ export function step(s, dt) {
         else { e.pose = 'hang'; e.moving = 0; let r = Math.atan2(q.x - e.x, q.z - e.z) - e.ry; r = Math.atan2(Math.sin(r), Math.cos(r)); e.ry += r * Math.min(1, dt * 6); }
       }
       else if (e.guard) {
-        // posts spread around the block, slow patrol between two corners of its side
-        e.post ??= (e.id * 2.39996) % (Math.PI * 2);
+        // posts spread around the block, slow patrol between two corners of its side. The walker covers a side the
+        // block's scene does not: a post on the scene's side would put him on top of the people already standing there.
+        if (e.post == null) { e.post = (e.id * 2.39996) % (Math.PI * 2); const q = sceneSpot(s.blocks[e.target]), sa = Math.atan2(q.z - c.z, q.x - c.x); let d = e.post - sa; d = Math.atan2(Math.sin(d), Math.cos(d)); if (Math.abs(d) < 1.1) e.post = sa + Math.PI; }
         e.patT = (e.patT || 0) + dt * 0.12;
         const a = e.post + Math.sin(e.patT) * 0.5, r = BLOCK / 2 + 1.2;
         const spot = { x: c.x + Math.cos(a) * r, z: c.z + Math.sin(a) * r };
