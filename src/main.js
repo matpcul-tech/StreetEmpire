@@ -1413,7 +1413,7 @@ function frame(now) {
   const cb = $('bCtx'); cb.classList.toggle('hidden', !ctxName); if (ctxName) cb.textContent = ctxName === 'UPGRADE' ? 'ARM' : ctxName;
   // desktop prompt for the E key, so walking up to Unc or a car says what E will do
   const pr = $('prompt'); const ptxt = ctxName === 'TALK' ? 'E  Talk to Unc' : ctxName === 'CAR' ? (ctxBike ? 'E  Get on' : 'E  Get in') : ctxName === 'EXIT' ? (ctxBike ? 'E  Get off' : 'E  Get out') : ctxName === 'DICE' ? 'E  Shoot dice' : ctxName === 'UPGRADE' ? `E  Arm guards ($${UPGRADE_COST})` : ctxName === 'BUILD' ? `E  Build up the hustle ($${BUILD_COST}, ${BUILD_BOOST}x income)` : '';
-  if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active);
+  if (pr.textContent !== ptxt) pr.textContent = ptxt; pr.classList.toggle('hidden', !ptxt || isTouch || !!cine.active || moments.cardShown);
   $('bAttack').textContent = p.weapon === 'pistol' || p.weapon === 'shotgun' ? 'SHOOT' : 'HIT';
   $('bFire').textContent = p.ammo > 0 ? 'FIRE ' + p.ammo : 'NO AMMO';
   const here = blockAt(s, p.x, p.z);

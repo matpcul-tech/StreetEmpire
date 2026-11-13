@@ -67,6 +67,7 @@ export function createMoments({ camera, scene, cine, S, player, clips, feed, pop
   const api = {
     get active() { return cur ? cur.kind : null; },
     get ownsFov() { return false; },
+    get cardShown() { return !!card; },
     get timeScale() { return cur && cur.t < cur.slowUntil ? cur.slow : 1; },
     showCard,
     end() { cur = null; card = null; sprite.visible = false; }, // test hook: drop the running shot and card
