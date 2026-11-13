@@ -22,12 +22,14 @@ import { SHOPS, HOUSES, SHOP_ITEMS, shopSpot, houseSpot, shopAt, houseAt, ownsHo
 import { DICE, diceAt, potCap, sceneSpot } from './state.js';
 import { createHustle } from './hustle.js';
 import { Particles, Flashes, Skids } from './fx.js';
+import { createStream, streamWanted } from './stream.js';
+import { createWeather } from './weather.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.12';
+const VERSION = 'v0.13';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -89,11 +91,12 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 450);
 const sky = new Sky(); sky.scale.setScalar(1000);
 const su = sky.material.uniforms;
-su.turbidity.value = 9; su.rayleigh.value = 2.6; su.mieCoefficient.value = 0.008; su.mieDirectionalG.value = 0.88;
+// v0.13: a tighter sun (less mie, more forward scatter), so the frame near the sun no longer washes out to cream and the flare carries the glow
+su.turbidity.value = 9; su.rayleigh.value = 2.6; su.mieCoefficient.value = 0.004; su.mieDirectionalG.value = 0.95;
 // daytime sky gain: the Sky shader's midday output is far past white even after tone mapping, which washed the
 // whole frame out to cream. The gain pulls the day sky back to a hazy blue; dusk and night are left as they were.
 su.uGain = { value: 1 };
-sky.material.fragmentShader = sky.material.fragmentShader.replace('void main() {', 'uniform float uGain;\nvoid main() {').replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uGain, 1.0 );');
+sky.material.fragmentShader = sky.material.fragmentShader.replace('void main() {', 'uniform float uGain;\nvoid main() {').replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uGain, 1.0 ); { float halo = smoothstep( 0.9, 0.996, cosTheta ) * ( 1.0 - smoothstep( 0.9992, 0.99995, cosTheta ) ); gl_FragColor.rgb = mix( gl_FragColor.rgb, min( gl_FragColor.rgb, vec3( 1.25 ) ), halo ); }');
 scene.add(sky);
 // twilight glow (v0.8.1): warm sunset band toward the sun plus a city light haze, so dusk never reads as a black sky
 const glowU = { uSun: { value: new THREE.Vector3(1, 0, 0) }, uDusk: { value: 0 }, uNight: { value: 0 } };
@@ -123,6 +126,7 @@ function rebuildEnv() {
   const rt = pmrem.fromScene(envScene, 0.04); scene.environment = rt.texture; if (envRT) envRT.dispose(); envRT = rt;
 }
 scene.fog = new THREE.Fog(0xb87a52, 45, !LOW ? 270 : FULL ? 245 : 215);
+let fogFar = scene.fog.far; // the dry view distance; rain pulls it in (weather.js)
 const hemi = new THREE.HemisphereLight(0xc8a080, 0x4a3226, 0.9);
 const sun = new THREE.DirectionalLight(0xffa060, 2.2);
 const SH_R = FULL ? 36 : 45, SH_MAP = FULL ? 1536 : 2048; // half width of the shadowed square around the view, and its map size
@@ -149,7 +153,12 @@ if (FX) {
   grade = makeGradePass(ShaderPass); composer.addPass(grade);
   // Low and potato: grain off. Med and High: off by default, opt in with se-grain=1
   grade.uniforms.uGrain.value = (LOW || POTATO) ? 0 : (localStorage.getItem('se-grain') === '1' ? 1 : 0);
+  // the lens (v0.13): phones render under native size, so they get more sharpening; the color split stays faint everywhere
+  grade.uniforms.uSharp.value = params.has('nosharp') ? 0 : LOW ? 0.42 : 0.26; grade.uniforms.uSplit.value = LOW ? 0.22 : 0.32;
 }
+// the sharpen and the speed blur step in texels, so the pass has to know the frame size whenever it changes
+function setGradeRes() { if (grade) grade.uniforms.uRes.value.set(1 / Math.max(1, innerWidth * pixelRatio), 1 / Math.max(1, innerHeight * pixelRatio)); }
+setGradeRes();
 export function setGrain(on) {
   if (LOW || POTATO) on = false;
   localStorage.setItem('se-grain', on ? '1' : '0');
@@ -242,6 +251,47 @@ const tmpM = new THREE.Matrix4(), tmpC = new THREE.Color();
 const pickupViz = new Map();
 // v0.5 feel: particles, muzzle flashes, skid marks, lock-on ring, mission package
 const parts = new Particles(scene, LOW ? 140 : 260), flashes = new Flashes(scene), skids = new Skids(scene, LOW ? 220 : 420);
+// weather (v0.13): rain now and then, on the sim's clock, so a continued save gets the weather it left
+const weather = createWeather({ scene, camera, LOW, POTATO, mats: city.wetMats, parts, sfx, force: params.has('rain'), off: PIN || params.has('noweather') });
+const fogRain = new THREE.Color(0x7c7e86);
+// ---------- sun flare (v0.13) ----------
+// Sprites on the line from the sun to the middle of the frame: a warm glow and a thin horizontal streak at the sun,
+// a few faint ghosts toward the center. Fades at the frame edge, with the sun under the horizon, in rain, and when
+// a building stands between the camera and the sun (sampled along that line with the sim's own building test).
+const flare = (() => {
+  const tex = (draw) => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; draw(cv.getContext('2d')); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const disc = tex((g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,250,235,1)'); gr.addColorStop(0.22, 'rgba(255,225,180,.5)'); gr.addColorStop(1, 'rgba(255,190,120,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+  const soft = tex((g) => { const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(0.6, 'rgba(255,255,255,.18)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+  const ring = tex((g) => { g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 7; g.beginPath(); g.arc(64, 64, 50, 0, 7); g.stroke(); const gr = g.createRadialGradient(64, 64, 36, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+  const streak = tex((g) => { const gx = g.createLinearGradient(0, 0, 128, 0); gx.addColorStop(0, 'rgba(255,240,220,0)'); gx.addColorStop(0.5, 'rgba(255,248,235,1)'); gx.addColorStop(1, 'rgba(255,240,220,0)'); g.fillStyle = gx; g.fillRect(0, 0, 128, 128); const gy = g.createLinearGradient(0, 0, 0, 128); gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.5, 'rgba(0,0,0,1)'); gy.addColorStop(1, 'rgba(0,0,0,0)'); g.globalCompositeOperation = 'destination-in'; g.fillStyle = gy; g.fillRect(0, 0, 128, 128); });
+  const EL = [
+    { t: disc, px: 560, f: 0, a: 0.5, col: 0xffe6c0 }, { t: streak, px: 1500, h: 0.045, f: 0, a: 0.32, col: 0xfff0dc },
+    { t: soft, px: 110, f: 0.3, a: 0.16, col: 0xffb888 }, { t: ring, px: 170, f: 0.55, a: 0.1, col: 0x9ec8ff },
+    { t: soft, px: 56, f: 0.82, a: 0.14, col: 0xff9cb8 }, { t: soft, px: 260, f: 1.3, a: 0.07, col: 0x90b4ff },
+  ];
+  const sprites = EL.map((e) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: e.t, color: e.col, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, opacity: 0, toneMapped: false, fog: false })); sp.renderOrder = 999; sp.frustumCulled = false; sp.visible = false; scene.add(sp); return sp; });
+  const v = new THREE.Vector3(), w = new THREE.Vector3(); let k = 0;
+  const ss = (x, a, b) => THREE.MathUtils.smoothstep(x, a, b);
+  return (elev, rain, rdt) => {
+    v.copy(camera.position).addScaledVector(sunDir, 300).project(camera);
+    const on = v.z < 1 && Math.abs(v.x) < 1.3 && Math.abs(v.y) < 1.3 && elev > -0.02;
+    let want = 0;
+    if (on) {
+      const edge = 1 - ss(Math.max(Math.abs(v.x), Math.abs(v.y)), 0.8, 1.25), up = ss(elev, -0.02, 0.06), low = 1 - ss(elev, 0.08, 0.6);
+      let occ = 0;
+      for (const d of [1.2, 2.5, 5, 9, 15, 24, 38]) if (insideBuilding(camera.position.x + sunDir.x * d, camera.position.z + sunDir.z * d, 0.15, camera.position.y + sunDir.y * d)) { occ = 1; break; }
+      want = edge * up * (0.35 + 0.65 * low) * (1 - occ) * (1 - 0.85 * rain);
+    }
+    k += (want - k) * Math.min(1, rdt * 7);
+    const unit = 2 * 10 * Math.tan(camera.fov * Math.PI / 360) / innerHeight; // world size of one pixel, ten units out
+    for (let i = 0; i < EL.length; i++) {
+      const e = EL[i], sp = sprites[i]; sp.visible = k > 0.01; if (!sp.visible) continue;
+      w.set(v.x * (1 - e.f), v.y * (1 - e.f), 0.5).unproject(camera).sub(camera.position).normalize();
+      sp.position.copy(camera.position).addScaledVector(w, 10);
+      sp.scale.set(e.px * unit, e.px * unit * (e.h || 1), 1); sp.material.opacity = e.a * k;
+    }
+  };
+})();
 const lockRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff4030, transparent: true, opacity: 0.85, toneMapped: false, depthWrite: false }));
 lockRing.visible = false; scene.add(lockRing);
 const pkgMesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.6), new THREE.MeshStandardMaterial({ color: 0x8a6238, emissive: 0xffaa33, emissiveIntensity: 0.6, roughness: 0.8 }));
@@ -584,6 +634,9 @@ function updateSpots(s, p, now) {
 let diceTick = 0;
 
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
+// stream layer (v0.13): event feed, turf bar, run stats, stream mode
+const stream = createStream({ isTouch, S, player, pop }); stream.setOn(streamWanted(params), false);
+$('endCopy').onclick = () => stream.copySummary(S(), $('endCopy'));
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
 function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = isTouch ? 1.6 : 2.2; }
 // Portrait left column: mission and capture stay. Toast yields first, then the tutorial line, if the stack would enter the road band.
@@ -705,7 +758,7 @@ let paused = false;
 function setPaused(on) {
   if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
   if (!on) goFullscreen();
-  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); }
+  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); stream.renderStats($('runstats'), S()); }
   if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
 }
@@ -721,7 +774,9 @@ function handleFx(list) {
   const byId = (id) => s.ents.find((e) => e.id === id);
   for (const f of list) {
     const d = f.x !== undefined ? Math.hypot(f.x - p.x, f.z - p.z) : 0, vol = Math.max(0, 1 - d / 45);
-    if (f.type === 'hit') {
+    stream.fx(f, s);
+    if (f.type === 'streak') { showBig(`${f.n}x KNOCKOUT`); sfx.chime(true); fovKick = Math.max(fovKick, 3); }
+    else if (f.type === 'hit') {
       const mine = f.by === p.id || f.to === p.id, src = byId(f.by), w = src ? src.weapon : 'fists';
       if (vol > 0) { sfx.impact(src && (w === 'pistol' || w === 'shotgun') && d > 3 ? 'bullet' : w, vol); if (f.ko) sfx.knockout(vol); }
       // sparks and dust, no blood: spray away from the attacker
@@ -875,11 +930,12 @@ const camPos = new THREE.Vector3(), tmp = new THREE.Vector3(), look = new THREE.
 
 // ---------- loop ----------
 let slowFor = 0, potatoOffered = false, fullT = 0, heavyFor = 0;
+let steerIn = 0, bank = 0, speedU = 0; // chase camera banking into turns, and the speed blur, both eased
 const shF = new THREE.Vector3(), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shZ = new THREE.Vector3(), shC = new THREE.Vector3(), shUp = new THREE.Vector3(0, 1, 0);
 // full graphics on a phone that cannot carry them: shadows and glow go off, the view pulls back in, and the choice is kept
 function dropFull() {
   FULL = false; sun.castShadow = false; flatLight(); if (bloom) bloom.enabled = false;
-  LOD_DIST = 34; CAR_DIST = 90; scene.fog.far = 215;
+  LOD_DIST = 34; CAR_DIST = 90; fogFar = 215;
   try { localStorage.setItem('se-gfx', 'lite'); } catch (e) { /* storage off: it steps down again next time */ }
   document.getElementById('ver').textContent = VERSION + ' low'; setGfxBtn();
   showMsg('Shadows off to keep it smooth.');
@@ -1064,7 +1120,7 @@ function frame(now) {
   else if (frameAvg < 50) slowFor = 0;
   // phones on full graphics: under about 38 fps for five seconds running (after the first few seconds of loading hitches), step down
   if (FULL && !PIN && gfxAsk !== 'full' && started && !paused && (fullT += rdt) > 8) { if (frameAvg > 26) { if ((heavyFor += rdt) > 5) dropFull(); } else if (frameAvg < 21) heavyFor = 0; }
-  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = PIN ? pixelRatio : frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.8, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } } }
+  if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = PIN ? pixelRatio : frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.8, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } setGradeRes(); } }
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
@@ -1080,6 +1136,7 @@ function frame(now) {
     f = Math.max(-1, Math.min(1, f)); r = Math.max(-1, Math.min(1, r));
     const sprint = keys.ShiftLeft || keys.ShiftRight || sprintTouch;
     if (cine.holdsInput) { f = 0; r = 0; attackQueued = false; }
+    steerIn = p.car ? r : 0;
     if (p.car) session.input(r, f, drive.drift || keys.Space, dt);
     else {
       const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
@@ -1095,9 +1152,16 @@ function frame(now) {
       $('end').classList.remove('hidden');
       $('endTitle').textContent = s.over === 'win' ? 'YOU RUN THIS CITY' : 'PUSHED OUT';
       $('endText').textContent = s.over === 'win' ? `The rival crews are gone. Rep ${Math.round(s.crews.player.rep)}. Time ${Math.round(s.t)}s.` : 'Your last block fell. The rivals own the city for now.';
+      stream.renderStats($('endStats'), s);
     }
   }
   const hour = updateDay();
+  // rain: dimmer sun, a closer grey haze, a hazier sky, wet streets (the materials are set inside update)
+  { const wx = weather.update(s, p, rdt, night), rn = wx.rain;
+    sun.intensity *= 1 - 0.55 * rn; hemi.intensity *= 1 + 0.2 * rn; scene.fog.far = fogFar * (1 - 0.32 * rn); scene.fog.color.lerp(fogRain, rn * 0.7); su.turbidity.value = 9 + 12 * rn;
+    if (grade) grade.uniforms.uWet.value = wx.wet;
+    if (wx.started && started) { stream.push('Rain moving in over the city', 'neutral'); showMsg('Rain. The streets are slick.'); radio.news('Rain over the city tonight. Slow down out there, or do not.'); }
+    flare(sunDir.y, rn, rdt); }
   const camX = camera.position.x, camZ = camera.position.z;
   // characters (people in cars are drawn as drivers instead)
   const seen = new Set(); let imp = 0;
@@ -1263,6 +1327,10 @@ function frame(now) {
   camera.position.copy(camPos);
   look.set(pv.x - Math.sin(yaw) * 1.2 + Math.cos(yaw) * (pcar ? 0 : 0.6), h, pv.z - Math.cos(yaw) * 1.2 - Math.sin(yaw) * (pcar ? 0 : 0.6));
   camera.lookAt(look);
+  // the chase camera banks a little into a turn and with a slide, and the frame streaks at speed
+  { const v = pcar ? Math.abs(pcar.v) : 0, bankT = pcar && !cine.active ? -steerIn * Math.min(1, v / 12) * 0.05 - Math.sign(steerIn || 1) * (pcar.slip || 0) * 0.02 : 0;
+    bank += (bankT - bank) * Math.min(1, rdt * 5); camera.rotation.z += bank;
+    const spT = pcar && !cine.active && !paused ? Math.max(0, Math.min(1, (v - 16) / 20)) : 0; speedU += (spT - speedU) * Math.min(1, rdt * 4); if (grade) grade.uniforms.uSpeed.value = speedU; }
   if (shake > 0) { shake = Math.max(0, shake - rdt * 2.2); camera.position.x += (Math.random() - 0.5) * shake * 0.5; camera.position.y += (Math.random() - 0.5) * shake * 0.5; camera.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
   const cineCam = cine.update(rdt); if (cineCam) cine.blendCamera();
   // the title is staged: he stands easy with nothing in his hands, whatever the save has him carrying
@@ -1309,6 +1377,7 @@ function frame(now) {
   const stRaw = stars(p); if (stRaw !== starWant) { starWant = stRaw; starHold = 0.5; } else if (starHold > 0 && (starHold -= rdt) <= 0) starShown = starWant;
   if (stRaw > starShown && starShown === 0) starShown = stRaw; // going wanted shows at once
   const st = starShown, si = $('stars').querySelectorAll('i'); for (let i = 0; i < 5; i++) si[i].classList.toggle('on', i < st);
+  if (started) stream.wanted(st);
   $('stars').classList.toggle('none', st === 0);
   $('stars').classList.toggle('flash', st > 0 && p.calmT < 3 && Math.floor(now / 400) % 2 === 0);
   document.body.classList.toggle('driving', !!p.car);
@@ -1369,6 +1438,7 @@ function frame(now) {
   }
   if (msgT > 0 && (msgT -= rdt) <= 0) $('msg').textContent = '';
   if (bigT > 0 && (bigT -= rdt) <= 0) $('big').classList.remove('show');
+  stream.tick(s, rdt);
   layoutNotices();
   if ((radarT -= rdt) <= 0) { radarT = LOW ? 0.1 : 0.05; drawRadar(now); }
   if (composer) { grade.uniforms.uTime.value = now / 1000; composer.render(); } else renderer.render(scene, camera);
@@ -1381,10 +1451,11 @@ function fitCanvas() {
   pixelRatio = Math.min(pixelRatio, PR_MAX()); renderer.setPixelRatio(pixelRatio);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight);
   if (composer) { composer.setPixelRatio(pixelRatio); composer.setSize(innerWidth, innerHeight); }
+  setGradeRes();
 }
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()) };
+window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

@@ -1,4 +1,4 @@
-# Street Empire (v0.3 prototype)
+# Street Empire (v0.13)
 
 A third-person browser game about building a street empire one block at a time. Think "World of Warcraft for the streets": every block is territory, every block runs a hustle, and rival crews are always expanding.
 
@@ -34,6 +34,16 @@ In a car, forward and back are throttle and left and right steer. Hitting rivals
 The game saves itself on this device every few seconds, when you pause and when you leave the page. The title screen then offers CONTINUE, with NEW GAME under it (two taps, it erases the save). RESTART in the pause menu also starts over.
 
 Phones get low settings automatically (no shadows, no dynamic street lights, pixel ratio up to 1.25, character LOD at 32 m). Add `?low` to the URL to force low settings on desktop.
+
+## What is new in v0.13
+
+- **Stream mode.** Tick it under HOW TO PLAY, or in the pause menu, or add `?stream` to the URL. The HUD gets bigger type and a safe margin all round, so a webcam or an overlay never covers the cash or the radar. Phones get the event feed too, and a run clock sits by Rep and Turf.
+- **Event feed.** A strip under the radar words the moments that matter, in the crew's color: any crew taking a block from any other, a raid gathering on your turf, a knockout streak, a wanted jump, a stunt, a race, a job done or blown, the helicopter, rain. Viewers can follow the war without reading the radar.
+- **Turf bar.** The city's 81 blocks by crew, one bar at the top of the left strip.
+- **Run stats.** Time, cash earned, knockouts, best streak, blocks taken and lost, jobs, stunts, races, fares, runs, stashes, times knocked out or locked up. On the pause screen, and on the end card with COPY SUMMARY, which puts one line on the clipboard for a stream title or chat. Three knockouts inside six seconds is a streak and shows on screen.
+- **Rain.** Now and then the sky closes in. The schedule comes from the game clock and the seed, so a continued save gets the weather it left. Streaks around the camera, wet asphalt and sidewalks that go dark and glossy so lamps and the low sun glint off them, a closer grey haze, splashes at your feet, and rain on the speakers. `?rain` forces it; `?noweather` keeps it dry (review shots with `?pin` are always dry).
+- **The lens.** A contrast-adaptive sharpen (phones render under native size and this puts the edge back without halos), a radial speed blur that pulls the frame in at speed, a faint color split at the edges of the frame, and a lens flare with a horizontal streak when the low sun is in view and nothing stands in front of it. The sun itself is a disc with a halo now instead of a wash across half the sky. The chase camera banks a little into turns and slides. `?nosharp` turns the sharpen off.
+- The phone smoke test skips the opening before it reaches for the buttons, as a player would. `tools/v013-shots.mjs` takes the review shots for this release.
 
 ## What is new in v0.12
 
@@ -117,6 +127,7 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - `src/state.js`: pure, serializable game state and simulation (blocks, crews, economy, AI, combat, cars). No rendering code.
 - `src/net.js`: session seam. `LocalSession` runs the sim in the tab. An online session can implement the same `send(action)`, `input(...)`, `tick(dt)` interface and talk to an authoritative host.
 - `src/main.js`: renderer, camera, input (keyboard, mouse, touch), HUD and game feel. It only reads state and sends actions.
+- `src/stream.js`: the stream layer (event feed, turf bar, run stats and summary, stream mode). `src/weather.js`: rain on the sim's clock. `src/grade.js`: the color grade and the lens (sharpen, speed blur, color split).
 - `src/city.js`, `src/vehicles.js`, `src/chars.js`, `src/audio.js`: city builder, car models, character loading and animation, and synthesized sound.
 - `tools/smoke.mjs`: headless Playwright smoke test for desktop and phone.
 

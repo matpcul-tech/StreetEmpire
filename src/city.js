@@ -79,7 +79,7 @@ export function buildCity(scene, LOW, blocks, base = './', SH = !LOW) {
   TEXBASE = base;
   rnd = mulberry(7);
   const S = LOW ? 256 : 512;
-  const out = { blockViz: [], emissive: [], nightOnly: [], signals: null, neon: [], lamps: [] };
+  const out = { blockViz: [], emissive: [], nightOnly: [], signals: null, neon: [], lamps: [], wetMats: [] };
   const SIZE = GRID * PITCH + 80;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), v3 = new THREE.Vector3(), v3b = new THREE.Vector3();
 
@@ -97,6 +97,7 @@ export function buildCity(scene, LOW, blocks, base = './', SH = !LOW) {
   const sidewalkMat = new THREE.MeshStandardMaterial({ map: painted('sidewalk', (BLOCK + 4) / 6, (BLOCK + 4) / 6), roughness: 1, roughnessMap: painted('pbr/concrete_r', (BLOCK + 4) / 3, (BLOCK + 4) / 3, false), ...relief('concrete', (BLOCK + 4) / 3, (BLOCK + 4) / 3, 1.0) });
   const [lc, lg] = canvas(S / 2, S / 2); drawConcrete(lg, S / 2, S / 2, '#4a4642');
   const lotMat = new THREE.MeshStandardMaterial({ map: tex(lc, 4, 4), roughness: 0.95 });
+  out.wetMats.push(ground.material, sidewalkMat, lotMat); // surfaces the rain darkens and glosses (weather.js)
   // dry yard grass for the Eastside
   // Fine grain, tiled small: thousands of thin blades in close tones, a few soft worn patches. Big blotches read as camouflage.
   const YS = LOW ? 256 : 512, [yc, yg] = canvas(YS, YS); yg.fillStyle = '#56562f'; yg.fillRect(0, 0, YS, YS);
