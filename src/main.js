@@ -31,7 +31,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.14';
+const VERSION = 'v0.15';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -66,7 +66,7 @@ function readSave() {
 }
 function clearSave() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* storage off: nothing to clear */ } }
 const savedState = params.has('new') ? null : readSave();
-const session = new LocalSession({ traffic: POTATO ? 5 : LOW ? 8 : 12, peds: POTATO ? 6 : LOW ? 10 : 18 }, savedState);
+const session = new LocalSession({ traffic: POTATO ? 5 : LOW ? 10 : 16, peds: POTATO ? 6 : LOW ? 13 : 26 }, savedState); // v0.15: far traffic and people run an ambient step, so there is room for more of them
 const S = () => session.state;
 let saveT = 0;
 function writeSave() {
@@ -809,6 +809,9 @@ function handleFx(list) {
       }
       const tagCol = { JAB: '#f4f4f4', CROSS: '#ffd27a', KNUCK: '#d5e8ff', BAT: '#ffb060', SHOT: '#ffe9a0', BUCK: '#ff9966', rush: '#ff7755', flank: '#7ad7ff', retreat: '#ffe14a' };
       if (f.amt && d < 40) floatHit(f.x, f.z, (f.tag ? f.tag + ' ' : '') + f.amt, f.to === p.id ? '#ff7777' : (tagCol[f.tag] || '#fff1c4'));
+      // a knockout tumbles (v0.15): hit by a car the body goes up and over, a punch or a bat drops it with a hop and a lean.
+      // Presentation on the drawn body only; the sim's knockback carries it along the ground.
+      if (f.ko && f.to !== p.id) { const g = charViz.get(f.to); if (g) { const byCar = typeof f.by === 'string'; const dir = Math.sign((f.dx || 0) * Math.sin(g.rotation.y) + (f.dz || 0) * Math.cos(g.rotation.y)) || -1; g.userData.tumble = byCar ? { t: 0, dur: 1.1, h: 1.5, turns: 1, lean: 0, dir } : { t: 0, dur: 0.6, h: 0.25, turns: 0, lean: 0.4, dir }; } }
       if (f.tag === 'KNUCK' && d < 60) parts.burst(f.x, 1.2, f.z, 8, 3.5, { color: 0xd5e8ff, life: 0.22, g: 5, s: 0.06, stretch: 1 }, dir);
       if (f.tag === 'BAT' && d < 60) parts.burst(f.x, 0.35, f.z, 10, 3, { color: 0xc4a070, life: 0.45, g: 2, s: 0.2, up: 0.3 });
       if (mine) {
@@ -842,7 +845,9 @@ function handleFx(list) {
       if (vol > 0) { if (big) sfx.crash(vol); else sfx.scrape(vol); }
       parts.burst(f.x, 0.6, f.z, big ? Math.min(24, 6 + n) : 6, big ? 6 : 4, { color: 0xffc070, life: 0.35, g: 9, s: 0.05, stretch: 1, bounce: 0.3 });
       if (big) parts.burst(f.x, 0.3, f.z, 6, 2, { color: 0x8a8070, life: 0.8, g: 1, s: 0.3, up: 0.4 });
-      if (f.by === p.id) { if (big && n > 20) { slowT = 0.4; fovKick = 5; } shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + (big ? 0.25 : 0.06); }
+      if (f.by === p.id) { if (big && n > 20) { slowT = 0.4; fovKick = 5; } shake = Math.max(shake, big ? Math.min(0.9, 0.25 + n * 0.03) : 0.12); if (big && isTouch && navigator.vibrate) navigator.vibrate(80); const g = carViz.get(p.car); if (g) { const u = g.userData; u.bounce = (u.bounce || 0) + (big ? 0.3 : 0.06); u.rv = (u.rv || 0) + (big ? 2.4 : 0.6) * (Math.random() < 0.5 ? -1 : 1); u.pv = (u.pv || 0) + (big ? 2.8 : 0.8); } }
+      // every car in the crash rocks on its springs, not only yours
+      if (big && d < 70) for (const [id, cg] of carViz) if (id !== p.car && (cg.position.x - f.x) ** 2 + (cg.position.z - f.z) ** 2 < 30) { const u = cg.userData; u.bounce = (u.bounce || 0) + 0.2; u.pv = (u.pv || 0) + 1.6; u.rv = (u.rv || 0) + 1.2 * (Math.random() < 0.5 ? -1 : 1); }
     }
     else if (f.type === 'cleared') { for (let i = 0; i < 6; i++) smoke.emit(f.x + (Math.random() - 0.5) * 2, 0.6, f.z + (Math.random() - 0.5) * 2, false, false); }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
@@ -1214,6 +1219,10 @@ function frame(now) {
     const kl = Math.hypot(e.kx || 0, e.kz || 0), back = kl > 0.3 ? -((e.kx * Math.sin(e.ry) + e.kz * Math.cos(e.ry)) / kl) : 0;
     const lean = e.hp > 0 ? Math.min(0.55, kl * 0.06) * back : 0;
     if (!held) g.rotation.x += ((e.dodgeT > 0 ? 0 : -lean) - g.rotation.x) * Math.min(1, rdt * 14); // the dodge roll is the Roll clip
+    { const tb = g.userData.tumble;
+      if (tb && !held) { tb.t += rdt; const k = Math.min(1, tb.t / tb.dur);
+        if (k >= 1) { g.userData.tumble = null; g.rotation.x = 0; g.rotation.z = 0; }
+        else { const sm = k * k * (3 - 2 * k), arc = Math.sin(k * Math.PI); g.position.y += tb.h * arc; g.rotation.x = tb.dir * (tb.turns * Math.PI * 2 * sm + tb.lean * arc); g.rotation.z = tb.turns ? 0 : tb.dir * tb.lean * 0.6 * arc; } } }
     if (e.kind === 'player' && e.moving > 0.05 && started && e.jumpT <= 0) {
       g.userData.stepT = (g.userData.stepT || 0) - dt * (e.moving > 1.3 ? 3.4 : 2.6);
       if (g.userData.stepT <= 0) { g.userData.stepT = 1; sfx.footstep(e.moving > 1.3 ? 1 : 0.7); }

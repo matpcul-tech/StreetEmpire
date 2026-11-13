@@ -1,4 +1,4 @@
-# Street Empire (v0.14)
+# Street Empire (v0.15)
 
 A third-person browser game about building a street empire one block at a time. Think "World of Warcraft for the streets": every block is territory, every block runs a hustle, and rival crews are always expanding.
 
@@ -34,6 +34,13 @@ In a car, forward and back are throttle and left and right steer. Hitting rivals
 The game saves itself on this device every few seconds, when you pause and when you leave the page. The title screen then offers CONTINUE, with NEW GAME under it (two taps, it erases the save). RESTART in the pause menu also starts over.
 
 Phones get low settings automatically (no shadows, no dynamic street lights, pixel ratio up to 1.25, character LOD at 32 m). Add `?low` to the URL to force low settings on desktop.
+
+## What is new in v0.15
+
+- **Weight.** A knockout tumbles: hit by a car the body goes up and over and lands rolling; dropped by a punch or a bat it hops and leans before it falls. Every car in a crash rocks on its springs, not only yours, and the car you hit takes some of your speed along its own heading (rear-ended it lurches forward, hit head on it is shoved back). A car at speed has a faint road buzz. Presentation on the drawn bodies and the existing suspension; the sim's knockback and crash rules are the same.
+- **Busier streets.** Traffic and people out of the player's sight run an ambient step (lane following, no car on car or car on person checks; pedestrians stepped every third tick), so the counts go up: 16 cars and 26 people on desktop, 10 and 13 on phones, from 12 and 18, 8 and 10.
+- **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
+- `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
 ## What is new in v0.14
 
