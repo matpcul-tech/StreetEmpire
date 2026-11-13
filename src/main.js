@@ -1232,7 +1232,7 @@ function frame(now) {
       if (modelReady(look.model)) {
         u.driver = makeCharacter(look, false);
         if (u.bike) { const S = (u.seatPose ||= { ...BIKE_SEAT, ...(u.rider || {}) }); u.driver.position.set(0, S.y, S.z); u.driver.rotation.set(S.lean, 0, 0); u.model.add(u.driver); } // on the model, so he leans with the bike
-        else { u.driver.position.set(-0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); }
+        else { u.driver.position.set(0.42, seatY(c, u), 0.15); u.driver.rotation.y = 0; g.add(u.driver); } // left seat: traffic keeps right (local +x is the car's left)
       }
     } else if (!wantDriver && u.driver) { u.driver.removeFromParent(); u.driver = null; }
     if (u.driver) { animate(u.driver, { hp: 1 }, rdt, true); if (u.bike) bikePose(u.driver, u.seatPose, u); }

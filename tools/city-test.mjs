@@ -93,7 +93,8 @@ const punch = (s, p, e) => { p.ry = Math.atan2(e.x - p.x, e.z - p.z); p.cd = 0; 
     o.x += 400; mine.hp = mine.max; // out of the way of the next one
   }
   check(`rear-ending traffic: ${out.rage} get out swinging, ${out.scare} take off, ${out.honk} lean on the horn`, out.rage > 0 && out.scare > 0 && out.honk > 0);
-  const angry = s.ents.find((e) => e.kind === 'ped' && e.angry > 0); mine.v = 0; mine.hp = mine.max; mine.wrecked = false; p.car = mine.id; mine.driver = p.id; p.hp = 100; for (const o of s.ents) if (o.kind === 'ped' && o !== angry) o.angry = 0; angry.x = mine.x + 4; angry.z = mine.z; angry.angry = 14;
+  // an angry driver, or one the pile-up above knocked down, back on his feet: the check is what he does next, not whether he survived the setup
+  const angry = s.ents.find((e) => e.kind === 'ped' && e.angry > 0) || s.ents.find((e) => e.kind === 'ped' && e.hp <= 0); angry.hp = angry.max = 45; angry.downT = 0; angry.flee = 0; mine.v = 0; mine.hp = mine.max; mine.wrecked = false; p.car = mine.id; mine.driver = p.id; p.hp = 100; for (const o of s.ents) if (o.kind === 'ped' && o !== angry) o.angry = 0; angry.x = mine.x + 4; angry.z = mine.z; angry.angry = 14;
   const hp0 = mine.hp; for (let k = 0; k < 4 / DT; k++) { mine.v = 0; angry.angry = 14; G.movePlayer(s, p, 0, 0, true, DT); G.step(s, DT); }
   check(`the angry driver beats on your car (${hp0} to ${mine.hp})`, mine.hp < hp0);
 }
