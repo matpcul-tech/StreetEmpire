@@ -142,7 +142,7 @@ if (FX) {
     // One pixel that is infinite or not a number (the sun disc and hot glints overflow the half float buffer on phone GPUs)
     // gets blurred across the whole frame and the screen goes black. Such pixels are dropped and the rest capped before the blur.
     const hp = bloom.materialHighPassFilter, read = 'vec4 texel = texture2D( tDiffuse, vUv );';
-    if (hp.fragmentShader.includes(read)) { hp.fragmentShader = hp.fragmentShader.replace(read, read + ' if ( any( isnan( texel ) ) || any( isinf( texel ) ) ) texel = vec4( 0.0 ); texel = clamp( texel, vec4( 0.0 ), vec4( 32.0 ) );'); hp.needsUpdate = true; composer.addPass(bloom); }
+    if (hp.fragmentShader.includes(read)) { hp.fragmentShader = hp.fragmentShader.replace(read, read + ' if ( any( isnan( texel ) ) || any( isinf( texel ) ) ) texel = vec4( 0.0 ); texel = clamp( texel, vec4( 0.0 ), vec4( 8.0 ) );'); hp.needsUpdate = true; composer.addPass(bloom); }
     else bloom = null; // the pass changed shape: run without glow rather than risk the black screen
   }
   composer.addPass(new OutputPass());
@@ -204,8 +204,9 @@ function updateDay() {
   skyGlow.position.copy(camera.position); glowU.uSun.value.copy(sunDir); glowU.uDusk.value = Math.max(dusk, (1 - day) * (1 - night)); glowU.uNight.value = night * 0.6;
   rebuildEnv();
   if (grade) { grade.uniforms.uNight.value = night; grade.uniforms.uDusk.value = dusk; }
-  // glow belongs to the lit hours: by day the sky itself is far past the threshold and would wash the whole street out
-  if (bloom && (FULL || !LOW)) { const g = Math.max(night, dusk * 0.7 * (1 - day)); bloom.strength = 0.7 * g; bloom.enabled = g > 0.04; }
+  // Glow is for lamps, signs and headlights after the sun is down. With the sun on the horizon the sky around it is far past
+  // the threshold over half the screen, and the glow from that buried the whole street in white at sunrise and sunset.
+  if (bloom && (FULL || !LOW)) { const g = night * (1 - THREE.MathUtils.smoothstep(elev, -0.09, -0.02)); bloom.strength = 0.7 * g; bloom.enabled = g > 0.04; }
   return h;
 }
 
