@@ -920,6 +920,7 @@ function startGame() {
   $('intro').classList.add('leaving'); $('tiFade').classList.add('on');
   setTimeout(() => {
     $('intro').classList.add('hidden'); $('tiFade').classList.remove('on'); clearTitleProps();
+    { const g0 = charViz.get(player(S()).id); if (g0) { g0.userData.cineHold = false; g0.userData.cineAnim = null; g0.userData.cineHolster = false; } }
     document.body.classList.remove('pre'); $('bPause').classList.add('show'); started = true; last = performance.now();
     scuffleT = savedState ? 0 : 2.5; onb.step = onb.done || savedState ? -1 : 0; renderOnb();
     const s = S(), p = player(s), pg = charViz.get(p.id), home = blockCenter(s.blocks[0]), far = blockCenter(s.blocks[s.blocks.length - 1]);
@@ -1262,7 +1263,8 @@ function frame(now) {
   camera.lookAt(look);
   if (shake > 0) { shake = Math.max(0, shake - rdt * 2.2); camera.position.x += (Math.random() - 0.5) * shake * 0.5; camera.position.y += (Math.random() - 0.5) * shake * 0.5; camera.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
   const cineCam = cine.update(rdt); if (cineCam) cine.blendCamera();
-  if (!started && loaded) { buildTitleProps(); updateTitleProps(rdt, now); const pg = charViz.get(p.id); if (pg) cine.titleCam(rdt, { player: pg.position, ry: pg.rotation.y, prop: titleCopCar ? titleCopCar.position : null, center: { x: 0, z: 0 } }); }
+  // the title is staged: he stands easy with nothing in his hands, whatever the save has him carrying
+  if (!started && loaded) { buildTitleProps(); updateTitleProps(rdt, now); const pg = charViz.get(p.id); if (pg) { pg.userData.cineHold = true; pg.userData.cineAnim = 'Idle_Loop'; pg.userData.cineHolster = true; } if (pg) cine.titleCam(rdt, { player: pg.position, ry: pg.rotation.y, prop: titleCopCar ? titleCopCar.position : null, center: { x: 0, z: 0 } }); }
   if (!cine.active && pendingBig) { if (!document.getElementById('passCard').classList.contains('show')) showBig(pendingBig); pendingBig = null; }
   if (window.__camOv) { const o = window.__camOv; camera.position.set(o.x, o.y, o.z); camera.lookAt(o.lx, o.ly, o.lz); } // test hook for close-up shots
   if (camKick > 0) { camera.rotateX(camKick * 0.06); camKick = Math.max(0, camKick - rdt * 6); }
