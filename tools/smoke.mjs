@@ -13,7 +13,8 @@ for (const [name, opts] of [['desktop', { viewport: { width: 1280, height: 720 }
   if (name === 'phone') await page.tap('#start'); else await page.click('#start');
   await page.waitForTimeout(1500);
   // the opening (v0.9) hides the controls until it ends: skip it with a tap, as a player would
-  if (await page.evaluate(() => document.body.classList.contains('cine-on'))) { await page.mouse.click(innerW(opts) / 2, 120); await page.waitForFunction(() => !document.body.classList.contains('cine-on'), null, { timeout: 20000 }); await page.waitForTimeout(600); }
+  for (let i = 0; i < 6 && await page.evaluate(() => document.body.classList.contains('cine-on')); i++) { await page.mouse.click(innerW(opts) / 2, 120); await page.waitForFunction(() => !document.body.classList.contains('cine-on'), null, { timeout: 10000 }).catch(() => {}); }
+  await page.waitForTimeout(600);
   if (name === 'desktop') { await page.keyboard.down('KeyD'); await page.waitForTimeout(800); await page.keyboard.up('KeyD'); await page.keyboard.press('KeyF'); }
   else { await page.tap('#bAttack'); await page.tap('#bRecruit'); }
   await page.waitForTimeout(2500);
