@@ -24,12 +24,14 @@ import { createHustle } from './hustle.js';
 import { Particles, Flashes, Skids } from './fx.js';
 import { createStream, streamWanted } from './stream.js';
 import { createWeather } from './weather.js';
+import { createMoments } from './moments.js';
+import { createClips } from './clips.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.13';
+const VERSION = 'v0.14';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -401,6 +403,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyH') sfx.honk();
   if (e.code === 'KeyC') doDodge();
   if (e.code === 'KeyV' && !e.repeat) session.send({ type: 'block', on: true });
+  if (e.code === 'KeyK') clips.cut('Clip');
   if (e.code === 'KeyG') { if (LOW || POTATO) { showMsg('Film grain off on Low'); return; } const on = !(grade && grade.uniforms.uGrain.value); setGrain(on); showMsg('Film grain ' + (on ? 'on' : 'off')); }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; if (e.code === 'KeyV') session.send({ type: 'block', on: false }); });
@@ -460,6 +463,7 @@ btn('bWeapon', () => session.send({ type: 'weapon' }));
 btn('bRecruit', () => session.send({ type: 'recruit' }));
 btn('bSquad', () => session.send({ type: 'squad' }));
 btn('bRadio', () => { sfx.initAudio(); radio.next(); });
+btn('bClip', () => clips.cut('Clip'));
 hold('bLeft', 'left'); hold('bRight', 'right'); hold('bGas', 'gas'); hold('bBrake', 'brake'); hold('bDrift', 'drift');
 btn('bDodge', () => doDodge());
 { const el = document.getElementById('bBlock'); el.addEventListener('pointerdown', (e) => { e.preventDefault(); session.send({ type: 'block', on: true }); el.classList.add('on'); }); for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, () => { session.send({ type: 'block', on: false }); el.classList.remove('on'); }); }
@@ -636,6 +640,24 @@ let diceTick = 0;
 function pop(t, cls = '') { const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = t; $('pops').appendChild(el); setTimeout(() => el.remove(), 2600); }
 // stream layer (v0.13): event feed, turf bar, run stats, stream mode
 const stream = createStream({ isTouch, S, player, pop }); stream.setOn(streamWanted(params), false);
+// clips (v0.14): a rolling recording of the frame, cut by the big moments or by K and the CLIP button
+const clips = createClips({ canvas: renderer.domElement, audioStream: sfx.stream, isTouch, onClip: (c) => { stream.push(`Clip saved: ${c.title}`, 'player'); pop('CLIP SAVED'); renderClips(); } });
+// moments (v0.14): a hook and a shot for everything that happens, drawn into the frame so the clip has it
+const moments = createMoments({ camera, scene, cine, S, player, clips, pop });
+function renderClips() {
+  const box = $('clipList'); if (!box) return; box.textContent = '';
+  const btn = $('clipsBtn'); if (btn) btn.textContent = clips.supported ? 'CLIPS: ' + (clips.on ? 'ON' : 'OFF') : 'CLIPS: NOT ON THIS BROWSER';
+  for (const c of clips.list) {
+    const row = document.createElement('div'); row.className = 'clip';
+    const t = document.createElement('span'); t.textContent = `${c.title} (${c.dur} s)`;
+    const save = document.createElement('button'); save.type = 'button'; save.textContent = 'SAVE'; save.onclick = () => clips.save(c);
+    row.append(t, save);
+    if (navigator.canShare) { const sh = document.createElement('button'); sh.type = 'button'; sh.textContent = 'SHARE'; sh.onclick = () => clips.share(c); row.appendChild(sh); }
+    box.appendChild(row);
+  }
+}
+$('clipsBtn').onclick = () => { clips.setOn(!clips.on); renderClips(); };
+$('clipNow').onclick = () => { clips.cut('Clip'); };
 $('endCopy').onclick = () => stream.copySummary(S(), $('endCopy'));
 function showMsg(t) { $('msg').textContent = t; msgT = 5; }
 function showBig(t, red) { const b = $('big'); b.textContent = t; b.classList.add('show'); b.classList.toggle('red', !!red); bigT = isTouch ? 1.6 : 2.2; }
@@ -758,7 +780,7 @@ let paused = false;
 function setPaused(on) {
   if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
   if (!on) goFullscreen();
-  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); stream.renderStats($('runstats'), S()); }
+  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); stream.renderStats($('runstats'), S()); renderClips(); }
   if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
 }
@@ -774,8 +796,8 @@ function handleFx(list) {
   const byId = (id) => s.ents.find((e) => e.id === id);
   for (const f of list) {
     const d = f.x !== undefined ? Math.hypot(f.x - p.x, f.z - p.z) : 0, vol = Math.max(0, 1 - d / 45);
-    stream.fx(f, s);
-    if (f.type === 'streak') { showBig(`${f.n}x KNOCKOUT`); sfx.chime(true); fovKick = Math.max(fovKick, 3); }
+    stream.fx(f, s); moments.fx(f, s);
+    if (f.type === 'streak') { sfx.chime(true); fovKick = Math.max(fovKick, 3); }
     else if (f.type === 'hit') {
       const mine = f.by === p.id || f.to === p.id, src = byId(f.by), w = src ? src.weapon : 'fists';
       if (vol > 0) { sfx.impact(src && (w === 'pistol' || w === 'shotgun') && d > 3 ? 'bullet' : w, vol); if (f.ko) sfx.knockout(vol); }
@@ -825,20 +847,20 @@ function handleFx(list) {
     else if (f.type === 'cleared') { for (let i = 0; i < 6; i++) smoke.emit(f.x + (Math.random() - 0.5) * 2, 0.6, f.z + (Math.random() - 0.5) * 2, false, false); }
     else if (f.type === 'wreck') { sfx.crash(vol); for (let i = 0; i < 8; i++) smoke.emit(f.x, 1.5, f.z, true, true); parts.burst(f.x, 1, f.z, 20, 7, { color: 0xffa040, life: 0.6, g: 9, s: 0.07, stretch: 1, bounce: 0.3 }); }
     else if (f.type === 'guards') { pop(`${f.n} guard${f.n > 1 ? 's' : ''} hold the block`); }
-    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { radio.news(`News: a corner in ${hood()} is under new management. Orange is in.`); const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); else showBig('BLOCK TAKEN'); } }
+    else if (f.type === 'capture') { sfx.sting(); if (f.crew === 'player') { radio.news(`News: a corner in ${hood()} is under new management. Orange is in.`); const b = s.blocks.find((b) => b.id === f.block); if (b && !cine.active) cine.swing(blockCenter(b), b.hustle); } }
     else if (f.type === 'stash' && (!f.stolen || f.crew === 'player')) pop(`+$${f.amt} ${f.hustle}`);
     else if (f.type === 'upgrade') pop(`${f.n} guard${f.n > 1 ? 's' : ''} armed`);
     else if (f.type === 'dice') { if (f.by === p.id) diceFx(f); else hustle.roll(f.block); }
     else if (f.type === 'built') { pop(`${f.hustle} built up: ${BUILD_BOOST}x income`); sfx.chime(true); }
     else if (f.type === 'raid' && f.eta > 0) sfx.chime(false);
-    else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); showBig('BLOCK LOST', true); sfx.chime(false); }
+    else if (f.type === 'lost') { radio.news('Word is the orange crew just lost a corner. Rough night.'); sfx.chime(false); }
     else if (f.type === 'jack') pendingJack = f.ped;
     else if (f.type === 'courier') { if (f.state === 'offer') pop(`${f.hustle} has a package to run (P on the radar)`); else if (f.state === 'pick') { showBig('PACKAGE LOADED'); sfx.chime(true); } else if (f.state === 'drop') { showBig(`DELIVERED +$${f.pay}`); if (f.streak) pop('Five in a row: +$150'); sfx.chime(true); } else { showBig('PACKAGE LOST', true); sfx.chime(false); } }
     else if (f.type === 'fare') { if (f.state === 'hail') pop('Someone nearby needs a ride (F on the radar)'); else if (f.state === 'pick') { showBig('FARE ON BOARD'); sfx.chime(true); } else if (f.state === 'drop') { showBig(`FARE PAID +$${f.pay}`); if (f.streak) pop('Five in a row: +$100'); sfx.chime(true); } else { showBig('FARE LOST', true); sfx.chime(false); } }
-    else if (f.type === 'heli') { if (f.state === 'in') { showBig('HELICOPTER INBOUND', true); radio.news('Police have a helicopter up tonight. Wave if you see it.'); } else if (f.fuel) pop('The helicopter is refueling: 30 s'); }
-    else if (f.type === 'found') { pop(`+$${f.pay} stash ${f.n} of ${f.of}`); sfx.chime(true); if (f.all) showBig('EVERY STASH FOUND'); parts.burst(f.x, 0.8, f.z, 14, 3, { color: 0xffb040, life: 0.6, g: 3, s: 0.08, up: 1.2 }); }
+    else if (f.type === 'heli') { if (f.state === 'in') { radio.news('Police have a helicopter up tonight. Wave if you see it.'); } else if (f.fuel) pop('The helicopter is refueling: 30 s'); }
+    else if (f.type === 'found') { pop(`+$${f.pay} stash ${f.n} of ${f.of}`); sfx.chime(true); parts.burst(f.x, 0.8, f.z, 14, 3, { color: 0xffb040, life: 0.6, g: 3, s: 0.08, up: 1.2 }); }
     else if (f.type === 'garage') { if (f.ok) { pop(`-$150 ${GARAGES[f.k].name}`); showBig(f.seen ? 'RESPRAYED' : 'RESPRAYED: HEAT GONE'); sfx.chime(true); const g = carViz.get(f.car); if (g) { scene.remove(g); carViz.delete(f.car); } } else { pop(`${GARAGES[f.k].name}: $150`, 'bad'); sfx.chime(false); } }
-    else if (f.type === 'race') { if (f.state === 'go') { showBig(f.name.toUpperCase() + ': GO'); sfx.sting(); } else if (f.state === 'win') { showBig(`${f.medal === 'none' ? 'FINISHED' : f.medal.toUpperCase()} ${f.time.toFixed(1)} S`); pop(`+$${f.pay}${f.record ? ' new best' : ''}`); sfx.chime(true); } else { showBig('RACE OVER', true); sfx.chime(false); } }
+    else if (f.type === 'race') { if (f.state === 'go') { sfx.sting(); } else if (f.state === 'win') { pop(`+$${f.pay}${f.record ? ' new best' : ''}`); sfx.chime(true); } else { showBig('RACE OVER', true); sfx.chime(false); } }
     else if (f.type === 'boom') {
       if (d < 60) radio.news(`News: a car just went up in ${hood()}. Police would like a word with a man in orange.`);
       sfx.boom(Math.max(0.15, 1 - d / 120));
@@ -854,7 +876,7 @@ function handleFx(list) {
     else if (f.type === 'fire') { if (d < 60) parts.burst(f.x, 1.2, f.z, 12, 4, { color: 0xff7a20, life: 0.5, g: 2, s: 0.1, up: 1.5 }); if (p.car === f.car) showBig('ON FIRE: GET OUT', true); }
     else if (f.type === 'launch') { slowT = 0.5; fovKick = 6; sfx.whoosh(); }
     else if (f.type === 'land') { if (f.by === p.id) { shake = Math.max(shake, Math.min(0.9, 0.2 + f.n * 0.06)); const g = carViz.get(f.car); if (g) g.userData.bounce = (g.userData.bounce || 0) + 0.5; if (isTouch && navigator.vibrate) navigator.vibrate(70); } if (vol > 0) sfx.impact('bat', vol); parts.burst(f.x, 0.2, f.z, 14, 4, { color: 0x9a8a78, life: 0.7, g: 1.5, s: 0.25, up: 0.4 }); }
-    else if (f.type === 'stunt') { radio.news(`A caller in ${hood()} says a car just flew over her street. We believe her.`); showBig(`STUNT JUMP ${Math.round(f.dist)} M`); pop(`+$${f.pay}${f.first ? ` ramp ${f.done} of ${f.of}` : ''}`); sfx.chime(true); }
+    else if (f.type === 'stunt') { radio.news(`A caller in ${hood()} says a car just flew over her street. We believe her.`); pop(`+$${f.pay}${f.first ? ` ramp ${f.done} of ${f.of}` : ''}`); sfx.chime(true); }
     else if (f.type === 'nearmiss') { pop(`NEAR MISS${f.n > 1 ? ' x' + f.n : ''} +$${f.pay}`); sfx.whoosh(); fovKick = Math.max(fovKick, 3); }
     else if (f.type === 'bark') { if (d < 26 && !cine.active) floatSay(f.id, f.x, f.z, f.text, f.set === 'call' ? 'call' : f.set === 'fight' || f.set === 'rage' || f.set === 'jacked' ? 'mad' : ''); }
     else if (f.type === 'called') { radio.news(`Police are answering a call in ${hood()}. If that is you, we never spoke.`); pop('A witness called it in', 'bad'); sfx.chime(false); floatSay(f.id, f.x, f.z, 'They are on the way.', 'call'); }
@@ -862,13 +884,13 @@ function handleFx(list) {
     else if (f.type === 'ditch') { if (vol > 0) sfx.block(vol * 0.6); }
     else if (f.type === 'pickup') sfx.chime(true);
     else if (f.type === 'bought') { pop(`-$${f.cost} ${SHOP_ITEMS[f.item].name}`); sfx.chime(true); }
-    else if (f.type === 'house') { showBig('SAFEHOUSE BOUGHT'); pop(f.name); sfx.chime(true); }
+    else if (f.type === 'house') { pop(f.name); sfx.chime(true); }
     else if (f.type === 'broke') sfx.chime(false);
-    else if (f.type === 'roadblock') { showBig('ROADBLOCK AHEAD', true); sfx.chime(false); }
+    else if (f.type === 'roadblock') { sfx.chime(false); }
     else if (f.type === 'checkpoint') { pop(`Marker ${f.n} of ${f.of}`); sfx.chime(true); }
     else if (f.type === 'gift') pop('A recruit is with you.');
-    else if (f.type === 'wasted') { showBig('KNOCKED OUT', true); cine.down(false); }
-    else if (f.type === 'busted') { showBig('LOCKED UP', true); cine.down(true); }
+    else if (f.type === 'wasted') { cine.down(false); }
+    else if (f.type === 'busted') { cine.down(true); }
     else if (f.type === 'mission') { if (f.state === 'pass') { const pg = charViz.get(p.id); cine.passed(f.title, f.reward, f.rep, p.car || !pg ? null : pg.position); pop(`+$${f.reward} job: ${f.title}`); sfx.chime(true); } else if (f.state === 'fail') { cine.failed(f.title); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
   }
 }
@@ -931,6 +953,7 @@ const camPos = new THREE.Vector3(), tmp = new THREE.Vector3(), look = new THREE.
 // ---------- loop ----------
 let slowFor = 0, potatoOffered = false, fullT = 0, heavyFor = 0;
 let steerIn = 0, bank = 0, speedU = 0; // chase camera banking into turns, and the speed blur, both eased
+let starsPrev = 0;
 const shF = new THREE.Vector3(), shX = new THREE.Vector3(), shY = new THREE.Vector3(), shZ = new THREE.Vector3(), shC = new THREE.Vector3(), shUp = new THREE.Vector3(0, 1, 0);
 // full graphics on a phone that cannot carry them: shadows and glow go off, the view pulls back in, and the choice is kept
 function dropFull() {
@@ -978,6 +1001,8 @@ function startGame() {
     $('intro').classList.add('hidden'); $('tiFade').classList.remove('on'); clearTitleProps();
     { const g0 = charViz.get(player(S()).id); if (g0) { g0.userData.cineHold = false; g0.userData.cineAnim = null; g0.userData.cineHolster = false; } }
     document.body.classList.remove('pre'); $('bPause').classList.add('show'); started = true; last = performance.now();
+    // clips record from here: on when asked for, or kept on from last time, or whenever stream mode is on
+    { let want = null; try { want = localStorage.getItem('se-clips'); } catch (e) { /* storage off */ } clips.setOn(params.has('clips') || (want != null ? want === '1' : stream.on)); }
     scuffleT = savedState ? 0 : 2.5; onb.step = onb.done || savedState ? -1 : 0; renderOnb();
     const s = S(), p = player(s), pg = charViz.get(p.id), home = blockCenter(s.blocks[0]), far = blockCenter(s.blocks[s.blocks.length - 1]);
     const welcome = () => showMsg('Welcome to the Eastside.');
@@ -1125,6 +1150,7 @@ function frame(now) {
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
   if (p.downT > 0) dt *= 0.4; // down beat in slow motion
+  if (moments.timeScale < 1) dt = rdt * moments.timeScale; // a moment's own beat of slow motion
   if (paused) dt = 0;
   if (started && !paused && (saveT += rdt) > 8) { saveT = 0; writeSave(); }
   if (started && !s.over && !cine.pausesSim && !paused) {
@@ -1160,7 +1186,7 @@ function frame(now) {
   { const wx = weather.update(s, p, rdt, night), rn = wx.rain;
     sun.intensity *= 1 - 0.55 * rn; hemi.intensity *= 1 + 0.2 * rn; scene.fog.far = fogFar * (1 - 0.32 * rn); scene.fog.color.lerp(fogRain, rn * 0.7); su.turbidity.value = 9 + 12 * rn;
     if (grade) grade.uniforms.uWet.value = wx.wet;
-    if (wx.started && started) { stream.push('Rain moving in over the city', 'neutral'); showMsg('Rain. The streets are slick.'); radio.news('Rain over the city tonight. Slow down out there, or do not.'); }
+    if (wx.started && started) { stream.push('Rain moving in over the city', 'neutral'); moments.rain(s, p); radio.news('Rain over the city tonight. Slow down out there, or do not.'); }
     flare(sunDir.y, rn, rdt); }
   const camX = camera.position.x, camZ = camera.position.z;
   // characters (people in cars are drawn as drivers instead)
@@ -1333,6 +1359,8 @@ function frame(now) {
     const spT = pcar && !cine.active && !paused ? Math.max(0, Math.min(1, (v - 16) / 20)) : 0; speedU += (spT - speedU) * Math.min(1, rdt * 4); if (grade) grade.uniforms.uSpeed.value = speedU; }
   if (shake > 0) { shake = Math.max(0, shake - rdt * 2.2); camera.position.x += (Math.random() - 0.5) * shake * 0.5; camera.position.y += (Math.random() - 0.5) * shake * 0.5; camera.rotation.z += (Math.random() - 0.5) * shake * 0.05; }
   const cineCam = cine.update(rdt); if (cineCam) cine.blendCamera();
+  moments.update(rdt, carViz); clips.update(rdt);
+  $('bClip').classList.toggle('show', started && clips.on && isTouch);
   // the title is staged: he stands easy with nothing in his hands, whatever the save has him carrying
   if (!started && loaded) { buildTitleProps(); updateTitleProps(rdt, now); const pg = charViz.get(p.id); if (pg) { pg.userData.cineHold = true; pg.userData.cineAnim = 'Idle_Loop'; pg.userData.cineHolster = true; } if (pg) cine.titleCam(rdt, { player: pg.position, ry: pg.rotation.y, prop: titleCopCar ? titleCopCar.position : null, center: { x: 0, z: 0 } }); }
   if (!cine.active && pendingBig) { if (!document.getElementById('passCard').classList.contains('show')) showBig(pendingBig); pendingBig = null; }
@@ -1377,7 +1405,7 @@ function frame(now) {
   const stRaw = stars(p); if (stRaw !== starWant) { starWant = stRaw; starHold = 0.5; } else if (starHold > 0 && (starHold -= rdt) <= 0) starShown = starWant;
   if (stRaw > starShown && starShown === 0) starShown = stRaw; // going wanted shows at once
   const st = starShown, si = $('stars').querySelectorAll('i'); for (let i = 0; i < 5; i++) si[i].classList.toggle('on', i < st);
-  if (started) stream.wanted(st);
+  if (started) { stream.wanted(st); if (st > starsPrev) moments.wanted(st, s, p); } starsPrev = st;
   $('stars').classList.toggle('none', st === 0);
   $('stars').classList.toggle('flash', st > 0 && p.calmT < 3 && Math.floor(now / 400) % 2 === 0);
   document.body.classList.toggle('driving', !!p.car);
@@ -1456,6 +1484,6 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream };
+window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

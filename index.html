@@ -38,7 +38,7 @@
 <div id="prompt" class="hidden"></div>
 <div id="rstack"><div id="pops"></div><div id="big"></div></div>
 <button id="bPause" aria-label="Pause">II</button>
-<div id="pause" class="panel hidden"><h1>PAUSED</h1><button id="pResume">RESUME</button><div id="prog"></div><div class="qrow">Quality: <button data-q="potato">POTATO</button><button data-q="low">LOW</button><button data-q="high">HIGH</button></div><div class="qrow">Shadows and glow: <button id="gfxBtn">ON</button></div><div class="qrow"><button data-stream type="button">STREAM MODE: OFF</button></div><div id="runstats" class="stats"></div><p class="pkeys">Esc or P pauses. Quality change reloads the game.</p><button id="pRestart">RESTART</button></div>
+<div id="pause" class="panel hidden"><h1>PAUSED</h1><button id="pResume">RESUME</button><div id="prog"></div><div class="qrow">Quality: <button data-q="potato">POTATO</button><button data-q="low">LOW</button><button data-q="high">HIGH</button></div><div class="qrow">Shadows and glow: <button id="gfxBtn">ON</button></div><div class="qrow"><button data-stream type="button">STREAM MODE: OFF</button><button id="clipsBtn" type="button">CLIPS: OFF</button><button id="clipNow" type="button">CLIP THE LAST 20 S</button></div><div id="clipList" class="clips"></div><div id="runstats" class="stats"></div><p class="pkeys">Esc or P pauses. K saves a clip of the last 20 seconds. Quality change reloads the game.</p><button id="pRestart">RESTART</button></div>
 <div id="objArrow"><div class="tri"></div><span id="objDist"></span></div>
 <div id="touch">
   <div id="stick"><div id="knob"></div></div>
@@ -77,7 +77,8 @@
   <p><b>Around town:</b> orange ramps are stunt jumps. <b>R</b> on the radar is a street race: stop a car on the ring. <b>G</b> is a garage: $150 fixes and resprays a car and loses the police. <b>F</b> is someone who needs a ride. Twenty stashes are hidden in the alleys. In a car, FIRE shoots your pistol. Four stars brings a helicopter. Pause shows your progress.</p>
   <p class="keys"><span class="kd">Desktop: WASD move, mouse look (click to lock), Shift sprint, Space jump, click or F attack, Q weapon, E car or talk, R recruit, T squad follow or guard, U arm guards ($80), C dodge, hold V block, Y step into a street call, N walk off, Space drift, Esc or P pause.</span><span class="kp">Phone: left thumb moves, drag the right side to look, big red button hits, DODGE rolls, the blue button talks, takes a car, or arms guards. A street call puts STEP IN and WALK OFF on the left. II pauses.</span></p>
   <label class="opt"><input type="checkbox" id="grain" /> Film grain (G)</label>
-  <label class="opt"><input type="checkbox" data-stream /> Stream mode: bigger HUD, a safe margin for overlays, the event feed on phones, a run clock</label>
+  <label class="opt"><input type="checkbox" data-stream /> Stream mode: bigger HUD, a safe margin for overlays, the event feed on phones, a run clock, and clips on</label>
+  <p>Every big moment gets its own shot and headline, and the game keeps a rolling recording: the biggest ones cut themselves into a clip, and K (or CLIP on a phone) cuts the last 20 seconds any time. Clips stay on this device until you save or share them from the pause menu.</p>
   </div>
   <button id="howClose" type="button">GOT IT</button>
  </div>
@@ -85,6 +86,7 @@
  <div class="credit" id="ver">v0.12</div>
 </div>
 <button id="bRadio" type="button">RADIO</button>
+<button id="bClip" type="button">CLIP</button>
 <div id="shop" class="panel hidden"><h1 id="shopName"></h1><p id="shopCash"></p><div id="shopItems"></div><button id="shopClose" type="button">LEAVE</button></div>
 <div id="dice" class="panel hidden"><h1 id="diceName"></h1><p id="diceInfo"></p><div id="diceFaces"><i class="die" id="dieA"></i><i class="die" id="dieB"></i><span id="dicePoint"></span></div><p id="diceMsg"></p><div id="diceBets"></div><div id="diceBtns"><button id="diceRoll" type="button">ROLL</button><button id="diceClose" type="button">LEAVE</button></div></div>
 <div id="end" class="panel hidden"><h1 id="endTitle"></h1><p id="endText"></p><div id="endStats" class="stats"></div><div class="endBtns"><button id="endCopy" type="button">COPY SUMMARY</button><button onclick="location.reload()">PLAY AGAIN</button></div></div>
