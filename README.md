@@ -42,6 +42,11 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.19
+
+- **Every job brief is filmed.** Dee, Rook and Sal give jobs 5 to 18 on camera (`brief-05` to `brief-18`), so all 19 briefs now play as clips with timed subtitles. Your reply in Send a Message is heard in the pause.
+- **Filmed busts.** When the police take you in, one of four officer clips (`bust-01` to `bust-04`, listed in `BUST_CLIPS` in `src/video.js`) plays ahead of the BUSTED screen, never the same one twice running. Skippable, and `?novideo` turns it off.
+
 ## What is new in v0.18
 
 - **Four more filmed briefs.** Unc gives Corner Collection, Chop Job, Take Over and Run the City on camera (`brief-02`, `brief-03`, `brief-04`, `brief-19`), the same way as Bag Back. In Corner Collection and Chop Job your reply is heard in the pause and subtitled as You.
