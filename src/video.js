@@ -11,6 +11,31 @@ export const BRIEF_CLIPS = {
     { t: 6.7, end: 10.0, who: 'Unc', text: 'He dropped it up the street running from a Red Kings car.' },
     { t: 10.5, end: 13.9, who: 'Unc', text: 'Go get it back. Then we talk real work.' },
   ] },
+  // the player's replies in 02 and 03 are voice only, mixed into the clip's own sound in the pause
+  1: { name: 'brief-02', subs: [
+    { t: 0.4, end: 3.7, who: 'Unc', text: 'Three corners on the Eastside are sitting on my envelopes.' },
+    { t: 4.05, end: 5.8, who: 'Unc', text: 'That money is already mine.' },
+    { t: 6.15, end: 7.6, who: 'You', text: 'And if they are short?' },
+    { t: 7.95, end: 10.5, who: 'Unc', text: 'They will not be short. Not today.' },
+    { t: 10.85, end: 12.9, who: 'Unc', text: 'Three envelopes, three corners.' },
+    { t: 13.25, end: 15.5, who: 'Unc', text: 'Bring them back before the clock runs out.' },
+  ] },
+  2: { name: 'brief-03', subs: [
+    { t: 0.4, end: 4.95, who: 'Unc', text: 'My guy at the chop shop is short one muscle car, and he needs it now.' },
+    { t: 5.05, end: 6.05, who: 'You', text: 'Any color?' },
+    { t: 6.12, end: 8.6, who: 'Unc', text: 'Fast is the only color that matters.' },
+    { t: 9.0, end: 12.6, who: 'Unc', text: 'Find a muscle car and drop it at the chop shop on the marker.' },
+  ] },
+  3: { name: 'brief-04', subs: [
+    { t: 0.4, end: 2.95, who: 'Unc', text: 'This block is ours because we hold it.' },
+    { t: 3.3, end: 5.45, who: 'Unc', text: 'That is the only reason it stays ours.' },
+    { t: 5.9, end: 8.7, who: 'Unc', text: 'Time to grow. Take the block on the marker.' },
+  ] },
+  18: { name: 'brief-19', subs: [
+    { t: 0.4, end: 3.8, who: 'Unc', text: 'One block. That is what we started with. Now look at the map.' },
+    { t: 4.3, end: 6.6, who: 'Unc', text: 'Take the rival block on the marker.' },
+    { t: 6.95, end: 8.9, who: 'Unc', text: 'This is the one that counts.' },
+  ] },
 };
 const SKIP_AFTER = 0.5; // seconds before a tap counts as a skip, so the START tap itself cannot skip the clip
 const GIVE_UP = 7; // seconds to wait for the first frame before moving on

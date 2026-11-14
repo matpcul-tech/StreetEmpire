@@ -42,6 +42,10 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.18
+
+- **Four more filmed briefs.** Unc gives Corner Collection, Chop Job, Take Over and Run the City on camera (`brief-02`, `brief-03`, `brief-04`, `brief-19`), the same way as Bag Back. In Corner Collection and Chop Job your reply is heard in the pause and subtitled as You.
+
 ## What is new in v0.17
 
 - **First filmed brief.** Unc gives the Bag Back job on camera (`public/cinematics/brief-01`), in place of the engine sit-down, with his lines as timed subtitles. A tap or any key skips it, the NEW JOB card follows, and if the clip cannot play the engine briefing runs as before. `?novideo` keeps the engine briefing.
