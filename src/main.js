@@ -26,13 +26,13 @@ import { createStream, streamWanted } from './stream.js';
 import { createWeather } from './weather.js';
 import { createMoments } from './moments.js';
 import { createClips } from './clips.js';
-import { createVideo, BRIEF_CLIPS } from './video.js';
+import { createVideo, BRIEF_CLIPS, BUST_CLIPS } from './video.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.18';
+const VERSION = 'v0.19';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -644,6 +644,7 @@ const stream = createStream({ isTouch, S, player, pop }); stream.setOn(streamWan
 // clips (v0.14): a rolling recording of the frame, cut by the big moments or by K and the CLIP button
 const clips = createClips({ canvas: renderer.domElement, audioStream: sfx.stream, isTouch, onClip: (c) => { stream.push(`Clip saved: ${c.title}`, 'player'); pop('CLIP SAVED'); renderClips(); } });
 // story clips (v0.16): Unc's welcome before the opening and the rooftop at the win, each once and skippable; the game's sound drops under them
+let lastBust = -1;
 const story = createVideo({ base: BASE, duck: (on) => { const a = sfx.audio(); if (a) a.master.gain.setTargetAtTime(on ? 0.0001 : 0.8, a.ctx.currentTime, 0.08); } });
 // moments (v0.14): a hook and a shot for everything that happens, drawn into the frame so the clip has it
 const moments = createMoments({ camera, scene, cine, S, player, clips, pop });
@@ -898,7 +899,11 @@ function handleFx(list) {
     else if (f.type === 'checkpoint') { pop(`Marker ${f.n} of ${f.of}`); sfx.chime(true); }
     else if (f.type === 'gift') pop('A recruit is with you.');
     else if (f.type === 'wasted') { cine.down(false); }
-    else if (f.type === 'busted') { cine.down(true); }
+    else if (f.type === 'busted') {
+      // a filmed officer takes you in, never the same one twice running, then the BUSTED screen as before
+      if (params.has('novideo') || story.active) cine.down(true);
+      else { let n = Math.floor(Math.random() * (BUST_CLIPS.length - 1)); if (n >= lastBust) n++; lastBust = n; const b = BUST_CLIPS[n]; story.play(b.name, { touch: isTouch, subs: b.subs }).then(() => cine.down(true)); }
+    }
     else if (f.type === 'mission') { if (f.state === 'pass') { const pg = charViz.get(p.id); cine.passed(f.title, f.reward, f.rep, p.car || !pg ? null : pg.position); pop(`+$${f.reward} job: ${f.title}`); sfx.chime(true); } else if (f.state === 'fail') { cine.failed(f.title); sfx.chime(false); } else { const pg = charViz.get(p.id), gv = s.ents.find((e) => e.kind === 'giver'), ug = gv && charViz.get(gv.id); if (!p.car) { pendingBrief = { idx: f.idx ?? 0, title: f.title, wait: 1.5 }; } else showBig(f.title.toUpperCase()); } }
   }
 }
