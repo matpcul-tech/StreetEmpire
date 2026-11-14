@@ -26,13 +26,13 @@ import { createStream, streamWanted } from './stream.js';
 import { createWeather } from './weather.js';
 import { createMoments } from './moments.js';
 import { createClips } from './clips.js';
-import { createVideo } from './video.js';
+import { createVideo, BRIEF_CLIPS } from './video.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.16';
+const VERSION = 'v0.17';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -1298,7 +1298,10 @@ function frame(now) {
   // Unc briefing: starts as soon as both characters are drawn
   if (pendingBrief) {
     const pg = charViz.get(p.id), gv = contactFor(s), ug = gv && charViz.get(gv.id), M = MISSIONS[pendingBrief.idx] || {};
-    if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, M.intro, pendingBrief.title, M.brief); pendingBrief = null; }
+    const film = !params.has('novideo') && !pendingBrief.noFilm && BRIEF_CLIPS[pendingBrief.idx];
+    // a filmed brief plays in place of the engine one; if the clip cannot play, the engine briefing runs instead
+    if (film && !cine.active && !story.active) { const pb = pendingBrief; pendingBrief = null; story.play(film.name, { touch: isTouch, subs: film.subs }).then(() => { if (story.failed) pendingBrief = { ...pb, noFilm: true, wait: 1.5 }; else cine.card({ k: 'NEW JOB', t: pb.title, dur: 2.6 }); }); }
+    else if (pg && ug && !cine.active) { cine.brief(pendingBrief.idx, ug, pg, M.intro, pendingBrief.title, M.brief); pendingBrief = null; }
     else if ((pendingBrief.wait -= rdt) <= 0) { showBig(pendingBrief.title.toUpperCase()); pendingBrief = null; }
   }
   if (wasDown && !(p.downT > 0)) cine.up();

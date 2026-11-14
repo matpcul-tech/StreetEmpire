@@ -42,6 +42,11 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.17
+
+- **First filmed brief.** Unc gives the Bag Back job on camera (`public/cinematics/brief-01`), in place of the engine sit-down, with his lines as timed subtitles. A tap or any key skips it, the NEW JOB card follows, and if the clip cannot play the engine briefing runs as before. `?novideo` keeps the engine briefing.
+- Filmed briefs are listed in `BRIEF_CLIPS` in `src/video.js`: the job's index, the file name and the subtitle cues in seconds. Adding the next one is a 720p `.mp4` and `.webm` in `public/cinematics/` and one entry there.
+
 ## What is new in v0.16
 
 - **Two story clips.** Unc's welcome plays before the opening on a new game, and the rooftop plays when the city is yours, before the end card (`src/video.js`, files in `public/cinematics/`). Each plays once, a tap or any key skips it, and nothing is drawn or simulated under it. Everything else stays in the engine: the opening, the briefings and the moments are unchanged. A clip that cannot load is skipped. `?novideo` turns them off; `?nointro` skips the welcome with the opening.
