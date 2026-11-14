@@ -42,6 +42,11 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.16
+
+- **Two story clips.** Unc's welcome plays before the opening on a new game, and the rooftop plays when the city is yours, before the end card (`src/video.js`, files in `public/cinematics/`). Each plays once, a tap or any key skips it, and nothing is drawn or simulated under it. Everything else stays in the engine: the opening, the briefings and the moments are unchanged. A clip that cannot load is skipped. `?novideo` turns them off; `?nointro` skips the welcome with the opening.
+- `tools/story-shots.mjs` starts a new game, lets the welcome play, skips it on a second run, forces the win and checks the end card follows the rooftop.
+
 ## What is new in v0.14
 
 - **Every big moment is a clip.** A moments director (`src/moments.js`) gives everything that happens a hook and a shot: a car going up gets a low orbit round the blast in slow motion under BOOM; a knockout streak gets a push in; the helicopter gets a tilt up to it; five stars, a taken or lost block, a stunt landing, a race medal, a cop down, a jacked car, rain moving in, a knockout or an arrest each get their headline and a line under it. The card is drawn inside the frame, not in the HUD, so it is in the recording.

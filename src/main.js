@@ -26,12 +26,13 @@ import { createStream, streamWanted } from './stream.js';
 import { createWeather } from './weather.js';
 import { createMoments } from './moments.js';
 import { createClips } from './clips.js';
+import { createVideo } from './video.js';
 import '@fontsource/anton/400.css';
 import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.15';
+const VERSION = 'v0.16';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -642,6 +643,8 @@ function pop(t, cls = '') { const el = document.createElement('div'); el.classNa
 const stream = createStream({ isTouch, S, player, pop }); stream.setOn(streamWanted(params), false);
 // clips (v0.14): a rolling recording of the frame, cut by the big moments or by K and the CLIP button
 const clips = createClips({ canvas: renderer.domElement, audioStream: sfx.stream, isTouch, onClip: (c) => { stream.push(`Clip saved: ${c.title}`, 'player'); pop('CLIP SAVED'); renderClips(); } });
+// story clips (v0.16): Unc's welcome before the opening and the rooftop at the win, each once and skippable; the game's sound drops under them
+const story = createVideo({ base: BASE, duck: (on) => { const a = sfx.audio(); if (a) a.master.gain.setTargetAtTime(on ? 0.0001 : 0.8, a.ctx.currentTime, 0.08); } });
 // moments (v0.14): a hook and a shot for everything that happens, drawn into the frame so the clip has it
 const moments = createMoments({ camera, scene, cine, S, player, clips, pop });
 function renderClips() {
@@ -784,8 +787,8 @@ function setPaused(on) {
   if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
 }
-addEventListener('keydown', (e) => { if ((e.code === 'Escape' || e.code === 'KeyP') && started && !cine.active) setPaused(!paused); });
-document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && started && !paused && !isTouch && !cine.active) setPaused(true); });
+addEventListener('keydown', (e) => { if ((e.code === 'Escape' || e.code === 'KeyP') && started && !cine.active && !story.active) setPaused(!paused); });
+document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement && started && !paused && !isTouch && !cine.active && !story.active) setPaused(true); });
 $('bPause').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setPaused(true); });
 $('pResume').onclick = () => setPaused(false);
 $('pRestart').onclick = () => { started = false; clearSave(); location.reload(); };
@@ -1016,11 +1019,14 @@ function startGame() {
     city.buildAll(); // the flyover crosses the whole city: build it behind the fade so no lot is empty
     // one block on the city's diagonal for each place the opening cuts to
     const diag = (g) => blockCenter(s.blocks.find((b) => b.gx === g && b.gz === g) || s.blocks[0]);
-    cine.opening({ home, center: { x: 0, z: 0 }, player: pg.position.clone(), onDone: welcome, pitch: PITCH,
+    const opening = () => cine.opening({ home, center: { x: 0, z: 0 }, player: pg.position.clone(), onDone: welcome, pitch: PITCH,
       spots: { harbor: far, downtown: diag(Math.floor(GRID / 2)), midtown: diag(Math.round((GRID - 1) * 0.35)) },
       locs: [{ at: 0.2, k: DISTRICTS[2].toUpperCase(), t: 'Gold Line runs the docks' }, { at: 2.0, k: DISTRICTS[1].toUpperCase(), t: 'Red Kings. Blue Hand. Nobody shares.' }, { at: 3.9, k: DISTRICTS[3].toUpperCase(), t: 'Nobody holds it. Yet.' }, { at: 5.3, k: DISTRICTS[0].toUpperCase(), t: 'One block. Yours.' }] });
+    // Unc's welcome plays first on a new game (?novideo skips it), then the flyover
+    if (params.has('novideo')) opening(); else story.play('unc-intro', { touch: isTouch }).then(opening);
   }, 480);
 }
+if (!savedState && !params.has('nointro') && !params.has('novideo')) story.warm('unc-intro'); // a new player's first clip loads behind the title
 $('howBtn').onclick = () => $('how').classList.remove('hidden');
 $('howClose').onclick = () => $('how').classList.add('hidden');
 // ---------- v0.11 title: staged props on the live block (not part of the sim) ----------
@@ -1141,6 +1147,7 @@ function seatY(c, u) { const y = sitOffset(c.type) - DRIVER_DROP; return u.kit &
 
 function frame(now) {
   requestAnimationFrame(frame);
+  if (story.active) { last = now; return; } // a story clip covers the screen: nothing is drawn or simulated under it, so the phone can spend itself on the video
   renderer.info.reset();
   const rawMs = Math.max(0, now - last);
   let rdt = Math.max(0, Math.min(0.05, rawMs / 1000)); last = now;
@@ -1158,7 +1165,7 @@ function frame(now) {
   if (moments.timeScale < 1) dt = rdt * moments.timeScale; // a moment's own beat of slow motion
   if (paused) dt = 0;
   if (started && !paused && (saveT += rdt) > 8) { saveT = 0; writeSave(); }
-  if (started && !s.over && !cine.pausesSim && !paused) {
+  if (started && !s.over && !cine.pausesSim && !paused && !story.active) {
     let f = 0, r = 0;
     if (keys.KeyW || keys.ArrowUp) f += 1; if (keys.KeyS || keys.ArrowDown) f -= 1;
     if (keys.KeyD || keys.ArrowRight) r += 1; if (keys.KeyA || keys.ArrowLeft) r -= 1;
@@ -1180,7 +1187,8 @@ function frame(now) {
     handleFx(session.drainFx());
     if (s.over) {
       clearSave(); // a finished game is not resumed
-      $('end').classList.remove('hidden');
+      // the rooftop plays before the end card when the city is yours
+      { const showEnd = () => $('end').classList.remove('hidden'); if (s.over === 'win' && !params.has('novideo')) story.play('victory', { touch: isTouch }).then(showEnd); else showEnd(); }
       $('endTitle').textContent = s.over === 'win' ? 'YOU RUN THIS CITY' : 'PUSHED OUT';
       $('endText').textContent = s.over === 'win' ? `The rival crews are gone. Rep ${Math.round(s.crews.player.rep)}. Time ${Math.round(s.t)}s.` : 'Your last block fell. The rivals own the city for now.';
       stream.renderStats($('endStats'), s);
@@ -1330,7 +1338,7 @@ function frame(now) {
     v.prog.visible = !!b.capBy; if (b.capBy) { v.prog.material.color.setHex(CREWS[b.capBy].color); const k = Math.max(0.01, b.capT / CAPTURE_TIME); v.prog.scale.set(k, k, 1); }
   });
   // onboarding progress and the opening scuffle
-  if (started && !cine.pausesSim && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A mugger is going for your bag.'); } }
+  if (started && !cine.pausesSim && !story.active && scuffleT > 0 && (scuffleT -= rdt) <= 0) { const e = openingScuffle(s); if (e) { scufflerId = e.id; showMsg('A mugger is going for your bag.'); } }
   // Unc stands a short walk from spawn, so Bag Back can start while the mugger group is still up.
   // Advance past the fight and the talk step together, or "1/3 Stop the muggers" stays on screen.
   if ((onb.step === 0 || onb.step === 1) && (s.mission || s.missionIdx > 0)) onbAdvance(2);
@@ -1493,6 +1501,6 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips };
+window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips, story };
 renderer.info.autoReset = false;
 window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
