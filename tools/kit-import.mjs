@@ -13,7 +13,7 @@
 //   node tools/kit-import.mjs list
 //   node tools/kit-import.mjs remove car sedan
 //   node tools/kit-import.mjs remove building house [variant file name]
-//   node tools/kit-import.mjs far            (re)make the far version of every installed building
+//   node tools/kit-import.mjs far            (re)make the far version of every installed building, car and bike
 //
 // Steps: dedup, prune, weld, textures to WebP at 1024 px or less, simplify
 // when over the triangle budget, quantize and meshopt. Node names survive so
@@ -50,6 +50,8 @@ const DIRS = { car: 'cars', building: 'buildings', character: 'characters' };
 const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 }, character: { tris: 15000, tex: 1024 } };
 // far versions of buildings: triangle target and texture size; a model already this light needs none
 const FAR = { tris: 8000, tex: 512, skip: 12000 };
+// far versions of cars: one mesh, shape only (the game draws it with the full model's own material), so a far car is one cheap draw
+const FAR_CAR = { tris: 3000, skip: 8000 };
 // bones the game needs to play its animations on a character, by the game rig's names
 const NEED_BONES = ['pelvis', 'spine', 'neck_01', 'Head', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
@@ -291,7 +293,9 @@ export async function importModel(kind, slot, file, opts = {}) {
   const m = readManifest(); m.cars ||= {}; m.buildings ||= {};
   const credit = opts.credit || null;
   if (kind === 'car') {
-    m.cars[slot] = { file: rel, yaw: opts.yaw || 0, length: opts.length || CAR_LENGTH[slot] || 4.8, paint: opts.paint !== false, ...(credit && { credit }) };
+    const far = await writeFarCar(rel, notes);
+    if (m.cars[slot]?.far && m.cars[slot].far !== far) { const old = path.join(KIT, m.cars[slot].far); if (fs.existsSync(old)) fs.rmSync(old); }
+    m.cars[slot] = { file: rel, ...(far && { far }), yaw: opts.yaw || 0, length: opts.length || CAR_LENGTH[slot] || 4.8, paint: opts.paint !== false, ...(credit && { credit }) };
   } else if (kind === 'character') {
     m.characters ||= {};
     const list = (m.characters[slot] = [].concat(m.characters[slot] || []).filter((e) => e.file !== rel));
@@ -327,12 +331,43 @@ async function writeFar(rel, notes = []) {
   return farRel;
 }
 
+// The far version of an installed car (<name>.far.glb): body and wheels simplified and joined into
+// one mesh with the full model's texture coordinates and no textures of its own. The game draws it
+// with the full model's material past a set distance, so paint, finish and color match exactly.
+async function writeFarCar(rel, notes = []) {
+  const farRel = rel.replace(/\.glb$/, '.far.glb'), farAbs = path.join(KIT, farRel);
+  const doc = await io.read(path.join(KIT, rel)), before = triCount(doc);
+  const none = (why) => { if (why) notes.push(why); if (fs.existsSync(farAbs)) fs.rmSync(farAbs); return null; };
+  if (before <= FAR_CAR.skip) return none();
+  if (doc.getRoot().listMaterials().length !== 1) return none('no far version: the car has more than one material');
+  await doc.transform(weld());
+  // a far car is a few dozen pixels long, so the shape may move up to two percent of its size
+  // (a bike is under half a car's length and all thin parts, so it is allowed more)
+  for (const error of rel.startsWith('bikes/') ? [0.01, 0.03, 0.06] : [0.004, 0.01, 0.02]) {
+    if (triCount(doc) <= FAR_CAR.tris * 1.15) break;
+    await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: Math.min(1, Math.max(0.02, FAR_CAR.tris / triCount(doc))), error }));
+  }
+  const after = triCount(doc);
+  if (after > before * 0.4) return none(`no far version: only got ${before} down to ${after} triangles`);
+  for (const m of doc.getRoot().listMaterials()) { m.setBaseColorTexture(null); m.setNormalTexture(null); m.setMetallicRoughnessTexture(null); m.setEmissiveTexture(null); m.setOcclusionTexture(null); m.setExtras({}); }
+  for (const n of doc.getRoot().listNodes()) n.setExtras({});
+  await doc.transform(flatten(), join(), prune({ keepAttributes: true }), quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  await io.write(farAbs, doc);
+  notes.push(`far version ${farRel}: ${after} triangles, ${(fs.statSync(farAbs).size / 1e3).toFixed(0)} KB`);
+  return farRel;
+}
+
 async function remakeFar() {
   const m = readManifest(), results = [];
   for (const [slot, list] of Object.entries(m.buildings || {})) for (const e of [].concat(list)) {
     const notes = [], far = await writeFar(e.file, notes);
     if (far) e.far = far; else delete e.far;
     results.push({ ok: true, src: e.file, slot, kind: 'building', file: far || e.file, tris: triCount(await io.read(path.join(KIT, far || e.file))), bytes: fs.statSync(path.join(KIT, far || e.file)).size, materials: 1, notes });
+  }
+  for (const [slot, e, kind] of [...Object.entries(m.cars || {}).map((x) => [...x, 'car']), ...Object.entries(m.bikes || {}).map((x) => [...x, 'bike'])]) {
+    const notes = [], far = await writeFarCar(e.file, notes);
+    if (far) e.far = far; else delete e.far;
+    results.push({ ok: true, src: e.file, slot, kind, file: far || e.file, tris: triCount(await io.read(path.join(KIT, far || e.file))), bytes: fs.statSync(path.join(KIT, far || e.file)).size, materials: 1, notes });
   }
   writeManifest(m);
   return results;
@@ -341,7 +376,7 @@ async function remakeFar() {
 export function removeModel(kind, slot, variant) {
   const m = readManifest();
   const drop = (rel) => { const f = path.join(KIT, rel); if (fs.existsSync(f)) fs.rmSync(f); };
-  if (kind === 'car' && m.cars?.[slot]) { drop(m.cars[slot].file); delete m.cars[slot]; }
+  if (kind === 'car' && m.cars?.[slot]) { drop(m.cars[slot].file); if (m.cars[slot].far) drop(m.cars[slot].far); delete m.cars[slot]; }
   for (const [k, group] of [['building', 'buildings'], ['character', 'characters']]) {
     if (kind !== k || !m[group]?.[slot]) continue;
     const keep = [];

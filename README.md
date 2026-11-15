@@ -42,6 +42,12 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.21
+
+- **Far cars and bikes.** Every kit car and bike has a far version (`<name>.far.glb`, made by `node tools/kit-import.mjs far` and on every car import): one mesh, shape only, drawn with the full model's own material so the paint matches. Past 28 m on phones (36 m with shadows on, 60 m on desktop) a vehicle draws that in place of its 30,000 triangle model. Cars drop to 3,500 to 8,000 triangles, bikes to about 11,000. The distance is measured from the camera, so cutscene close-ups keep the full model, and the car you are in never swaps. `?nofar` turns it off for testing.
+- **Edge smoothing steps down.** The resolution scaler could not shed the multisampling cost. A phone that is still slow once the resolution has stepped down now loses the smoothing as well and keeps it off next time. Picking a Quality in Pause resets that.
+- **Frame rate readout.** Pause shows the average and worst frame rate over the last 30 seconds of play with the current sharpness, smoothing and shadow state. "Show frame rate" puts a live number in the corner (`?fps` does the same).
+
 ## What is new in v0.20
 
 - **Filmed busts removed.** An arrest goes straight to the BUSTED screen again; the officer clips are out of the game. The 19 filmed job briefs stay.

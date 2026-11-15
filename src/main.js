@@ -10,7 +10,7 @@ import { LocalSession } from './net.js';
 import { CREWS, GRID, PITCH, BLOCK, CAPTURE_TIME, UPGRADE_COST, BUILD_COST, BUILD_BOOST, blockCenter, player, blockAt, insideBuilding, stars, clock, signal, nearestCar, districtOf, DISTRICTS, guardsOf } from './state.js';
 import { buildCity } from './city.js';
 import { loadKit } from './kit.js';
-import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight } from './vehicles.js';
+import { loadCars, makeCar, updateCar, Smoke, setCarQuality, carNight, carLod } from './vehicles.js';
 import { loadPeople, makeCharacter, animate, lookFor, ready as modelReady, charNight } from './chars.js';
 import * as sfx from './audio.js';
 import { createCine } from './cine.js';
@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.20';
+const VERSION = 'v0.21';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -41,6 +41,7 @@ const LOW = (isTouch || POTATO || params.has('low') || params.get('q') === 'low'
 // "lite" is the plain low look. A phone that cannot hold its frame rate on full steps down by itself and remembers.
 // ?gfx=full or ?gfx=lite picks one, ?pin stops every automatic quality change (review shots).
 const PIN = params.has('pin');
+const NOFAR = params.has('nofar'); // testing: every car draws its full model at any range
 const gfxAsk = params.get('gfx') || localStorage.getItem('se-gfx');
 let FULL = LOW && !POTATO && (gfxAsk ? gfxAsk === 'full' : !(navigator.deviceMemory && navigator.deviceMemory < 4));
 const SHADOWS = !LOW || FULL;
@@ -50,7 +51,7 @@ if (isTouch) document.body.classList.add('touch');
 addEventListener('touchstart', () => { if (!isTouch) { isTouch = true; document.body.classList.add('touch'); } }, { capture: true, passive: true });
 // no long press menus, callouts or text selection over the game
 addEventListener('contextmenu', (e) => { if (!e.target.closest || !e.target.closest('input,textarea')) e.preventDefault(); });
-let LOD_DIST = !LOW ? 60 : FULL ? 46 : 34, CAR_DIST = !LOW ? 170 : FULL ? 105 : 90; const DRIVER_DIST = LOW ? 30 : 50;
+let LOD_DIST = !LOW ? 60 : FULL ? 46 : 34, CAR_DIST = !LOW ? 170 : FULL ? 105 : 90, CAR_FAR = !LOW ? 60 : FULL ? 36 : 28; const DRIVER_DIST = LOW ? 30 : 50; // CAR_FAR: past this a kit car draws its far version
 const BASE = import.meta.env.BASE_URL;
 
 // ---------- save game ----------
@@ -138,9 +139,10 @@ scene.add(hemi, sun, sun.target);
 
 // post: tone map, then a warm LUT grade, optional soft film grain and vignette
 const FX = !params.has('nofx') && !POTATO;
+let MSAA_OFF = LOW && !params.has('smooth') && (() => { try { return localStorage.getItem('se-smooth') === 'off'; } catch (e) { return false; } })();
 let composer = null, grade = null, bloom = null;
 if (FX) {
-  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: LOW && !FULL ? 2 : 4 }); // 2x multisampling on Low smooths the stair-step edges
+  const rt = new THREE.WebGLRenderTarget(innerWidth * pixelRatio, innerHeight * pixelRatio, { type: THREE.HalfFloatType, samples: MSAA_OFF ? 0 : LOW && !FULL ? 2 : 4 }); // 2x multisampling on Low smooths the stair-step edges; a phone that could not carry it keeps it off (dropSmooth)
   composer = new EffectComposer(renderer, rt);
   composer.addPass(new RenderPass(scene, camera));
   // glow: only light sources and hot highlights pass the threshold, so signs, lamps, headlights and the low sun bleed a little
@@ -783,7 +785,7 @@ let paused = false;
 function setPaused(on) {
   if (!started || S().over) return; paused = on; $('pause').classList.toggle('hidden', !on);
   if (!on) goFullscreen();
-  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); stream.renderStats($('runstats'), S()); renderClips(); }
+  if (on) { const g = progress(S()); $('prog').innerHTML = `<b>${g.pct}% complete</b>` + g.parts.map(([n, a, b]) => `<span>${n} ${a}/${b}</span>`).join(''); stream.renderStats($('runstats'), S()); renderClips(); renderPerf(); }
   if (on) writeSave();
   if (on && document.pointerLockElement) document.exitPointerLock();
 }
@@ -792,7 +794,7 @@ document.addEventListener('pointerlockchange', () => { if (!document.pointerLock
 $('bPause').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); setPaused(true); });
 $('pResume').onclick = () => setPaused(false);
 $('pRestart').onclick = () => { started = false; clearSave(); location.reload(); };
-for (const b of document.querySelectorAll('#pause [data-q]')) b.onclick = () => { writeSave(); localStorage.setItem('se-q', b.dataset.q); const u = new URL(location.href); u.searchParams.set('q', b.dataset.q); location.href = u.toString(); };
+for (const b of document.querySelectorAll('#pause [data-q]')) b.onclick = () => { writeSave(); localStorage.removeItem('se-smooth'); localStorage.setItem('se-q', b.dataset.q); const u = new URL(location.href); u.searchParams.set('q', b.dataset.q); location.href = u.toString(); };
 document.addEventListener('visibilitychange', () => { if (document.hidden && started) { setPaused(true); writeSave(); } });
 function handleFx(list) {
   const s = S(), p = player(s);
@@ -966,15 +968,44 @@ const shF = new THREE.Vector3(), shX = new THREE.Vector3(), shY = new THREE.Vect
 // full graphics on a phone that cannot carry them: shadows and glow go off, the view pulls back in, and the choice is kept
 function dropFull() {
   FULL = false; sun.castShadow = false; flatLight(); if (bloom) bloom.enabled = false;
-  LOD_DIST = 34; CAR_DIST = 90; fogFar = 215;
+  LOD_DIST = 34; CAR_DIST = 90; CAR_FAR = 28; fogFar = 215;
   try { localStorage.setItem('se-gfx', 'lite'); } catch (e) { /* storage off: it steps down again next time */ }
   document.getElementById('ver').textContent = VERSION + ' low'; setGfxBtn();
   showMsg('Shadows off to keep it smooth.');
+}
+// Edge smoothing costs the same at any resolution, so the resolution scaler cannot shed it. A phone that is still
+// slow after the resolution has stepped down loses the smoothing instead, and keeps it off next time.
+let smoothFor = 0;
+function dropSmooth() {
+  if (!composer || MSAA_OFF) return; MSAA_OFF = true;
+  for (const rt of [composer.renderTarget1, composer.renderTarget2]) { rt.samples = 0; rt.dispose(); }
+  try { localStorage.setItem('se-smooth', 'off'); } catch (e) { /* storage off: it steps down again next time */ }
 }
 const gfxBtn = $('gfxBtn');
 function setGfxBtn() { if (gfxBtn) gfxBtn.textContent = FULL ? 'ON' : 'OFF'; }
 if (gfxBtn) { if (!LOW || POTATO) gfxBtn.parentElement.style.display = 'none'; setGfxBtn(); gfxBtn.onclick = () => { writeSave(); localStorage.setItem('se-gfx', FULL ? 'lite' : 'full'); const u = new URL(location.href); u.searchParams.delete('gfx'); location.href = u.toString(); }; }
 let last = performance.now(), radarT = 0, frameAvg = 16, resT = 0, camInit = false;
+// Frame rate readout: one-second buckets over the last 30 seconds of play, shown in Pause and, with FPS on, live in the corner.
+const perfSecs = []; let perfN = 0, perfMs = 0, fpsLive = false;
+try { fpsLive = params.has('fps') || localStorage.getItem('se-fps') === 'on'; } catch (e) { /* storage off */ }
+function perfTick(ms) {
+  if (!started || paused || story.active || ms > 500) return; // a tab switch or a clip is not a slow frame
+  perfN++; perfMs += ms;
+  if (perfMs < 1000) return;
+  perfSecs.push({ fps: perfN * 1000 / perfMs }); if (perfSecs.length > 30) perfSecs.shift();
+  perfN = 0; perfMs = 0;
+  if (fpsLive) $('ver').textContent = `${Math.round(perfSecs[perfSecs.length - 1].fps)} fps`;
+}
+function perfReport() {
+  if (perfSecs.length < 3) return { secs: perfSecs.length };
+  const f = perfSecs.map((x) => x.fps).sort((a, b) => a - b);
+  return { secs: f.length, avg: Math.round(f.reduce((a, b) => a + b, 0) / f.length), low: Math.round(f[0]), sharp: +pixelRatio.toFixed(2), smooth: !!composer && !MSAA_OFF, shadows: !!FULL || !LOW, quality: POTATO ? 'potato' : LOW ? 'low' : 'high', cars: carViz.size };
+}
+function renderPerf() {
+  const el = $('perfLine'); if (!el) return; const r = perfReport();
+  el.textContent = r.avg == null ? 'Frame rate: play for a few seconds, then pause again.' : `Frame rate, last ${r.secs} s: ${r.avg} fps average, ${r.low} worst. Sharpness ${r.sharp}, smoothing ${r.smooth ? 'on' : 'off'}, shadows ${r.shadows ? 'on' : 'off'}, ${r.cars} cars.`;
+  const b = $('fpsBtn'); if (b) b.textContent = fpsLive ? 'ON' : 'OFF';
+}
 const startBtn = $('start');
 // with a save on this device the title offers CONTINUE, and NEW GAME under it (two taps, it erases the save)
 const START_LABEL = savedState ? 'CONTINUE' : 'HIT THE STREETS';
@@ -1158,6 +1189,8 @@ function frame(now) {
   // phones on full graphics: under about 38 fps for five seconds running (after the first few seconds of loading hitches), step down
   if (FULL && !PIN && gfxAsk !== 'full' && started && !paused && (fullT += rdt) > 8) { if (frameAvg > 26) { if ((heavyFor += rdt) > 5) dropFull(); } else if (frameAvg < 21) heavyFor = 0; }
   if ((resT += rdt) > 2) { resT = 0; const max = PR_MAX(); const target = PIN ? pixelRatio : frameAvg > 24 ? Math.max(POTATO ? 0.5 : 0.8, pixelRatio - 0.15) : frameAvg < 15 ? Math.min(max, pixelRatio + 0.1) : pixelRatio; if (Math.abs(target - pixelRatio) > 0.01) { pixelRatio = target; renderer.setPixelRatio(pixelRatio); if (composer) { composer.setPixelRatio(pixelRatio); } setGradeRes(); } }
+  if (LOW && composer && !MSAA_OFF && !PIN && started && !paused) { if (frameAvg > 24 && pixelRatio <= 1.05) { if ((smoothFor += rdt) > 4) dropSmooth(); } else if (frameAvg < 20) smoothFor = 0; }
+  perfTick(rawMs);
   let dt = rdt;
   if (hitStop > 0) { hitStop -= rdt; dt = rdt * 0.05; } else if (slowT > 0) { slowT -= rdt; dt = rdt * (0.25 + 0.75 * Math.max(0, 1 - slowT / 0.6) ** 2); }
   const s = S(), p = player(s);
@@ -1250,6 +1283,8 @@ function frame(now) {
     let g = carViz.get(c.id);
     if (!g) { g = makeCar(c); g.position.set(c.x, 0, c.z); g.rotation.y = c.ry; scene.add(g); carViz.set(c.id, g); }
     updateCar(g, c, rdt, night > 0.3, now);
+    // far version by distance from the camera (not the player, so a cutscene close-up gets the full model); 3 m of slack stops flicker at the line
+    if (g.userData.far) { const cd2 = (g.position.x - camera.position.x) ** 2 + (g.position.z - camera.position.z) ** 2, lim = g.userData.isFar ? CAR_FAR - 3 : CAR_FAR; carLod(g, !NOFAR && p.car !== c.id && cd2 > lim * lim); }
     // a dead car being cleared sinks into the street and is gone (state.js clearCar)
     if (c.clear != null) { const k = 1 - Math.max(0, c.clear) / CLEAR_TIME; g.position.y -= k * k * 2.2; g.userData.flares.visible = false; }
     // tire smoke and skid marks from the rear wheels while sliding
@@ -1504,6 +1539,7 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips, story };
+window.__game = session; window.__dbg = { dropSmooth, RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips, story };
 renderer.info.autoReset = false;
-window.__perf = () => ({ frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
+{ const b = $('fpsBtn'); if (b) b.onclick = () => { fpsLive = !fpsLive; try { localStorage.setItem('se-fps', fpsLive ? 'on' : 'off'); } catch (e) { /* storage off */ } if (!fpsLive) $('ver').textContent = VERSION + (POTATO ? ' potato' : FULL ? ' low+' : LOW ? ' low' : ' high'); renderPerf(); }; }
+window.__perf = () => ({ report: perfReport(), smooth: !!composer && !MSAA_OFF, farCars: [...carViz.values()].filter((g) => g.userData.isFar).length, frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });

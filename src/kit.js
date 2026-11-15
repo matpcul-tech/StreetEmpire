@@ -82,11 +82,14 @@ export async function loadKit(base, { low = false, shadow = !low, farAt = 0 } = 
   const jobs = [];
   for (const [slot, spec] of Object.entries(manifest.cars || {})) {
     if (!CAR_SLOTS.includes(slot) || !spec || !spec.file) continue;
-    jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { kit.cars[slot] = prepCar(g.scene, spec, slot, low); }).catch((e) => console.warn('kit car', slot, e)));
+    // the far file is optional: if it is missing or fails, the full model shows at any range
+    const farCar = spec.far ? loader.loadAsync(`${base}models/kit/${spec.far}`).then((g) => g.scene).catch((e) => { console.warn('kit car far', slot, e); return null; }) : null;
+    jobs.push(Promise.all([loader.loadAsync(`${base}models/kit/${spec.file}`), farCar]).then(([g, farScene]) => { kit.cars[slot] = prepCar(g.scene, spec, slot, low, farScene); }).catch((e) => console.warn('kit car', slot, e)));
   }
   for (const [slot, spec] of Object.entries(manifest.bikes || {})) {
     if (!spec || !spec.file) continue;
-    jobs.push(loader.loadAsync(`${base}models/kit/${spec.file}`).then((g) => { kit.bikes[slot] = prepBike(g.scene, spec, slot, low); }).catch((e) => console.warn('kit bike', slot, e)));
+    const farBike = spec.far ? loader.loadAsync(`${base}models/kit/${spec.far}`).then((g) => g.scene).catch((e) => { console.warn('kit bike far', slot, e); return null; }) : null;
+    jobs.push(Promise.all([loader.loadAsync(`${base}models/kit/${spec.file}`), farBike]).then(([g, farScene]) => { kit.bikes[slot] = prepBike(g.scene, spec, slot, low, farScene); }).catch((e) => console.warn('kit bike', slot, e)));
   }
   for (const [slot, list] of Object.entries(manifest.buildings || {})) {
     if (!BUILDING_SLOTS.includes(slot)) continue;
@@ -137,7 +140,20 @@ function cheapen(root) {
 // A car template: the model turned to +z, scaled to the slot length, sitting on
 // the ground, with each wheel moved under its own pivot at the wheel center so
 // it can spin and steer. Paint materials are marked so each car gets its color.
-function prepCar(scene, spec, slot, low) {
+// A car's far version (made by the importer): one light mesh with the full model's texture coordinates,
+// given the full model's own material so paint and finish match, placed with the same turn, scale and
+// offset. It rides in the template hidden; the game shows it in place of the full model past a set distance.
+function addFarCar(root, inner, scene, farScene) {
+  if (!farScene) return;
+  let mat = null; scene.traverse((o) => { if (!mat && o.isMesh) mat = [].concat(o.material).find((m) => m.map) || null; });
+  if (!mat) return;
+  const far = new THREE.Group(); far.name = 'kit-car-far'; far.visible = false;
+  const fi = new THREE.Group(); fi.rotation.copy(inner.rotation); fi.scale.copy(inner.scale); fi.position.copy(inner.position); fi.add(farScene); far.add(fi);
+  farScene.traverse((o) => { if (o.isMesh) o.material = mat; });
+  root.add(far);
+}
+
+function prepCar(scene, spec, slot, low, farScene = null) {
   const root = new THREE.Group(); root.name = 'kit-car';
   const masked = takeMasks(scene) > 0;
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
@@ -156,6 +172,7 @@ function prepCar(scene, spec, slot, low) {
       pivot.attach(w); // the wheel keeps its authored transform inside the pivot; the pivot only adds spin and steer
     }
     const paint = collectPaint(scene, spec);
+    addFarCar(root, inner, scene, farScene);
     shadows(root, castSh, false); if (low) cheapen(root);
     return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: true, masked, slot, spec };
   }
@@ -173,6 +190,7 @@ function prepCar(scene, spec, slot, low) {
     pivot.attach(m); // keeps the world transform, so the wheel now turns around its own center
   }
   const paint = collectPaint(scene, spec);
+  addFarCar(root, inner, scene, farScene);
   shadows(root, castSh, false); if (low) cheapen(root);
   const nWheels = root.children.filter((c) => c.name === 'wheel').length;
   return { root, paint, atlas: !paint.length, key: paint.length || spec.paint === false ? null : paintKey(scene), hasWheels: nWheels > 0, masked, slot, spec };
@@ -180,7 +198,7 @@ function prepCar(scene, spec, slot, low) {
 
 // A bike template: turned to +z, scaled to its length, tires on the ground. The file's own rig is kept
 // as built (wheel nodes on their axles, the steer node on the steering head), so nothing is re-pivoted here.
-function prepBike(scene, spec, slot, low) {
+function prepBike(scene, spec, slot, low, farScene = null) {
   const root = new THREE.Group(); root.name = 'kit-bike';
   takeMasks(scene);
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
@@ -194,6 +212,7 @@ function prepBike(scene, spec, slot, low) {
     if (o.userData && o.userData.kitSteer) steer++;
     if (o.userData && o.userData.kitWheel) { wheels++; const b = new THREE.Box3().setFromObject(o, true); wheelR = (b.max.y - b.min.y) / 2; }
   });
+  addFarCar(root, inner, scene, farScene);
   shadows(root, castSh, false); if (low) cheapen(root);
   return { root, key: spec.paint === false ? null : paintKey(scene), hasWheels: wheels > 0, hasSteer: steer > 0, wheelR, height: size.y * k, slot, spec };
 }
@@ -208,7 +227,8 @@ export function cloneKitBike(T, paintHex) {
     if (o.userData && o.userData.kitWheel) wheels.push(o);
     if (o.userData && o.userData.kitSteer && !steer) steer = { node: o, axis: new THREE.Vector3(...(o.userData.kitSteerAxis || [0, 1, 0])).normalize() };
   });
-  return { model, wheels, steer };
+  const far = model.children.find((c) => c.name === 'kit-car-far') || null;
+  return { model, wheels, steer, far, near: far ? model.children.filter((c) => c !== far) : null };
 }
 
 function collectPaint(scene, spec) {
@@ -256,7 +276,8 @@ export function cloneKitCar(T, paintHex) {
     o.material = Array.isArray(o.material) ? o.material.map(swap) : swap(o.material);
   });
   const wheels = []; for (const c of model.children) if (c.name === 'wheel') wheels.push({ node: c, front: c.position.z > 0 });
-  return { model, wheels };
+  const far = model.children.find((c) => c.name === 'kit-car-far') || null;
+  return { model, wheels, far, near: far ? model.children.filter((c) => c !== far) : null };
 }
 
 // Repaint for models whose paint is baked into one texture (AI-made cars, atlases): the body's

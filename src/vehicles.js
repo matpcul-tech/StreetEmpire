@@ -263,8 +263,8 @@ function addBikeLights(g, spec = {}) {
 function makeBike(c) {
   const g = new THREE.Group(), KT = kitBike(c.model || 'sportbike') || kitBike(); // c.model picks the bike (sportbike, cruiser); a missing one falls back to the sport bike
   const paintHex = BIKE_PAINT[c.paint % BIKE_PAINT.length], spec = KT ? KT.spec : {};
-  let model, wheels = [], steer = null, wheelR = 0.31, seat = 0.8;
-  if (KT) { ({ model, wheels, steer } = cloneKitBike(KT, paintHex)); wheelR = KT.wheelR; }
+  let model, wheels = [], steer = null, wheelR = 0.31, seat = 0.8, far = null, near = null;
+  if (KT) { ({ model, wheels, steer, far, near } = cloneKitBike(KT, paintHex)); wheelR = KT.wheelR; }
   else {
     model = new THREE.Group();
     const dark = new THREE.MeshLambertMaterial({ color: 0x18181a }), body = new THREE.MeshLambertMaterial({ color: paintHex });
@@ -277,7 +277,7 @@ function makeBike(c) {
   model.rotation.order = 'YXZ';
   g.add(model);
   const L = addBikeLights(g, spec);
-  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex, axle: spec.axle || 'x', // axle: the axis the wheel nodes spin on (a file built sideways uses z)
+  g.userData = { wheels: [], bikeWheels: wheels, steer, wheelR, spinA: 0, siren: null, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: !!KT, bike: true, seat, paintHex, far, near, isFar: false, axle: spec.axle || 'x', // axle: the axis the wheel nodes spin on (a file built sideways uses z)
     rider: spec.rider || null, // kit.json: seat position and pose for this bike, see BIKE_SEAT in main.js
     grips: spec.grips ? [new THREE.Vector3(spec.grips[0], spec.grips[1], spec.grips[2]), new THREE.Vector3(-spec.grips[0], spec.grips[1], spec.grips[2])] : null }; // left and right handlebar grip, in the model's space
   return g;
@@ -318,13 +318,13 @@ export function makeCar(c) {
 function makeKitCar(c, KT) {
   const g = new THREE.Group();
   const paintHex = c.type === 'police' || c.type === 'taxi' || KT.spec.paint === false ? null : paintHexFor(c);
-  const { model, wheels } = cloneKitCar(KT, paintHex);
+  const { model, wheels, far, near } = cloneKitCar(KT, paintHex);
   model.rotation.order = 'YXZ';
   g.add(model);
   const roof = new THREE.Box3().setFromObject(model, true).max.y;
   const L = addLights(g, c, roof + 0.08);
   L.heads.visible = false; L.tails.visible = false; // the model has its own lamps; only the glow flares and beams are added
-  g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true, roof };
+  g.userData = { wheels, spinA: 0, siren: L.siren, model, body: model, burnt: false, baseY: 0, tails: L.tails, flares: L.flares, kit: true, roof, far, near, isFar: false };
   g.userData.paintHex = paintHexFor(c);
   return g;
 }
@@ -358,6 +358,12 @@ function lampGeos(grp) {
     lampGeo = { head: mergeGeometries(hs), tail: mergeGeometries(ts) };
   }
   return lampGeo;
+}
+
+// Far cars: past the swap distance a kit car shows its light far version (one mesh) in place of the full model.
+export function carLod(g, far) {
+  const u = g.userData; if (!u.far || u.isFar === far) return;
+  u.isFar = far; u.far.visible = far; for (const n of u.near) n.visible = !far;
 }
 
 export function updateCar(g, c, dt, night, now) {
