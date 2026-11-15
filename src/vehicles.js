@@ -46,8 +46,8 @@ function parts() {
     tail: new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }),
     tailDim: new THREE.MeshBasicMaterial({ color: 0x8a1010, toneMapped: false }),
     tailBrake: new THREE.MeshBasicMaterial({ color: 0xff3a3a, toneMapped: false }),
-    flare: new THREE.SpriteMaterial({ map: glowTex('255,240,210'), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
-    flareR: new THREE.SpriteMaterial({ map: glowTex('255,40,30'), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    flare: new THREE.SpriteMaterial({ map: glowTex('255,240,210'), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.7 }),
+    flareR: new THREE.SpriteMaterial({ map: glowTex('255,40,30'), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, opacity: 0.65 }),
     sirenR: new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false }),
     sirenB: new THREE.MeshBasicMaterial({ color: 0x2050ff, toneMapped: false }),
     sirenGeo: new THREE.BoxGeometry(0.35, 0.14, 0.25),
@@ -366,7 +366,7 @@ export function carLod(g, far) {
   u.isFar = far; u.far.visible = far; for (const n of u.near) n.visible = !far;
 }
 
-export function updateCar(g, c, dt, night, now) {
+export function updateCar(g, c, dt, night, now, cam = null) {
   const u = g.userData;
   u.spinA += (c.v * dt) / (u.bike ? u.wheelR : 0.37);
   for (const w of u.wheels) { w.node.rotation.x = u.kit ? u.spinA : -u.spinA; if (w.front) w.node.rotation.y = c.steer; }
@@ -397,7 +397,13 @@ export function updateCar(g, c, dt, night, now) {
   u.tails.material = braking ? parts().tailBrake : night && !c.wrecked ? parts().tail : parts().tailDim;
   u.flares.visible = !c.wrecked && (night || braking);
   for (const f of u.flares.children) f.visible = f.userData.tail ? (braking || night) : night;
-  for (const f of u.flares.children) if (f.userData.tail) f.scale.setScalar(braking ? 1.3 : 0.8);
+  // A lamp's glow is seen from where the lamp points: headlamps from ahead, tail lamps from behind. From the other
+  // side only a rim of it shows, so your own headlamps do not halo the car you are driving or whoever stands past it.
+  let facing = 0; if (cam) { const dx = cam.x - g.position.x, dz = cam.z - g.position.z, l = Math.hypot(dx, dz) || 1; facing = (Math.sin(g.rotation.y) * dx + Math.cos(g.rotation.y) * dz) / l; }
+  for (const f of u.flares.children) {
+    const base = f.userData.s || (f.userData.s = f.scale.x), tail = f.userData.tail, toward = cam ? Math.max(0, tail ? -facing : facing) : 0.6;
+    f.scale.setScalar(base * (tail ? (braking ? 1.0 : 0.6) : 1) * (0.3 + 0.7 * toward));
+  }
   if (u.siren) { const on = c.siren && Math.floor(now / 180) % 2 === 0; u.siren[0].visible = !c.siren || on; u.siren[1].visible = !c.siren || !on; }
   if (c.wrecked && !u.burnt) { u.burnt = true; u.model.traverse((o) => { if (o.isMesh) o.material = parts().burnt; }); }
 }

@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.23';
+const VERSION = 'v0.24';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -230,11 +230,17 @@ let carsReady = false;
 const smoke = new Smoke(scene, LOW ? 30 : 70);
 let playerCarLight = null;
 const headPool = (() => {
-  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const g = cv.getContext('2d');
-  const gr = g.createLinearGradient(0, 128, 0, 0); gr.addColorStop(0, 'rgba(255,240,200,0.85)'); gr.addColorStop(1, 'rgba(255,240,200,0)'); g.fillStyle = gr;
-  g.beginPath(); g.moveTo(22, 128); g.lineTo(42, 128); g.lineTo(64, 0); g.lineTo(0, 0); g.fill();
+  // the light your headlamps throw on the road: a soft cone, brightest a few meters out, fading to nothing at the
+  // sides and the far end (it was a hard-edged slab that the glow pass turned solid white)
+  const W = 128, H = 256, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d'), img = g.createImageData(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = 1 - y / (H - 1), half = 0.16 + 0.34 * t, u = Math.abs(x / (W - 1) - 0.5) / half; // t: 0 at the lamps, 1 at the far end
+    const along = Math.min(1, t / 0.12) * (1 - t) ** 1.6, across = Math.exp(-2.6 * u * u) * Math.max(0, 1 - u * u * 0.55);
+    const k = (y * W + x) * 4; img.data[k] = 255; img.data[k + 1] = 236; img.data[k + 2] = 196; img.data[k + 3] = Math.round(255 * Math.min(1, along * across * 1.5));
+  }
+  g.putImageData(img, 0, 0);
   const geo = new THREE.PlaneGeometry(13, 22); geo.rotateX(-Math.PI / 2); geo.rotateY(Math.PI); geo.translate(0, 0.05, 13);
-  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: LOW ? 0.75 : 0.45 }));
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.4 }));
   m.visible = false; return m;
 })();
 const lampLights = [];
@@ -1282,7 +1288,7 @@ function frame(now) {
     seenCars.add(c.id);
     let g = carViz.get(c.id);
     if (!g) { g = makeCar(c); g.position.set(c.x, 0, c.z); g.rotation.y = c.ry; scene.add(g); carViz.set(c.id, g); }
-    updateCar(g, c, rdt, night > 0.3, now);
+    updateCar(g, c, rdt, night > 0.3, now, camera.position);
     // far version by distance from the camera (not the player, so a cutscene close-up gets the full model); 3 m of slack stops flicker at the line
     if (g.userData.far) { const cd2 = (g.position.x - camera.position.x) ** 2 + (g.position.z - camera.position.z) ** 2, lim = g.userData.isFar ? CAR_FAR - 3 : CAR_FAR; carLod(g, !NOFAR && p.car !== c.id && cd2 > lim * lim); }
     // a dead car being cleared sinks into the street and is gone (state.js clearCar)
@@ -1347,7 +1353,7 @@ function frame(now) {
   radio.setOn(started && !!pcar && !paused && !s.over && !pcar.wrecked && !(p.downT > 0));
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
   // headlight throw on the road: an additive ground decal on every platform
-  if (pcar && night > 0.3 && carViz.get(pcar.id)) { const g = carViz.get(pcar.id); if (headPool.parent !== g) g.add(headPool); headPool.visible = true; } else headPool.visible = false;
+  if (pcar && night > 0.3 && carViz.get(pcar.id)) { const g = carViz.get(pcar.id); if (headPool.parent !== g) g.add(headPool); headPool.visible = true; headPool.material.opacity = bloom && bloom.enabled ? 0.24 : 0.4; } // the glow pass adds its own spill, so the pool itself is dimmer under it else headPool.visible = false;
   // sodium lamps: real point lights on the nearest lamps (desktop only)
   if (lampLights.length && night > 0.2 && (frameN++ % 20 === 0)) {
     const near = city.lamps.map((l) => [(l[0] - camX) ** 2 + (l[1] - camZ) ** 2, l]).sort((a, b) => a[0] - b[0]);
