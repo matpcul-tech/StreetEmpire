@@ -8,9 +8,13 @@ const KEEP = 8;
 
 export function createClips({ canvas, audioStream, isTouch, onClip }) {
   const MR = window.MediaRecorder;
-  const mime = MR && ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'].find((m) => MR.isTypeSupported(m));
+  // MP4 first (v0.27). A phone's gallery, video player and share targets open MP4 and mostly refuse what the browser
+  // records as WebM: that file has no length written in it and reads as unsupported or corrupted. H.264 with AAC is
+  // the pair every phone plays; plain video/mp4 lets the browser pick; WebM is the fallback for browsers with no MP4 recorder.
+  const mime = MR && ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.42E01F,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MR.isTypeSupported(m));
   const supported = !!(MR && mime && canvas.captureStream);
   const ext = mime && mime.includes('mp4') ? 'mp4' : 'webm';
+  const fileType = ext === 'mp4' ? 'video/mp4' : 'video/webm'; // the saved file's type carries no codec list: share sheets match on the plain type
   let stream = null, old = null, young = null, on = false, rotT = 0, pending = null, cutting = false;
   const clips = [];
   function getStream() {
@@ -22,9 +26,9 @@ export function createClips({ canvas, audioStream, isTouch, onClip }) {
   function rec() {
     const r = new MR(getStream(), { mimeType: mime, videoBitsPerSecond: isTouch ? 3500000 : 6000000, audioBitsPerSecond: 96000 });
     const chunks = []; r.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    r.start(1000); return { r, chunks, at: performance.now() };
+    r.start(); return { r, chunks, at: performance.now() }; // no time slices: the recorder writes one whole file when it stops, with its index and length in place
   }
-  const stop = (h) => new Promise((res) => { if (!h || h.r.state === 'inactive') return res(null); h.r.onstop = () => res(new Blob(h.chunks, { type: mime })); try { h.r.stop(); } catch (e) { res(null); } });
+  const stop = (h) => new Promise((res) => { if (!h || h.r.state === 'inactive') return res(null); h.r.onstop = () => res(new Blob(h.chunks, { type: fileType })); try { h.r.stop(); } catch (e) { res(null); } });
   function setOn(v) {
     v = !!v && supported; if (v === on) return;
     on = v;
@@ -47,7 +51,7 @@ export function createClips({ canvas, audioStream, isTouch, onClip }) {
     cutting = false;
   }
   const api = {
-    get supported() { return supported; }, get on() { return on; }, get list() { return clips; }, get armed() { return !!pending; },
+    get supported() { return supported; }, get format() { return ext; }, get on() { return on; }, get list() { return clips; }, get armed() { return !!pending; },
     setOn,
     // a moment asks for a clip that ends `after` seconds from now, so the aftermath is in it. A later, bigger ask extends it.
     mark(title, after = 3) { if (!on) return; if (!pending || after > pending.left) pending = { title, left: after }; else pending.title = title; },
