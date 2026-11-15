@@ -42,6 +42,10 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.25
+
+- **Closer camera on a phone held sideways.** Landscape has half the screen height of portrait, so the same camera left you very small. On a touch screen in landscape the chase camera now sits 20 percent closer on foot and 12 percent closer in a vehicle, with a 55 degree lens in place of 62. You come out about 40 percent bigger on foot. Portrait, tablets and desktop are unchanged.
+
 ## What is new in v0.24
 
 - **Night glare.** The headlight pool on the road was a hard-edged slab that the glow pass turned solid white. It is now a soft cone, brightest a few meters out, and dimmer when the glow pass is on.
