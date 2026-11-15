@@ -110,21 +110,6 @@ export const BRIEF_CLIPS = {
     { t: 6.95, end: 8.9, who: 'Unc', text: 'This is the one that counts.' },
   ] },
 };
-// Filmed busts (v0.19): one of these plays when the police take you in, ahead of the BUSTED screen.
-export const BUST_CLIPS = [
-  { name: 'bust-01', subs: [
-    { t: 0.3, end: 2.3, who: 'Officer', text: 'Hands. Now. You are done tonight.' },
-  ] },
-  { name: 'bust-02', subs: [
-    { t: 0.3, end: 2.8, who: 'Officer', text: 'On the ground. Do not make this worse.' },
-  ] },
-  { name: 'bust-03', subs: [
-    { t: 0.4, end: 2.6, who: 'Officer', text: 'That is enough. You are coming with us.' },
-  ] },
-  { name: 'bust-04', subs: [
-    { t: 0.3, end: 2.85, who: 'Officer', text: 'Turn around. Hands behind your back.' },
-  ] },
-];
 const SKIP_AFTER = 0.5; // seconds before a tap counts as a skip, so the START tap itself cannot skip the clip
 const GIVE_UP = 7; // seconds to wait for the first frame before moving on
 
