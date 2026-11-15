@@ -42,6 +42,10 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.20
+
+- **Filmed busts removed.** An arrest goes straight to the BUSTED screen again; the officer clips are out of the game. The 19 filmed job briefs stay.
+
 ## What is new in v0.19
 
 - **Every job brief is filmed.** Dee, Rook and Sal give jobs 5 to 18 on camera (`brief-05` to `brief-18`), so all 19 briefs now play as clips with timed subtitles. Your reply in Send a Message is heard in the pause.
