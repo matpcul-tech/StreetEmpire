@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.26';
+const VERSION = 'v0.27';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -1554,7 +1554,7 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 // device emulation and rotation do not always fire resize, so also check the size every half second
 setInterval(fitCanvas, 500);
-window.__game = session; window.__dbg = { dropSmooth, RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips, story };
+window.__game = session; window.__dbg = { dropSmooth, clips, RAMPS, RACES, GARAGES, STASHES, radio, audio: sfx.audio, MISSIONS, contactFor, scene, carViz, charViz, camera, blockCenter, sceneSpot, Raycaster: THREE.Raycaster, down: () => debugDown(S()), weather, stream, moments, clips, story };
 renderer.info.autoReset = false;
 { const b = $('fpsBtn'); if (b) b.onclick = () => { fpsLive = !fpsLive; try { localStorage.setItem('se-fps', fpsLive ? 'on' : 'off'); } catch (e) { /* storage off */ } if (!fpsLive) $('ver').textContent = VERSION + (POTATO ? ' potato' : FULL ? ' low+' : LOW ? ' low' : ' high'); renderPerf(); }; }
 window.__perf = () => ({ report: perfReport(), smooth: !!composer && !MSAA_OFF, farCars: [...carViz.values()].filter((g) => g.userData.isFar).length, frameMs: frameAvg, pixelRatio, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chars: charViz.size, cars: carViz.size });
