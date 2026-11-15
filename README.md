@@ -42,6 +42,11 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.23
+
+- **Arms come off the shirt.** On the crews, the rival crews, the locals and the police, the side of the shirt, the chest and the back were weighted to the arm bones, so a raised arm dragged the torso out into a wing. `tools/char-armfix.mjs` takes the arm bones' weight off everything that is not the arm (measured from each model's own arm line and sleeve width) and removes the few triangles that welded a forearm to a hip or jacket hem. 18 character files repaired; the player and Unc were repaired by hand earlier and are untouched. Only skin weights and those triangles change.
+- A new character with the same fault: `node tools/char-armfix.mjs --dry public/models/kit/characters/<file>.glb` reports what it would change; drop `--dry` to apply, then check it in `kit.html` on Punch, Pistol and Bat.
+
 ## What is new in v0.22
 
 - **Distant buildings.** Every kit building with a far version also gets a distant version (`<name>.dist.glb`, 3,000 to 9,000 triangles, shape only, drawn with the far version's material). It takes over past 80 m on phones (100 m with shadows on, 150 m on desktop). `node tools/kit-import.mjs far` remakes them and a building import makes one. `?nofar` turns it off.
