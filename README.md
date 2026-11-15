@@ -42,6 +42,13 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.26
+
+- **Jump shot clean-up.** The headlight pool stays on the road and fades as you leave it; it used to ride up with the vehicle as a lit sheet under a jump. The stand-in tail lamp block no longer shows on kit cars and bikes (it sat at the vehicle's origin, under a parked or airborne bike).
+- **Reflections no longer bloom white.** The glow pass let a glint off a wet road, a bumper or glass through at up to eight times a lamp's brightness, so one reflection became a white ball. The cap is now 1.6 and the night glow is a little weaker (0.55 from 0.7).
+- **No more explosion cutaway.** A car going up no longer takes the camera into a slow-motion orbit. The BOOM card and the saved clip stay; you keep the controls.
+- **Fix for v0.24.** The headlight pool did not switch off when you got out of a vehicle or when day came (a comment had swallowed the line that hides it). It switches off again.
+
 ## What is new in v0.25
 
 - **Closer camera on a phone held sideways.** Landscape has half the screen height of portrait, so the same camera left you very small. On a touch screen in landscape the chase camera now sits 20 percent closer on foot and 12 percent closer in a vehicle, with a 55 degree lens in place of 62. You come out about 40 percent bigger on foot. Portrait, tablets and desktop are unchanged.

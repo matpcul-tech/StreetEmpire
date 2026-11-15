@@ -86,7 +86,7 @@ export function createMoments({ camera, scene, cine, S, player, clips, feed, pop
         case 'boom': {
           if (d > 70) return;
           showCard(pick(['BOOM', 'UP IN FLAMES', 'THAT WAS A CAR']), `${hood(s, p)}. nobody is getting that deposit back`, true, 3);
-          start('boom', 5, { type: 'orbit', x: f.x, y: 1.2, z: f.z, r: 9, h: 2.6, sweep: 1.3 }, { k: 0.3, t: 1.0 }, 2.0);
+          // no camera move and no slow motion here: the orbit round the blast took the controls away mid-fight (v0.26)
           clips.mark('Car went up in ' + hood(s, p), 3.5); return;
         }
         case 'streak': {

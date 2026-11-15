@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.25';
+const VERSION = 'v0.26';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -150,8 +150,10 @@ if (FX) {
     bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.5, 0.9);
     // One pixel that is infinite or not a number (the sun disc and hot glints overflow the half float buffer on phone GPUs)
     // gets blurred across the whole frame and the screen goes black. Such pixels are dropped and the rest capped before the blur.
+    // The cap is low on purpose: a glint off a wet road, a bumper or glass can be many times brighter than a lamp, and at the
+    // old cap of 8 one such glint bloomed into a white ball. At 1.6 a reflection can glow a little more than a lamp, no more.
     const hp = bloom.materialHighPassFilter, read = 'vec4 texel = texture2D( tDiffuse, vUv );';
-    if (hp.fragmentShader.includes(read)) { hp.fragmentShader = hp.fragmentShader.replace(read, read + ' if ( any( isnan( texel ) ) || any( isinf( texel ) ) ) texel = vec4( 0.0 ); texel = clamp( texel, vec4( 0.0 ), vec4( 8.0 ) );'); hp.needsUpdate = true; composer.addPass(bloom); }
+    if (hp.fragmentShader.includes(read)) { hp.fragmentShader = hp.fragmentShader.replace(read, read + ' if ( any( isnan( texel ) ) || any( isinf( texel ) ) ) texel = vec4( 0.0 ); texel = clamp( texel, vec4( 0.0 ), vec4( 1.6 ) );'); hp.needsUpdate = true; composer.addPass(bloom); }
     else bloom = null; // the pass changed shape: run without glow rather than risk the black screen
   }
   composer.addPass(new OutputPass());
@@ -220,7 +222,7 @@ function updateDay() {
   if (grade) { grade.uniforms.uNight.value = night; grade.uniforms.uDusk.value = dusk; }
   // Glow is for lamps, signs and headlights after the sun is down. With the sun on the horizon the sky around it is far past
   // the threshold over half the screen, and the glow from that buried the whole street in white at sunrise and sunset.
-  if (bloom && (FULL || !LOW)) { const g = night * (1 - THREE.MathUtils.smoothstep(elev, -0.09, -0.02)); bloom.strength = 0.7 * g; bloom.enabled = g > 0.04; }
+  if (bloom && (FULL || !LOW)) { const g = night * (1 - THREE.MathUtils.smoothstep(elev, -0.09, -0.02)); bloom.strength = 0.55 * g; bloom.enabled = g > 0.04; }
   return h;
 }
 
@@ -1306,7 +1308,7 @@ function frame(now) {
     // visible driver
     const occupied = (c.ai && !c.wrecked) || (c.cops && s.ents.some((e) => e.car === c.id));
     for (const ch of g.children) if (ch.userData.beam) ch.visible = ch.visible && (occupied || p.car === c.id); // parked cars keep their lights off
-    if (!(occupied || p.car === c.id)) { g.userData.flares.visible = false; g.userData.tails.material.color && (g.userData.tails.visible = true); }
+    if (!(occupied || p.car === c.id)) { g.userData.flares.visible = false; g.userData.tails.material.color && !g.userData.kit && !g.userData.bike && (g.userData.tails.visible = true); } // kit cars and bikes have their own lamps: their stand-in lamp block stays hidden
     const u = g.userData;
     // on a bike the rider is out in the open, so the player is drawn riding too (after the mount moment ends)
     const riding = u.bike && p.car === c.id && cine.active !== 'car' && p.hp > 0;
@@ -1353,7 +1355,10 @@ function frame(now) {
   radio.setOn(started && !!pcar && !paused && !s.over && !pcar.wrecked && !(p.downT > 0));
   sfx.setSiren(Math.max(0, sirenVol)); sfx.setSkid(skidVol);
   // headlight throw on the road: an additive ground decal on every platform
-  if (pcar && night > 0.3 && carViz.get(pcar.id)) { const g = carViz.get(pcar.id); if (headPool.parent !== g) g.add(headPool); headPool.visible = true; headPool.material.opacity = bloom && bloom.enabled ? 0.24 : 0.4; } // the glow pass adds its own spill, so the pool itself is dimmer under it else headPool.visible = false;
+  // The pool sits on the road and fades as you leave it (it used to ride up with a jump as a lit sheet under the bike).
+  // The glow pass adds its own spill, so the pool itself is dimmer under it.
+  if (pcar && night > 0.3 && carViz.get(pcar.id)) { const g = carViz.get(pcar.id); if (headPool.parent !== g) g.add(headPool); headPool.visible = true; headPool.position.y = -g.position.y; headPool.material.opacity = (bloom && bloom.enabled ? 0.24 : 0.4) * Math.max(0, 1 - g.position.y / 2.5); }
+  else headPool.visible = false;
   // sodium lamps: real point lights on the nearest lamps (desktop only)
   if (lampLights.length && night > 0.2 && (frameN++ % 20 === 0)) {
     const near = city.lamps.map((l) => [(l[0] - camX) ** 2 + (l[1] - camZ) ** 2, l]).sort((a, b) => a[0] - b[0]);
