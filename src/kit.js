@@ -45,6 +45,8 @@ const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
 
 // distance where a building swaps to its far version: phones swap sooner, they draw a lot less
 const FAR_AT = { low: 38, high: 70 };
+// distance where it swaps again to its distant version (shape only, a block or more away)
+const DIST_AT = { low: 80, high: 150 };
 
 const kit = { cars: {}, buildings: {}, characters: {}, bikes: {} };
 let done = false;
@@ -73,8 +75,8 @@ export function kitCharacter(slot, seed = 0, gender = null) { return pickCharact
 
 // Loads every kit model. Resolves even when nothing is installed.
 let castSh = true; // sun shadows: on for high and for phones on full graphics
-export async function loadKit(base, { low = false, shadow = !low, farAt = 0 } = {}) {
-  castSh = shadow; if (farAt) FAR_AT.low = farAt;
+export async function loadKit(base, { low = false, shadow = !low, farAt = 0, distAt = 0, noDist = false } = {}) {
+  castSh = shadow; if (farAt) FAR_AT.low = farAt; if (distAt) DIST_AT.low = distAt; if (noDist) DIST_AT.low = DIST_AT.high = Infinity;
   let manifest = null;
   try { const r = await fetch(`${base}models/kit/kit.json`, { cache: 'no-cache' }); if (r.ok) manifest = await r.json(); } catch (e) { /* no kit installed */ }
   if (!manifest) { done = true; return kit; }
@@ -96,7 +98,9 @@ export async function loadKit(base, { low = false, shadow = !low, farAt = 0 } = 
     const got = [], specs = [].concat(list).filter((x) => x && x.file);
     // the far file is optional: if it is missing or fails, the full model shows at any range
     const far = (spec) => (spec.far ? loader.loadAsync(`${base}models/kit/${spec.far}`).then((g) => g.scene).catch((e) => { console.warn('kit building far', slot, e); return null; }) : null);
-    specs.forEach((spec, i) => jobs.push(Promise.all([loader.loadAsync(`${base}models/kit/${spec.file}`), far(spec)]).then(([g, farScene]) => { got[i] = prepBuilding(g.scene, spec, low, farScene); }).catch((e) => console.warn('kit building', slot, e))));
+    // the distant file is optional too: without it the far version shows at any range past its own distance
+    const dist = (spec) => (spec.far && spec.dist ? loader.loadAsync(`${base}models/kit/${spec.dist}`).then((g) => g.scene).catch((e) => { console.warn('kit building dist', slot, e); return null; }) : null);
+    specs.forEach((spec, i) => jobs.push(Promise.all([loader.loadAsync(`${base}models/kit/${spec.file}`), far(spec), dist(spec)]).then(([g, farScene, distScene]) => { got[i] = prepBuilding(g.scene, spec, low, farScene, distScene); }).catch((e) => console.warn('kit building', slot, e))));
     kit.buildings[slot] = got; // variants keep the manifest order; empty entries are dropped below
   }
   for (const [slot, list] of Object.entries(manifest.characters || {})) {
@@ -240,7 +244,7 @@ function collectPaint(scene, spec) {
 // A building template: turned to +z, footprint fitted into the 13 m lot,
 // standing on the ground. Height follows the model (uniform scale).
 // The far version gets the full model's turn, scale and offset, so the two swap in place.
-function prepBuilding(scene, spec, low, farScene = null) {
+function prepBuilding(scene, spec, low, farScene = null, distScene = null) {
   const root = new THREE.Group(); root.name = 'kit-building';
   const inner = new THREE.Group(); inner.rotation.y = THREE.MathUtils.degToRad(spec.yaw || 0); inner.add(scene); root.add(inner);
   root.updateMatrixWorld(true);
@@ -254,7 +258,16 @@ function prepBuilding(scene, spec, low, farScene = null) {
     const fi = new THREE.Group(); fi.rotation.copy(inner.rotation); fi.scale.copy(inner.scale); fi.position.copy(inner.position); fi.add(farScene); far.add(fi);
     shadows(far, castSh, castSh); if (low) cheapen(far);
   }
-  return { root, far, farAt: low ? FAR_AT.low : FAR_AT.high, height: size.y * k, spec };
+  // the distant version is shape only: it takes the far version's material, and the same turn, scale and offset
+  let dist = null, distMat = null;
+  if (far && distScene) farScene.traverse((o) => { if (!distMat && o.isMesh) distMat = [].concat(o.material).find((m) => m.map) || null; });
+  if (distMat) {
+    dist = new THREE.Group(); dist.name = 'kit-building-dist';
+    const di = new THREE.Group(); di.rotation.copy(inner.rotation); di.scale.copy(inner.scale); di.position.copy(inner.position); di.add(distScene); dist.add(di);
+    distScene.traverse((o) => { if (o.isMesh) o.material = distMat; });
+    shadows(dist, castSh, castSh);
+  }
+  return { root, far, dist, farAt: low ? FAR_AT.low : FAR_AT.high, distAt: low ? DIST_AT.low : DIST_AT.high, height: size.y * k, spec };
 }
 
 // A placed car: a clone of the template, with paint tinted per car (materials
@@ -365,11 +378,12 @@ function finishMaterial(m, key, paintHex) {
   finished.set(id, t); return t;
 }
 
-// A placed building: the full model up close, the far version past T.farAt (three.js picks the level each frame).
+// A placed building: the full model up close, the far version past T.farAt, the distant version past T.distAt (three.js picks the level each frame).
 export function placeKitBuilding(T) {
   if (!T.far) return T.root.clone(true);
   const lod = new THREE.LOD(); lod.name = 'kit-building-lod';
   lod.addLevel(T.root.clone(true), 0); lod.addLevel(T.far.clone(true), T.farAt, 0.1);
+  if (T.dist && T.distAt > T.farAt && isFinite(T.distAt)) lod.addLevel(T.dist.clone(true), T.distAt, 0.05);
   return lod;
 }
 
