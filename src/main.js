@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.21';
+const VERSION = 'v0.22';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -41,7 +41,7 @@ const LOW = (isTouch || POTATO || params.has('low') || params.get('q') === 'low'
 // "lite" is the plain low look. A phone that cannot hold its frame rate on full steps down by itself and remembers.
 // ?gfx=full or ?gfx=lite picks one, ?pin stops every automatic quality change (review shots).
 const PIN = params.has('pin');
-const NOFAR = params.has('nofar'); // testing: every car draws its full model at any range
+const NOFAR = params.has('nofar'); // testing: every car draws its full model at any range, and buildings never use their distant version
 const gfxAsk = params.get('gfx') || localStorage.getItem('se-gfx');
 let FULL = LOW && !POTATO && (gfxAsk ? gfxAsk === 'full' : !(navigator.deviceMemory && navigator.deviceMemory < 4));
 const SHADOWS = !LOW || FULL;
@@ -1020,7 +1020,7 @@ const grainBox = $('grain'); grainBox.checked = !(LOW || POTATO) && localStorage
 Promise.all([
   loadPeople(BASE, () => { peopleReady = true; }, POTATO).catch((e) => console.error(e)),
   // build kit first, so the first cars and city sections already use its models
-  Promise.all([loadKit(BASE, { low: LOW, shadow: SHADOWS, farAt: FULL ? 52 : 0 }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
+  Promise.all([loadKit(BASE, { low: LOW, shadow: SHADOWS, farAt: FULL ? 52 : 0, distAt: FULL ? 100 : 0, noDist: NOFAR }).then(() => { const p = player(S()); city.buildAllNear(p.x, p.z); }).catch((e) => console.error(e)), loadCars(BASE)]).then(() => { carsReady = true; }).catch((e) => console.error(e)),
 ]).finally(() => { peopleReady = true; loaded = true; startBtn.disabled = false; startBtn.textContent = START_LABEL; if (wantStart) startGame(); $('loadbar').style.width = '100%'; document.body.classList.add('loaded'); });
 // On a phone the browser's address bar and the system buttons take a strip of the screen. Going fullscreen has to
 // happen inside a tap, so it is asked for on START and again whenever the game is resumed (the back gesture leaves

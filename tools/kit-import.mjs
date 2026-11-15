@@ -24,7 +24,7 @@
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { getBounds } from '@gltf-transform/core';
-import { dedup, prune, weld, quantize, meshopt, resample, textureCompress, simplify, unpartition, flatten, join } from '@gltf-transform/functions';
+import { dedup, prune, weld, quantize, meshopt, resample, textureCompress, simplify, unpartition, flatten, join, dequantize, compactPrimitive } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
 import draco3d from 'draco3dgltf';
@@ -48,10 +48,37 @@ const SLOTS = { car: CAR_SLOTS, building: BUILDING_SLOTS, character: CHAR_SLOTS 
 const DIRS = { car: 'cars', building: 'buildings', character: 'characters' };
 // phone budgets: triangles per model and texture size (a character is on screen many times at once)
 const BUDGET = { car: { tris: 40000, tex: 1024 }, building: { tris: 60000, tex: 1024 }, character: { tris: 15000, tex: 1024 } };
+// Simplify hard while keeping the paint in place. Store-bought and AI-made models are cut into many small
+// islands at every texture seam; the seam-keeping pass cannot join them, and letting edges collapse across
+// seams by shape alone drags the texture with them (walls smear and go dark). Here every vertex also carries
+// its texture coordinate and normal into the error measure, so a collapse that would move the paint or flip
+// the shading costs as much as one that moves the shape. Joins the model into one mesh first.
+async function simplifyKeepPaint(doc, tris, error) {
+  await doc.transform(dequantize(), weld(), flatten(), join());
+  const total = triCount(doc);
+  for (const mesh of doc.getRoot().listMeshes()) for (const p of mesh.listPrimitives()) {
+    const ia = p.getIndices(), pa = p.getAttribute('POSITION'), ua = p.getAttribute('TEXCOORD_0'), na = p.getAttribute('NORMAL');
+    if (!ia || !pa) continue;
+    const n = pa.getCount(), idx = new Uint32Array(ia.getArray()), P = new Float32Array(pa.getArray()), A = new Float32Array(n * 5), e = [];
+    for (let i = 0; i < n; i++) {
+      if (ua) { ua.getElement(i, e); A[i * 5] = e[0]; A[i * 5 + 1] = e[1]; }
+      if (na) { na.getElement(i, e); A[i * 5 + 2] = e[0]; A[i * 5 + 3] = e[1]; A[i * 5 + 4] = e[2]; }
+    }
+    const target = Math.max(3, Math.floor(tris * (idx.length / 3) / Math.max(1, total)) * 3);
+    if (idx.length <= target) continue;
+    const [out] = MeshoptSimplifier.simplifyWithAttributes(idx, P, 3, A, 5, [2, 2, 0.6, 0.6, 0.6], null, target, error, ['Permissive', 'Prune']);
+    p.setIndices(doc.createAccessor().setType('SCALAR').setArray(out));
+    compactPrimitive(p);
+  }
+  await doc.transform(prune({ keepAttributes: true }));
+}
+
 // far versions of buildings: triangle target and texture size; a model already this light needs none
 const FAR = { tris: 8000, tex: 512, skip: 12000 };
 // far versions of cars: one mesh, shape only (the game draws it with the full model's own material), so a far car is one cheap draw
 const FAR_CAR = { tris: 3000, skip: 8000 };
+// distant versions of buildings: shape only, drawn with the far version's material once a building is a block or more away
+const DIST = { tris: 3000, skip: 6000 };
 // bones the game needs to play its animations on a character, by the game rig's names
 const NEED_BONES = ['pelvis', 'spine', 'neck_01', 'Head', 'upperarm_l', 'lowerarm_l', 'hand_l', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'thigh_r', 'calf_r', 'foot_r'];
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
@@ -302,9 +329,9 @@ export async function importModel(kind, slot, file, opts = {}) {
     const gender = opts.gender === 'f' || opts.gender === 'm' ? opts.gender : inferGender(variant);
     list.push({ file: rel, yaw: opts.yaw || 0, ...(opts.height && { height: opts.height }), ...(gender && { gender }), ...(credit && { credit }) });
   } else {
-    const far = await writeFar(rel, notes);
+    const far = await writeFar(rel, notes), dist = far ? await writeDist(far, notes) : null;
     const list = (m.buildings[slot] = [].concat(m.buildings[slot] || []).filter((e) => e.file !== rel));
-    list.push({ file: rel, ...(far && { far }), yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
+    list.push({ file: rel, ...(far && { far }), ...(dist && { dist }), yaw: opts.yaw || 0, ...(opts.footprint && { footprint: opts.footprint }), ...(credit && { credit }) });
   }
   writeManifest(m);
   return { slot, kind, file: rel, tris: triCount(doc), before, bytes, wheels, materials: mats.length, mask: masks.length > 0, notes };
@@ -347,6 +374,10 @@ async function writeFarCar(rel, notes = []) {
     if (triCount(doc) <= FAR_CAR.tris * 1.15) break;
     await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: Math.min(1, Math.max(0.02, FAR_CAR.tris / triCount(doc))), error }));
   }
+  // Some AI-made models (the bikes) are split into so many small islands that the seam-keeping pass stalls at a
+  // third of the full model. Only those get the harder pass; a car that got under three times the target keeps
+  // the seam-kept result, which holds its panel shading better up close.
+  if (triCount(doc) > FAR_CAR.tris * 3) await simplifyKeepPaint(doc, FAR_CAR.tris, rel.startsWith('bikes/') ? 0.03 : 0.02);
   const after = triCount(doc);
   if (after > before * 0.4) return none(`no far version: only got ${before} down to ${after} triangles`);
   for (const m of doc.getRoot().listMaterials()) { m.setBaseColorTexture(null); m.setNormalTexture(null); m.setMetallicRoughnessTexture(null); m.setEmissiveTexture(null); m.setOcclusionTexture(null); m.setExtras({}); }
@@ -357,11 +388,32 @@ async function writeFarCar(rel, notes = []) {
   return farRel;
 }
 
+// The distant version of an installed building (<name>.dist.glb), made from its far version: one mesh, shape
+// only, with the far version's texture coordinates. The game draws it with the far version's material past a
+// second, longer distance, where a building is a few dozen pixels tall.
+async function writeDist(farRel, notes = []) {
+  const distRel = farRel.replace(/\.far\.glb$/, '.dist.glb'), distAbs = path.join(KIT, distRel);
+  const none = (why) => { if (why) notes.push(why); if (fs.existsSync(distAbs)) fs.rmSync(distAbs); return null; };
+  if (!farRel || !farRel.endsWith('.far.glb')) return null;
+  const doc = await io.read(path.join(KIT, farRel)), before = triCount(doc);
+  if (before <= DIST.skip) return none();
+  if (doc.getRoot().listMaterials().length !== 1) return none('no distant version: the far version has more than one material');
+  await simplifyKeepPaint(doc, DIST.tris, 0.02);
+  const after = triCount(doc);
+  if (after > before * 0.5) return none(`no distant version: only got ${before} down to ${after} triangles`);
+  for (const m of doc.getRoot().listMaterials()) { m.setBaseColorTexture(null); m.setNormalTexture(null); m.setMetallicRoughnessTexture(null); m.setEmissiveTexture(null); m.setOcclusionTexture(null); m.setExtras({}); }
+  await doc.transform(flatten(), join(), prune({ keepAttributes: true }), quantize(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  await io.write(distAbs, doc);
+  notes.push(`distant version ${distRel}: ${after} triangles, ${(fs.statSync(distAbs).size / 1e3).toFixed(0)} KB`);
+  return distRel;
+}
+
 async function remakeFar() {
   const m = readManifest(), results = [];
   for (const [slot, list] of Object.entries(m.buildings || {})) for (const e of [].concat(list)) {
-    const notes = [], far = await writeFar(e.file, notes);
+    const notes = [], far = await writeFar(e.file, notes), dist = far ? await writeDist(far, notes) : null;
     if (far) e.far = far; else delete e.far;
+    if (dist) e.dist = dist; else delete e.dist;
     results.push({ ok: true, src: e.file, slot, kind: 'building', file: far || e.file, tris: triCount(await io.read(path.join(KIT, far || e.file))), bytes: fs.statSync(path.join(KIT, far || e.file)).size, materials: 1, notes });
   }
   for (const [slot, e, kind] of [...Object.entries(m.cars || {}).map((x) => [...x, 'car']), ...Object.entries(m.bikes || {}).map((x) => [...x, 'bike'])]) {
@@ -380,7 +432,7 @@ export function removeModel(kind, slot, variant) {
   for (const [k, group] of [['building', 'buildings'], ['character', 'characters']]) {
     if (kind !== k || !m[group]?.[slot]) continue;
     const keep = [];
-    for (const e of [].concat(m[group][slot])) { if (!variant || path.basename(e.file, '.glb') === variant) { drop(e.file); if (e.far) drop(e.far); } else keep.push(e); }
+    for (const e of [].concat(m[group][slot])) { if (!variant || path.basename(e.file, '.glb') === variant) { drop(e.file); if (e.far) drop(e.far); if (e.dist) drop(e.dist); } else keep.push(e); }
     if (keep.length) m[group][slot] = keep; else delete m[group][slot];
   }
   writeManifest(m);
