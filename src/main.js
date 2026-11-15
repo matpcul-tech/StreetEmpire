@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.24';
+const VERSION = 'v0.25';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -1405,14 +1405,18 @@ function frame(now) {
   if (pcar) { const head = pcar.ry * 0.6 + (pcar.mh ?? pcar.ry) * 0.4, target = head + Math.PI; let d = target - yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); if (lookIdle > 0.5) yaw += d * Math.min(1, rdt * (2.2 + Math.abs(pcar.v) * 0.08)); }
   const downK = p.downT > 0 ? 1 - p.downT / DOWN_TIME : 0;
   const onBike = !!pcar && pcar.type === 'bike'; // a bike is a third the size of a car, so the chase camera sits closer and lower
-  const dist = (pcar ? (onBike ? 6.0 : 8.8) + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5, h = (pcar ? (onBike ? 2.0 : 2.5) : 1.7) + downK * 3;
+  // A phone held sideways has half the screen height of one held upright, so the same camera made you under two
+  // centimeters tall. There the camera sits closer and the lens is a little longer (wantFov below).
+  const land = isTouch && innerWidth > innerHeight && innerHeight < 560;
+  const dist = ((pcar ? (onBike ? 6.0 : 8.8) + Math.abs(pcar.v) * 0.09 : 5.2) + downK * 2.5) * (land ? (pcar ? 0.88 : 0.8) : 1), h = (pcar ? (onBike ? 2.0 : 2.5) : 1.7) + downK * 3;
   let dd = dist;
   for (; dd > 1.5; dd -= 0.5) { const cx = pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, cy = h + Math.sin(pitch) * dd, cz = pv.z + Math.cos(yaw) * Math.cos(pitch) * dd; if (!insideBuilding(cx, cz, 0.3, cy)) break; }
   tmp.set(pv.x + Math.sin(yaw) * Math.cos(pitch) * dd, Math.max(0.6, h + Math.sin(pitch) * dd), pv.z + Math.cos(yaw) * Math.cos(pitch) * dd);
   if (!camInit) { camPos.copy(tmp); camInit = true; }
   camPos.lerp(tmp, Math.min(1, rdt * 12));
   camera.position.copy(camPos);
-  look.set(pv.x - Math.sin(yaw) * 1.2 + Math.cos(yaw) * (pcar ? 0 : 0.6), h, pv.z - Math.cos(yaw) * 1.2 - Math.sin(yaw) * (pcar ? 0 : 0.6));
+  // sideways phone: aim a little lower, so the longer lens does not push you or the car down under the buttons
+  look.set(pv.x - Math.sin(yaw) * 1.2 + Math.cos(yaw) * (pcar ? 0 : 0.6), h - (land ? (pcar ? 1.0 : 0.5) : 0), pv.z - Math.cos(yaw) * 1.2 - Math.sin(yaw) * (pcar ? 0 : 0.6));
   camera.lookAt(look);
   // the chase camera banks a little into a turn and with a slide, and the frame streaks at speed
   { const v = pcar ? Math.abs(pcar.v) : 0, bankT = pcar && !cine.active ? -steerIn * Math.min(1, v / 12) * 0.05 - Math.sign(steerIn || 1) * (pcar.slip || 0) * 0.02 : 0;
@@ -1428,7 +1432,7 @@ function frame(now) {
   if (window.__camOv) { const o = window.__camOv; camera.position.set(o.x, o.y, o.z); camera.lookAt(o.lx, o.ly, o.lz); } // test hook for close-up shots
   if (camKick > 0) { camera.rotateX(camKick * 0.06); camKick = Math.max(0, camKick - rdt * 6); }
   fovKick = Math.max(0, fovKick - rdt * 20);
-  const wantFov = 62 + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;
+  const wantFov = (land ? 55 : 62) + (pcar ? Math.min(18, Math.abs(pcar.v) * 0.55) : 0) + fovKick;
   if (started && !cine.ownsFov) { camera.fov += (wantFov - camera.fov) * Math.min(1, rdt * 4); camera.updateProjectionMatrix(); }
   if (sun.castShadow) {
     // the shadowed square sits a little ahead of the camera and moves in whole shadow texels, so shadow edges do not crawl as you move
