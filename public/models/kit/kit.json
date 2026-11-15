@@ -4,49 +4,57 @@
       "file": "cars/lowrider-v4.glb",
       "yaw": 0,
       "length": 5.4,
-      "paint": true
+      "paint": true,
+      "far": "cars/lowrider-v4.far.glb"
     },
     "muscle": {
       "file": "cars/muscle-coupe-v5.glb",
       "yaw": 0,
       "length": 4.8,
-      "paint": true
+      "paint": true,
+      "far": "cars/muscle-coupe-v5.far.glb"
     },
     "police": {
       "file": "cars/police-v7.glb",
       "yaw": 0,
       "length": 5.2,
-      "paint": true
+      "paint": true,
+      "far": "cars/police-v7.far.glb"
     },
     "suv": {
       "file": "cars/suv-v3.glb",
       "yaw": 0,
       "length": 4.8,
-      "paint": true
+      "paint": true,
+      "far": "cars/suv-v3.far.glb"
     },
     "van": {
       "file": "cars/van-v5.glb",
       "yaw": 0,
       "length": 5.2,
-      "paint": true
+      "paint": true,
+      "far": "cars/van-v5.far.glb"
     },
     "sedan": {
       "file": "cars/sedan-v11.glb",
       "yaw": 0,
       "length": 4.5,
-      "paint": true
+      "paint": true,
+      "far": "cars/sedan-v11.far.glb"
     },
     "taxi": {
       "file": "cars/taxi-v1.glb",
       "yaw": 0,
       "length": 4.9,
-      "paint": false
+      "paint": false,
+      "far": "cars/taxi-v1.far.glb"
     },
     "pickup": {
       "file": "cars/pickup.glb",
       "yaw": 0,
       "length": 5.2,
-      "paint": true
+      "paint": true,
+      "far": "cars/pickup.far.glb"
     }
   },
   "bikes": {
@@ -54,7 +62,8 @@
       "file": "bikes/sportbike.glb",
       "yaw": 0,
       "length": 2.1,
-      "credit": "Original Street Empire motorcycle made for this project in Meshy. Not a third-party download."
+      "credit": "Original Street Empire motorcycle made for this project in Meshy. Not a third-party download.",
+      "far": "bikes/sportbike.far.glb"
     },
     "cruiser": {
       "file": "bikes/cruiser.glb",
@@ -82,7 +91,8 @@
         1.11,
         0.265
       ],
-      "credit": "Original Street Empire cruiser motorcycle made for this project by the art team in Meshy. Not a third-party download."
+      "credit": "Original Street Empire cruiser motorcycle made for this project by the art team in Meshy. Not a third-party download.",
+      "far": "bikes/cruiser.far.glb"
     },
     "dirtbike": {
       "file": "bikes/dirtbike.glb",
@@ -95,7 +105,8 @@
         "y": 0.37,
         "z": -0.2,
         "lean": 0.24
-      }
+      },
+      "far": "bikes/dirtbike.far.glb"
     }
   },
   "buildings": {
