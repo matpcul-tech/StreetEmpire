@@ -60,7 +60,13 @@ export function createCine({ camera, sfx, charViz, blocked, scene }) {
     get holdsInput() { return !!cur; },
     get ownsFov() { return !!cur && (cur.kind === 'brief' || cur.kind === 'open'); },
     // a lower third card: kicker, title, optional reward and note lines
+    // A job card (NEW JOB, JOB DONE, JOB BLOWN) carries the face of whoever gave the job: api.faceOf(title) returns
+    // the picture's address, or nothing for cards that are not about a job.
     card({ k, t = '', r = '', s = '', red = false, dur = 3.2 }) {
+      const src = api.faceOf && /^(NEW JOB|JOB DONE|JOB BLOWN)$/.test(k) ? api.faceOf(t) : null;
+      let face = $('pcFace'); if (!face && src) { face = document.createElement('img'); face.id = 'pcFace'; face.alt = ''; face.onerror = () => card.classList.remove('face'); card.prepend(face); }
+      if (face && src && face.getAttribute('src') !== src) face.src = src;
+      card.classList.toggle('face', !!src);
       $('pcKick').textContent = k; $('pcTitle').textContent = t; $('pcReward').textContent = r; $('pcRep').textContent = s;
       $('pcReward').style.display = r ? '' : 'none'; $('pcRep').style.display = s ? '' : 'none';
       card.classList.toggle('red', red); card.classList.remove('show'); void card.offsetWidth; card.classList.add('show'); cardT = dur;

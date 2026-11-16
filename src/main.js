@@ -32,7 +32,7 @@ import '@fontsource/oswald/500.css';
 import '@fontsource/oswald/600.css';
 
 let isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const VERSION = 'v0.27';
+const VERSION = 'v0.28';
 // ?q=potato: very low quality for slow devices (also chosen automatically on sustained low FPS)
 const params = new URLSearchParams(location.search);
 const POTATO = params.get('q') === 'potato' || (!params.has('q') && localStorage.getItem('se-q') === 'potato');
@@ -253,6 +253,7 @@ if (!LOW) { playerCarLight = new THREE.SpotLight(0xfff0d0, 260, 70, 0.62, 0.55, 
 // ---------- characters ----------
 const charViz = new Map();
 const cine = createCine({ camera, scene, sfx, charViz, blocked: (x, z, y) => insideBuilding(x, z, 0.4, y) });
+cine.faceOf = (title) => { const m = MISSIONS.find((x) => x.title === title); return m ? `${BASE}faces/${(m.by || 'Unc').toLowerCase()}.jpg` : null; }; // job cards show who gave the job
 let prevCar = null, pendingBig = null, pendingBrief = null, pendingJack = null, wasDown = false;
 let peopleReady = false;
 const MAXIMP = 120;
