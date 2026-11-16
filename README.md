@@ -42,6 +42,11 @@ Phones get low settings automatically (no shadows, no dynamic street lights, pix
 - **The police mind their own cases.** A crew fight only heats up when an officer can see it (on foot or in a cruiser within 45 m) or a gun goes off. A bystander can still phone it in, and hitting civilians or officers always counts, with a car too. You no longer pick up stars for every corner you take with your fists.
 - `tools/weight-shots.mjs` checks the heat rule both ways and shoots a pedestrian mid-flight and a punch knockout.
 
+## What is new in v0.29
+
+- **Dee, Rook and Sal have their own models.** The three job givers now match their filmed briefs and card portraits, the way Unc already did. New character slots `dee`, `rook` and `sal`; a giver wears the model installed under their name and falls back to the crew or locals look without one. 15,000 triangles and 0.6 to 0.7 MB each.
+- Rook's model had the arm weighted into the jacket and went through `tools/char-armfix.mjs`. Dee and Sal are as delivered: the repair left a thin spike under a raised arm on them, and givers never raise their arms that far.
+
 ## What is new in v0.28
 
 - **Faces on the job cards.** NEW JOB, JOB DONE and JOB BLOWN show the portrait of whoever gave the job: Unc, Dee, Rook or Sal (`public/faces/`, four 160 px pictures, about 5 KB each). Other cards are unchanged.

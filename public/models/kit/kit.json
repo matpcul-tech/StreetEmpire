@@ -322,6 +322,27 @@
         "height": 1.76,
         "gender": "m"
       }
+    ],
+    "dee": [
+      {
+        "file": "characters/dee.glb",
+        "yaw": 0,
+        "gender": "f"
+      }
+    ],
+    "rook": [
+      {
+        "file": "characters/rook.glb",
+        "yaw": 0,
+        "gender": "m"
+      }
+    ],
+    "sal": [
+      {
+        "file": "characters/sal.glb",
+        "yaw": 0,
+        "gender": "m"
+      }
     ]
   }
 }

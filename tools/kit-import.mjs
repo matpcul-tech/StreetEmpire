@@ -43,7 +43,7 @@ export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lo
 // real-world lengths in meters, so kit cars match the people (a 4.4 m lowrider put the driver's head through the roof)
 export const CAR_LENGTH = {'sedan':  4.9, 'muscle':  4.8, 'suv':  4.8, 'van':  5.1, 'taxi':  4.9, 'police':  5.2, 'lowrider':  5.4, 'pickup':  5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
-export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
+export const CHAR_SLOTS = ['player', 'unc', 'dee', 'rook', 'sal', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped']; // unc, dee, rook, sal: the four job givers, one model each
 const SLOTS = { car: CAR_SLOTS, building: BUILDING_SLOTS, character: CHAR_SLOTS };
 const DIRS = { car: 'cars', building: 'buildings', character: 'characters' };
 // phone budgets: triangles per model and texture size (a character is on screen many times at once)

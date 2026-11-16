@@ -39,7 +39,7 @@ export const CAR_SLOTS = ['sedan', 'muscle', 'suv', 'van', 'taxi', 'police', 'lo
 export const CAR_LENGTH = {'sedan': 4.9, 'muscle': 4.8, 'suv': 4.8, 'van': 5.1, 'taxi': 4.9, 'police': 5.2, 'lowrider': 5.4, 'pickup': 5.2};
 export const BUILDING_SLOTS = ['house', 'store', 'apt', 'tower', 'shed'];
 // who wears each character slot: player, Unc, your crew, the three rival crews, the Locals crew, police, people on the street
-export const CHAR_SLOTS = ['player', 'unc', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped'];
+export const CHAR_SLOTS = ['player', 'unc', 'dee', 'rook', 'sal', 'crew', 'reds', 'blues', 'golds', 'locals', 'cop', 'ped']; // unc, dee, rook, sal: the four job givers, one model each
 const WHEEL = /^(?!.*steer)(?=.*(?:^|[^a-z])(wheel|tire|tyre|rim))/i; // road wheels, not the steering wheel; "rim" must start a word so Trim and Primer do not count
 const PAINTABLE = /paint|body|carpaint|exterior|shell/i;
 
