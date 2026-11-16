@@ -61,6 +61,9 @@ Installed through tools/kit-import.mjs (generated from public/models/kit/kit.jso
 | character: reds (reds-f-1) | no credit given (add a .txt next to the upload) |
 | character: reds (reds-m-2) | no credit given (add a .txt next to the upload) |
 | character: unc (unc) | no credit given (add a .txt next to the upload) |
+| character: dee (dee) | Supplied by the project owner in the contacts package of 2026-11-16, finished in Sovereign Asset. |
+| character: rook (rook) | Supplied by the project owner in the contacts package of 2026-11-16, finished in Sovereign Asset. |
+| character: sal (sal) | Supplied by the project owner in the contacts package of 2026-11-16, finished in Sovereign Asset. |
 | character: locals (locals-m-2) | no credit given (add a .txt next to the upload) |
 | character: locals (locals-m-1) | no credit given (add a .txt next to the upload) |
 | character: locals (locals-f-1) | no credit given (add a .txt next to the upload) |

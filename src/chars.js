@@ -80,7 +80,8 @@ export const kitSlotFor = (e) => e.kind === 'player' ? 'player' : e.kind === 'gi
 export function lookFor(e, CREWS) {
   const L = paintedLook(e, CREWS);
   if (!tmpl || potatoPeople) return L;
-  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), T = kitCharacter(slot, v, L.female ? 'f' : 'm');
+  // a job giver wears their own model when one is installed under their name (unc, dee, rook, sal); without it they keep the crew or locals look
+  const v = e.look ?? (e.id * 7), slot = kitSlotFor(e), own = e.kind === 'giver' && e.name ? e.name.toLowerCase() : null, T = (own && own !== slot && kitCharacter(own, 0)) || kitCharacter(slot, v, L.female ? 'f' : 'm');
   if (!T || !prepKit(T)) return L;
   return { ...L, model: `kit:${slot}:${T.spec.file}`, kitT: T };
 }
